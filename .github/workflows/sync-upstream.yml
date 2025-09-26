@@ -11,7 +11,7 @@ permissions:
 
 env:
   UPSTREAM_REPO: SparkDevNetwork/Rock
-  MUST_HAVE: '["develop","main"]'   # always keep these
+  MUST_HAVE: '["develop"]'   # always keep these
   DAYS_RECENT: "90"                 # also keep any branch touched in last 90 days
   # Prefix matches; covers names like hotfix-17.6, hotfix/17.6, release-17.6, etc.
   INCLUDE_PATTERNS: '["hotfix","hotfix-","hotfix/","release","release-","release/"]'
