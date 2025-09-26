@@ -1,12 +1,12 @@
-name: Sync upstream develop (ff-only) + tags
+name: Sync upstream develop (mirror-safe)
 
 on:
-  workflow_dispatch: {}
+  workflow_dispatch: {}        # allow manual runs
   schedule:
-    - cron: "17 6 * * *"   # daily at 06:17 UTC
+    - cron: "17 6 * * *"       # daily at 06:17 UTC (change as you like)
 
 permissions:
-  contents: write
+  contents: write              # needed to push to your fork
 
 env:
   UPSTREAM_REPO: SparkDevNetwork/Rock
@@ -15,14 +15,16 @@ env:
 jobs:
   sync:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout fork (full history)
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           ref: ${{ env.BRANCH }}
+          fetch-tags: true
 
-      - name: Configure git
+      - name: Configure git author
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -34,23 +36,24 @@ jobs:
           git fetch upstream --prune --tags
           git checkout ${{ env.BRANCH }}
 
-      - name: Fast-forward from upstream (fail if not possible)
+      - name: Sync branch to upstream (FF if possible, else hard reset)
         run: |
           set -euxo pipefail
           # Ensure upstream branch exists
           git ls-remote --heads upstream ${{ env.BRANCH }}
-          # Try ff-only merge
-          git merge --ff-only "upstream/${{ env.BRANCH }}" || { echo "Not fast-forwardable"; exit 0; }
 
-      - name: Push branch if ahead
-        run: |
-          set -euxo pipefail
-          AHEAD=$(git rev-list --left-right --count "origin/${{ env.BRANCH }}...HEAD" | awk '{print $1}')
-          if [ "${AHEAD:-0}" -gt 0 ]; then
-            git push origin "${{ env.BRANCH }}"
+          # Try fast-forward first
+          if git merge-base --is-ancestor HEAD "upstream/${{ env.BRANCH }}"; then
+            git merge --ff-only "upstream/${{ env.BRANCH }}"
           else
-            echo "Already up to date."
+            # Histories diverged: mirror upstream exactly
+            git reset --hard "upstream/${{ env.BRANCH }}"
           fi
 
-      - name: Push tags
-        run: git push origin --tags
+      - name: Push branch (force-with-lease) and tags
+        run: |
+          set -euxo pipefail
+          # Push branch (safe force for mirrors)
+          git push --force-with-lease origin "${{ env.BRANCH }}"
+          # Push tags
+          git push origin --tags
