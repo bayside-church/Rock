@@ -1,20 +1,16 @@
-name: Sync selected upstream branches (ff-only) + tags
+name: Sync upstream develop (ff-only) + tags
 
 on:
-  schedule:
-    - cron: "19 6 * * *"    # daily at 06:19 UTC
   workflow_dispatch: {}
+  schedule:
+    - cron: "17 6 * * *"   # daily at 06:17 UTC
 
 permissions:
   contents: write
 
-
 env:
   UPSTREAM_REPO: SparkDevNetwork/Rock
-  MUST_HAVE: '["develop"]'   # always keep these
-  DAYS_RECENT: "90"                 # also keep any branch touched in last 90 days
-  # Prefix matches; covers names like hotfix-17.6, hotfix/17.6, release-17.6, etc.
-  INCLUDE_PATTERNS: '["hotfix","hotfix-","hotfix/","release","release-","release/"]'
+  BRANCH: develop
 
 jobs:
   sync:
@@ -24,114 +20,37 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: develop
+          ref: ${{ env.BRANCH }}
 
-      - name: Configure Git
+      - name: Configure git
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Add upstream and fetch everything (including tags)
+      - name: Add upstream and fetch
         run: |
+          set -euxo pipefail
           git remote add upstream https://github.com/${{ env.UPSTREAM_REPO }}.git || true
           git fetch upstream --prune --tags
+          git checkout ${{ env.BRANCH }}
 
-      - name: Build list of branches to sync
-        id: plan
-        shell: bash
+      - name: Fast-forward from upstream (fail if not possible)
         run: |
-          set -euo pipefail
-          must=($(echo '${{ env.MUST_HAVE }}' | jq -r '.[]'))
-          pats=($(echo '${{ env.INCLUDE_PATTERNS }}' | jq -r '.[]'))
-          days=${{ env.DAYS_RECENT }}
+          set -euxo pipefail
+          # Ensure upstream branch exists
+          git ls-remote --heads upstream ${{ env.BRANCH }}
+          # Try ff-only merge
+          git merge --ff-only "upstream/${{ env.BRANCH }}" || { echo "Not fast-forwardable"; exit 0; }
 
-          # Collect recent upstream branches by committer date
-          mapfile -t recent < <(git for-each-ref --format='%(refname:short) %(committerdate:iso8601)' refs/remotes/upstream/ \
-            | awk -v d="$days" '
-              function to_epoch(s,    cmd,t){ cmd="date -d \"" s "\" +%s"; cmd | getline t; close(cmd); print t }
-              BEGIN { now=systime(); cutoff=now-(d*24*3600) }
-              {
-                branch=$1; $1=""; sub(/^ /,""); date=$0;
-                # skip HEAD pointer line
-                if (branch=="upstream/HEAD") next;
-                # convert date to epoch
-                cmd="date -d \"" date "\" +%s"; cmd | getline epoch; close(cmd);
-                if (epoch >= cutoff) print branch
-              }' \
-            | sed 's#^upstream/##')
-
-          # Pattern includes
-          mapfile -t pat_matches < <(git for-each-ref --format='%(refname:short)' refs/remotes/upstream/ \
-            | sed 's#^upstream/##' \
-            | awk -v pats="$(printf "%s\n" "${pats[@]}")" '
-                BEGIN{ split(pats, P, "\n") }
-                {
-                  b=$0
-                  for (i in P) {
-                    if (P[i]!="" && index(b, P[i])==1) { print b; break }
-                  }
-                }')
-
-          # Merge lists with MUST_HAVE
-          all=("${must[@]}" "${recent[@]}" "${pat_matches[@]}")
-          # De-dup
-          uniq=($(printf "%s\n" "${all[@]}" | awk '!seen[$0]++'))
-
-          echo "branches<<EOF" >> $GITHUB_OUTPUT
-          printf "%s\n" "${uniq[@]}" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
-          echo "Planned branches:"
-          printf " - %s\n" "${uniq[@]}"
-
-      - name: Fast-forward each selected branch (if exists upstream)
-        if: steps.plan.outputs.branches != ''
-        shell: bash
+      - name: Push branch if ahead
         run: |
-          set -euo pipefail
-          while IFS= read -r BR; do
-            [ -z "$BR" ] && continue
-            if git show-ref --verify --quiet "refs/remotes/upstream/${BR}"; then
-              # Ensure local branch exists tracking origin (or create)
-              if git show-ref --verify --quiet "refs/heads/${BR}"; then
-                git checkout "${BR}"
-              else
-                git checkout -b "${BR}" || git checkout -B "${BR}"
-              fi
-              # Bring local branch to origin state if it exists
-              if git show-ref --verify --quiet "refs/remotes/origin/${BR}"; then
-                git reset --hard "origin/${BR}"
-              fi
-              # Attempt ff-only merge from upstream
-              git merge --ff-only "upstream/${BR}" || {
-                echo "Skipping ${BR}: not fast-forwardable."
-                continue
-              }
-              # Push only if ahead
-              AHEAD=$(git rev-list --left-right --count "origin/${BR}...HEAD" | awk '{print $1}')
-              if [ "${AHEAD:-0}" -gt 0 ]; then
-                git push origin "${BR}"
-                echo "Updated ${BR}"
-              else
-                echo "${BR} already up to date"
-              fi
-            else
-              echo "Upstream branch ${BR} not found; skipping."
-            fi
-          done <<< "${{ steps.plan.outputs.branches }}"
+          set -euxo pipefail
+          AHEAD=$(git rev-list --left-right --count "origin/${{ env.BRANCH }}...HEAD" | awk '{print $1}')
+          if [ "${AHEAD:-0}" -gt 0 ]; then
+            git push origin "${{ env.BRANCH }}"
+          else
+            echo "Already up to date."
+          fi
 
-      - name: Push tags (lightweight)
-        run: git push --tags origin
-
-      - name: (Optional) Prune stale local branches that no longer exist upstream
-        if: ${{ true }}   # flip to true if you want pruning behavior
-        run: |
-          # CAREFUL: This deletes local + origin branches missing upstream.
-          # Review before enabling.
-          for BR in $(git for-each-ref --format='%(refname:short)' refs/heads); do
-            if ! git show-ref --verify --quiet "refs/remotes/upstream/${BR}"; then
-              echo "Pruning ${BR} (no longer in upstream)"; 
-              git push origin --delete "${BR}" || true
-              git branch -D "${BR}" || true
-            fi
-          done
+      - name: Push tags
+        run: git push origin --tags
