@@ -1,4 +1,4 @@
-// <copyright>
+﻿// <copyright>
 // Copyright by the Spark Development Network
 //
 // Licensed under the Rock Community License (the "License");
@@ -26,6 +26,7 @@ using Rock.Data;
 using Rock.Model;
 using Rock.Obsidian.UI;
 using Rock.Security;
+using Rock.Utility;
 using Rock.ViewModels.Blocks;
 using Rock.ViewModels.Blocks.Finance.FinancialPledgeList;
 using Rock.Web.Cache;
@@ -40,8 +41,8 @@ namespace Rock.Blocks.Finance
     [DisplayName( "Financial Pledge List" )]
     [Category( "Finance" )]
     [Description( "Displays a list of financial pledges." )]
-    [IconCssClass( "fa fa-list" )]
-    // [SupportedSiteTypes( Model.SiteType.Web )]
+    [IconCssClass( "ti ti-list" )]
+    [SupportedSiteTypes( Model.SiteType.Web )]
 
     [LinkedPage( "Detail Page",
         Key = AttributeKey.DetailPage,
@@ -78,7 +79,7 @@ namespace Rock.Blocks.Finance
 
     [BooleanField( "Show Account Summary",
         Key = AttributeKey.ShowAccountSummary,
-        Description = "Should the account summary be displayed at the bottom of the list?",
+        Description = "When enabled, the account summary be displayed at the bottom of the list. NOTE: The summary will not display if 'Hide Amount' is enabled.",
         DefaultBooleanValue = true,
         Order = 5 )]
 
@@ -97,34 +98,6 @@ namespace Rock.Blocks.Finance
         Category = "",
         Order = 6 )]
 
-    [BooleanField( "Show Person Filter",
-        Key = AttributeKey.ShowPersonFilter,
-        Description = "Allows person filter to be hidden.",
-        DefaultBooleanValue = true,
-        Category = "Display Filters",
-        Order = 0 )]
-
-    [BooleanField( "Show Account Filter",
-        Key = AttributeKey.ShowAccountFilter,
-        Description = "Allows account filter to be hidden.",
-        DefaultBooleanValue = true,
-        Category = "Display Filters",
-        Order = 1 )]
-
-    [BooleanField( "Show Date Range Filter",
-        Key = AttributeKey.ShowDateRangeFilter,
-        Description = "Allows date range filter to be hidden.",
-        DefaultBooleanValue = true,
-        Category = "Display Filters",
-        Order = 2 )]
-
-    [BooleanField( "Show Last Modified Filter",
-        Key = AttributeKey.ShowLastModifiedFilter,
-        Description = "Allows last modified filter to be hidden.",
-        DefaultBooleanValue = true,
-        Category = "Display Filters",
-        Order = 3 )]
-
     [ContextAware]
 
     [Rock.SystemGuid.EntityTypeGuid( "8b1663eb-b5cb-4c78-b0c6-ed14e173e4c0" )]
@@ -137,17 +110,13 @@ namespace Rock.Blocks.Finance
         private static class AttributeKey
         {
             public const string DetailPage = "DetailPage";
-            public const string ShowAccountColumn = "ShowAccountsColumn";
+            public const string ShowAccountColumn = "ShowAccountColumn";
             public const string ShowLastModifiedDateColumn = "ShowLastModifiedDateColumn";
             public const string ShowGroupColumn = "ShowGroupColumn";
             public const string LimitPledgesToCurrentPerson = "LimitPledgesToCurrentPerson";
             public const string ShowAccountSummary = "ShowAccountSummary";
             public const string Accounts = "Accounts";
             public const string HideAmount = "HideAmount";
-            public const string ShowPersonFilter = "ShowPersonFilter";
-            public const string ShowAccountFilter = "ShowAccountFilter";
-            public const string ShowDateRangeFilter = "ShowDateRangeFilter";
-            public const string ShowLastModifiedFilter = "ShowLastModifiedFilter";
         }
 
         private static class NavigationUrlKey
@@ -157,14 +126,27 @@ namespace Rock.Blocks.Finance
 
         private static class PreferenceKey
         {
-            public const string DateRange = "Date Range";
-            public const string LastModified = "Last Modified";
-            public const string Person = "Person";
+            public const string FilterActiveOnly = "filter-active-only";
+        }
+        private static class PageParameterKey
+        {
             public const string Accounts = "Accounts";
-            public const string ActiveOnly = "Active Only";
         }
 
         #endregion Keys
+
+        #region Properties
+
+        /// <summary>
+        /// Gets the filter indicating whether verified photos should be included in the results.
+        /// </summary>
+        /// <value>
+        /// The filter show verified photos.
+        /// </value>
+        protected string FilterActiveOnly => GetBlockPersonPreferences()
+            .GetValue( PreferenceKey.FilterActiveOnly );
+
+        #endregion
 
         #region Methods
 
@@ -190,6 +172,8 @@ namespace Rock.Blocks.Finance
         /// <returns>The options that provide additional details to the block.</returns>
         private FinancialPledgeListOptionsBag GetBoxOptions()
         {
+            var currencyInfo = new RockCurrencyCodeInfo();
+
             var options = new FinancialPledgeListOptionsBag()
             {
                 ShowAccountColumn = GetAttributeValue( AttributeKey.ShowAccountColumn ).AsBoolean(),
@@ -198,11 +182,14 @@ namespace Rock.Blocks.Finance
                 LimitPledgesToCurrentPerson = GetAttributeValue( AttributeKey.LimitPledgesToCurrentPerson ).AsBoolean(),
                 ShowAccountSummary = GetAttributeValue( AttributeKey.ShowAccountSummary ).AsBoolean(),
                 HideAmount = GetAttributeValue( AttributeKey.HideAmount ).AsBoolean(),
-                ShowPersonFilter = GetAttributeValue( AttributeKey.ShowPersonFilter ).AsBoolean(),
-                ShowAccountFilter = GetAttributeValue( AttributeKey.ShowAccountFilter ).AsBoolean(),
-                ShowDateRangeFilter = GetAttributeValue( AttributeKey.ShowDateRangeFilter ).AsBoolean(),
-                ShowLastModifiedFilter = GetAttributeValue( AttributeKey.ShowLastModifiedFilter ).AsBoolean()
+                CurrencyInfo = new ViewModels.Utility.CurrencyInfoBag
+                {
+                    Symbol = currencyInfo.Symbol,
+                    DecimalPlaces = currencyInfo.DecimalPlaces,
+                    SymbolLocation = currencyInfo.SymbolLocation
+                }
             };
+
             return options;
         }
 
@@ -223,7 +210,7 @@ namespace Rock.Blocks.Finance
         {
             return new Dictionary<string, string>
             {
-                [NavigationUrlKey.DetailPage] = this.GetLinkedPageUrl( AttributeKey.DetailPage, "PledgeId", "((Key))" )
+                [NavigationUrlKey.DetailPage] = this.GetLinkedPageUrl( AttributeKey.DetailPage, new Dictionary<string, string> { ["PledgeId"] = "((Key))", ["autoEdit"] = "true", ["returnUrl"] = this.GetCurrentPageUrl() } )
             };
         }
 
@@ -231,20 +218,32 @@ namespace Rock.Blocks.Finance
         protected override IQueryable<FinancialPledge> GetListQueryable( RockContext rockContext )
         {
             var query = base.GetListQueryable( rockContext )
-                .Include( a => a.PersonAlias )
+                .Include( a => a.PersonAlias.Person )
                 .Include( a => a.Account )
                 .Include( a => a.PledgeFrequencyValue )
                 .Include( a => a.Group );
 
-            // If the 'LimitPledgesToCurrentPerson' option is enabled, filter by current person
+            // If 'LimitPledgesToCurrentPerson' is enabled, filter by the logged-in user
             if ( GetAttributeValue( AttributeKey.LimitPledgesToCurrentPerson ).AsBoolean() )
             {
-                var currentPersonId = RequestContext.CurrentPerson?.Id;
-
-                if ( currentPersonId.HasValue )
+                var currentPerson = RequestContext.CurrentPerson;
+                if ( currentPerson != null && !string.IsNullOrWhiteSpace( currentPerson.GivingId ) )
                 {
-                    query = query.Where( a => a.PersonAlias.PersonId == currentPersonId.Value );
+                    query = query.Where( a => a.PersonAlias.Person.GivingId == currentPerson.GivingId );
                 }
+            }
+            else
+            {
+                // Otherwise, use the selected context entity type
+                var contextEntity = GetContextEntity();
+                if ( contextEntity is Person contextPerson)
+                {
+                    if ( contextPerson != null && !string.IsNullOrWhiteSpace( contextPerson.GivingId ) )
+                    {
+                        query = query.Where( a => a.PersonAlias.Person.GivingId == contextPerson.GivingId );
+                    }
+                }
+                // else: show pledges for all people
             }
 
             // Filter by configured limit accounts if specified
@@ -254,9 +253,29 @@ namespace Rock.Blocks.Finance
                 query = query.Where( p => accountGuids.Contains( p.Account.Guid ) );
             }
 
-            // Filter by "Active Only" user preference
-            var activeOnly = this.GetBlockPersonPreferences().GetValue( PreferenceKey.ActiveOnly ).AsBoolean();
-            if ( activeOnly )
+            var accountIds = new List<int>();
+            foreach ( var accountIdentifier in PageParameter( PageParameterKey.Accounts ).Split( ',' ) )
+            {
+                var accountId = accountIdentifier.AsIntegerOrNull();
+                if ( !accountId.HasValue )
+                {
+                    accountId = FinancialAccountCache.GetByIdKey( accountIdentifier )?.Id;
+                }
+
+                if ( accountId.HasValue )
+                {
+                    accountIds.Add( accountId.Value );
+                }
+            }
+
+            if ( accountIds.Any() )
+            {
+                query = query.Where( p => p.AccountId.HasValue && accountIds.Contains( p.AccountId.Value ) );
+            }
+
+            // Filter by active pledges only
+            var showActiveOnly = FilterActiveOnly.AsBooleanOrNull() ?? false;
+            if ( showActiveOnly )
             {
                 query = query.Where( p => p.StartDate <= RockDateTime.Now && p.EndDate >= RockDateTime.Now );
             }
@@ -276,8 +295,8 @@ namespace Rock.Blocks.Finance
                 .AddTextField( "group", a => a.Group?.Name ?? "" )
                 .AddField( "totalAmount", a => a.TotalAmount )
                 .AddTextField( "pledgeFrequency", a => a.PledgeFrequencyValue?.Value )
-                .AddField( "startDate", a => a.StartDate )
-                .AddField( "endDate", a => a.EndDate )
+                .AddField( "startDate", a => a.StartDate == DateTime.MinValue.Date ? ( DateTime? ) null : a.StartDate )
+                .AddField( "endDate", a => a.EndDate == DateTime.MaxValue.Date ? ( DateTime? ) null : a.EndDate )
                 .AddField( "modifiedDate", a => a.ModifiedDateTime )
                 .AddAttributeFields( GetGridAttributes() );
         }
@@ -333,108 +352,6 @@ namespace Rock.Blocks.Finance
                 var entityService = new FinancialPledgeService( rockContext );
                 var count = entityService.Queryable().Count();
                 return ActionOk( count );
-            }
-        }
-
-        /// <summary>
-        /// Applies filters and binds the grid with the filtered data.
-        /// </summary>
-        [BlockAction]
-        public BlockActionResult ApplyFilter( string dateRange, string lastModified, string personGuid, List<Guid> accountGuids, bool activeOnly, string attributeFiltersJson )
-        {
-            using ( var rockContext = new RockContext() )
-            {
-                var pledges = GetListQueryable( rockContext );
-
-                // Always start with the base query to ensure correct filtering
-                var filteredPledges = pledges;
-
-                if ( !string.IsNullOrEmpty( personGuid ) )
-                {
-                    var person = new PersonAliasService( rockContext ).Get( personGuid.AsGuid() );
-                    if ( person != null )
-                    {
-                        filteredPledges = filteredPledges.Where( p => p.PersonAlias.Person.GivingId == person.Person.GivingId );
-                    }
-                }
-
-                if ( accountGuids != null && accountGuids.Any() )
-                {
-                    var accountIds = new FinancialAccountService( rockContext )
-                        .GetListByGuids( accountGuids )
-                        .Select( a => a.Id )
-                        .ToList();
-
-                    filteredPledges = filteredPledges.Where( p => p.AccountId.HasValue && accountIds.Contains( p.AccountId.Value ) );
-                }
-
-                var filterDateRange = RockDateTimeHelper.CalculateDateRangeFromDelimitedValues( dateRange );
-                if ( filterDateRange.Start.HasValue || filterDateRange.End.HasValue )
-                {
-                    var filterStartDate = filterDateRange.Start ?? DateTime.MinValue;
-                    var filterEndDate = filterDateRange.End ?? DateTime.MaxValue;
-                    filteredPledges = filteredPledges.Where( p => p.StartDate >= filterStartDate && p.EndDate <= filterEndDate );
-                }
-
-                var filterLastModifiedRange = RockDateTimeHelper.CalculateDateRangeFromDelimitedValues( lastModified );
-                if ( filterLastModifiedRange.Start.HasValue || filterLastModifiedRange.End.HasValue )
-                {
-                    var filterStartDate = filterLastModifiedRange.Start ?? DateTime.MinValue;
-                    var filterEndDate = filterLastModifiedRange.End ?? DateTime.MaxValue;
-                    filteredPledges = filteredPledges.Where( p => p.ModifiedDateTime >= filterStartDate && p.ModifiedDateTime <= filterEndDate );
-                }
-
-                if ( activeOnly )
-                {
-                    filteredPledges = filteredPledges.Where( p => p.StartDate <= RockDateTime.Now && p.EndDate >= RockDateTime.Now );
-                }
-
-                // Apply attribute filters if configured
-                var attributeFilters = attributeFiltersJson.FromJsonOrNull<Dictionary<string, List<string>>>() ?? new Dictionary<string, List<string>>();
-
-                if ( attributeFilters.Any() )
-                {
-                    foreach ( var filter in attributeFilters )
-                    {
-                        var attribute = AttributeCache.Get( filter.Key );
-                        if ( attribute != null )
-                        {
-                            var attributeValues = new AttributeValueService( rockContext )
-                                .Queryable()
-                                .Where( v => v.AttributeId == attribute.Id && filter.Value.Contains( v.Value ) )
-                                .Select( v => v.EntityId )
-                                .ToList();
-
-                            filteredPledges = filteredPledges.Where( p => attributeValues.Contains( p.Id ) );
-                        }
-                    }
-                }
-
-                var result = filteredPledges.ToList()
-                    .Select( p => new
-                    {
-                        p.IdKey,
-                        p.Id,
-                        Person = new
-                        {
-                            p.PersonAlias.Person.NickName,
-                            p.PersonAlias.Person.LastName,
-                            p.PersonAlias.Person.PhotoUrl
-                        },
-                        Account = p.Account.Name,
-                        Group = p.Group != null ? p.Group.Name : "",
-                        p.TotalAmount,
-                        PledgeFrequency = p.PledgeFrequencyValue != null ? p.PledgeFrequencyValue.Value : null,
-                        StartDate = p.StartDate.Year == 1 ? ( DateTime? ) null : p.StartDate,
-                        EndDate = p.EndDate.Year == 9999 ? ( DateTime? ) null : p.EndDate,
-                        ModifiedDate = p.ModifiedDateTime
-                    } )
-                    .ToList();
-
-                return ActionOk( new
-                {
-                    Rows = result
-                } );
             }
         }
         #endregion

@@ -12,35 +12,30 @@
             </NotificationBox>
 
             <div class="control-wrapper">
-                <div class="note-editor-container">
-                    <div class="note-editor note-frame panel panel-default">
-                        <div :id="assignToolbarId(uniqueId)"
-                             class="panel-heading note-toolbar"
-                             ref="toolbarElement"></div>
+                <div ref="noteEditorContainerElement" class="note-editor-container">
+                    <EditSourceCodePlugin v-model="internalValue"
+                                          :disabled="disabled"
+                                          :editorHeight="editorHeight + yOffset"
+                                          :mergeFields="mergeFields"
+                                          ref="editSourceCodePlugin"
+                                          :startInCodeEditorMode="startInCodeEditorMode"
+                                          :isTogglableCodeEditorForced="isTogglableCodeEditorForced"
+                                          @preventToggleOff="onPreventCodeEditorToggleOff">
+                        <template #default="{ isEditorShown }">
+                            <textarea v-show="!updateIsEditorShown(isEditorShown)"
+                                      class="d-none"
+                                      :id="assignEditorId(uniqueId)"
+                                      ref="editorElement"></textarea>
+                        </template>
+                    </EditSourceCodePlugin>
 
-                        <div class="note-editing-area">
-                            <EditSourceCodePlugin v-model="internalValue"
-                                                  :disabled="disabled"
-                                                  :editorHeight="editorHeight + yOffset"
-                                                  :mergeFields="mergeFields"
-                                                  ref="editSourceCodePlugin"
-                                                  :startInCodeEditorMode="startInCodeEditorMode"
-                                                  @preventToggleOff="onPreventCodeEditorToggleOff">
-                                <template #default="{ isEditorShown }">
-                                    <div v-show="!updateIsEditorShown(isEditorShown)"
-                                         class="note-editable"
-                                         :id="assignEditorId(uniqueId)"
-                                         ref="editorElement"></div>
-                                </template>
-                            </EditSourceCodePlugin>
-                        </div>
+                    <div v-if="isResizing" class="note-editing-area-overlay"></div>
 
-                        <div class="note-statusbar" ref="resizerElement" role="status">
-                            <div aria-label="Resize" class="note-resizebar">
-                                <div class="note-icon-bar"></div>
-                                <div class="note-icon-bar"></div>
-                                <div class="note-icon-bar"></div>
-                            </div>
+                    <div ref="resizerElement" class="note-statusbar" role="status">
+                        <div aria-label="Resize" class="note-resizebar">
+                            <div class="note-icon-bar"></div>
+                            <div class="note-icon-bar"></div>
+                            <div class="note-icon-bar"></div>
                         </div>
                     </div>
                 </div>
@@ -50,7 +45,7 @@
 
             <PasteAsPlainTextPlugin ref="pasteAsPlainTextPlugin" />
 
-            <MergeFieldPlugin :mergeFields="mergeFields" ref="mergeFieldPlugin" />
+            <MergeFieldPlugin :mergeFields="mergeFields" :commonMergeFields="commonMergeFields" ref="mergeFieldPlugin" />
 
             <ImageBrowserPlugin ref="imageBrowserPlugin"
                                 :encryptedRootFolder="encryptedImageRootFolder"
@@ -62,35 +57,30 @@
 
             <AssetManagerPlugin ref="assetManagerPlugin" />
 
-            <StylesheetsPlugin htmlCssReplacementSelector=".note-editor" bodyCssReplacementSelector=".note-editing-area" />
-
             <MetaTagsPlugin />
 
             <LavaLanguagePlugin />
+
+            <StylesheetsPlugin />
+
+            <ShortLinkPlugin ref="shortLinkPlugin"
+                             :checkToken="shortLinkCheckToken"
+                             :getPageId="shortLinkGetPageId"
+                             :sites="shortLinkSites"
+                             :tokenMinLength="shortLinkTokenMinLength" />
         </template>
     </RockFormField>
 </template>
 
 <style scoped>
-:deep(.tox.tox-tinymce-inline .tox-editor-header) {
-    border: none;
-}
 
-.note-editable {
-    height: v-bind(editorHeightCss);
-}
-
-.note-editor-container {
-    position: relative;
-}
-
-.note-editor .note-toolbar {
+.note-editor-container :deep(.note-editor .note-editable) {
     padding: 0;
+    border-right: none;
+    border-left: none;
+    border-bottom: none;
 }
 
-:deep(.codeeditor-header) {
-    display: none;
-}
 </style>
 
 <script setup lang="ts">
@@ -106,12 +96,18 @@
     import MetaTagsPlugin from "./NoteEditor/metaTagsPlugin.partial.obs";
     import ParagraphPlugin from "./NoteEditor/paragraphPlugin.partial.obs";
     import PasteAsPlainTextPlugin from "./NoteEditor/pasteAsPlainTextPlugin.partial.obs";
+
+    import ShortLinkPlugin from "./NoteEditor/shortLinkPlugin.partial.obs";
     import StylesheetsPlugin from "./NoteEditor/stylesheetsPlugin.partial.obs";
+    import { getCssVariableValue } from "@Obsidian/Utility/cssUtils";
     import { providePluginsFeature } from "./NoteEditor/utils.partial";
     import { tinymce, Editor, EditorEvent, Events, RawEditorOptions } from "@Obsidian/Libs/tinymce";
+    import { Guid } from "@Obsidian/Types";
     import { useVModelPassthrough } from "@Obsidian/Utility/component";
+    import { debounce, isNullish } from "@Obsidian/Utility/util";
+    import { ListItemBag } from "@Obsidian/ViewModels/Utility/listItemBag";
 
-    type ToolbarConfig = "light" | "full";
+    type ToolbarConfig = "light" | "full" | "light-compact";
 
     const props = defineProps({
         /** The HTML value. */
@@ -157,7 +153,17 @@
             required: false
         },
 
-        /** Editor height in pixels (not including toolbar). */
+        /**
+         * A list of common merge field to show below the picker for easy access. Should be an array of strings
+         * and the strings should be in the following format: "FieldName^Label|Icon" or just "FieldName^Label", where the FieldName is the
+         * name of the merge field, Label is the text to display on the button, and Icon is the CSS class for icon.
+         */
+        commonMergeFields: {
+            type: Array as PropType<string[] | undefined>,
+            required: false
+        },
+
+        /** Editor height in pixels (including toolbar). */
         editorHeight: {
             type: Number as PropType<number>,
             default: 600
@@ -204,6 +210,57 @@
         userSpecificRoot: {
             type: Boolean,
             default: false
+        },
+
+        /**
+         * When set to true, the HTML editor will show the asset manager button
+         * in the toolbar. This requires that a security grant token be available
+         * that provides access to the asset manager.
+         */
+        enableAssetManager: {
+            type: Boolean as PropType<boolean>,
+            default: false
+        },
+
+
+        /**
+         * When set to true, the code editor allows toggling even if the content includes Lava commands,
+         * bypassing any usual restrictions related to such content.
+         */
+        isTogglableCodeEditorForced: {
+            type: Boolean,
+            default: false
+        },
+
+        shortLinkCheckToken: {
+            type: Object as PropType<((token: string, siteId: number) => Promise<string>) | null | undefined>
+        },
+
+        shortLinkGetPageId: {
+            type: Object as PropType<((pageGuid: Guid) => Promise<number | null | undefined>) | null | undefined>
+        },
+
+        shortLinkSites: {
+            type: Array as PropType<ListItemBag[] | null | undefined>
+        },
+
+        shortLinkTokenMinLength: {
+            type: Number as PropType<number | null | undefined>
+        },
+
+        /**
+         * The delay (in milliseconds) before uncommitted editor changes are automatically committed.
+         *
+         * "Uncommitted changes" are edits made by the user that have not yet triggered a change event—
+         * typically because the editor hasn't lost focus or reached an internal threshold.
+         *
+         * This setting is useful for syncing the model value shortly after the user stops typing.
+         * May affect performance with large content.
+         *
+         * Set to `null` or `undefined` to disable (default).
+         */
+        autocommitDelayMs: {
+            type: Number as PropType<number | null | undefined>
         }
     });
 
@@ -217,11 +274,12 @@
     const internalValue = useVModelPassthrough(props, "modelValue", emit);
     const editorId = ref<string | undefined>();
     const editorElement = ref<HTMLElement | undefined>();
-    const toolbarId = ref<string | undefined>();
+    const noteEditorContainerElement = ref<HTMLElement | undefined>();
     const tinyMceInstance = ref<Editor | undefined>();
     const toolbarElement = ref<HTMLElement | undefined>();
     const isCodeEditorWarningDismissed = ref<boolean>(false);
     const isCodeEditorWarningShown = ref<boolean>(false);
+    const isResizing = ref<boolean>(false);
 
     // Keep track of the TinyMCE value to compare with the modelValue.
     const tinyMceValue = ref<string | undefined>();
@@ -237,6 +295,7 @@
     const imageBrowserPlugin = ref<InstanceType<typeof ImageBrowserPlugin> | undefined>();
     const fileBrowserPlugin = ref<InstanceType<typeof FileBrowserPlugin> | undefined>();
     const assetManagerPlugin = ref<InstanceType<typeof AssetManagerPlugin> | undefined>();
+    const shortLinkPlugin = ref<InstanceType<typeof ShortLinkPlugin> | undefined>();
 
     // Provide helpers to plugins.
     const pluginManager = providePluginsFeature({
@@ -246,26 +305,12 @@
 
     //#endregion
 
-    // #region Computed Values
-
-    const editorHeightCss = computed<string>(() => {
-        return `${props.editorHeight + yOffset.value}px`;
-    });
-
-    // #endregion
-
     // #region Functions
 
     /** Returns the ID assigned to the editor HTML element. */
     function assignEditorId(uniquePart: string): string {
         editorId.value = `html-editor-container-${uniquePart}`;
         return editorId.value;
-    }
-
-    /** Returns the ID assigned to the editor toolbar HTML element. */
-    function assignToolbarId(uniquePart: string): string {
-        toolbarId.value = `html-editor-toolbar-container-${uniquePart}`;
-        return toolbarId.value;
     }
 
     /** Updates and returns the isEditorShown value. */
@@ -275,14 +320,34 @@
         return isEditorShown.value;
     }
 
-    // #endregion
+    const scheduleAutoCommit = computed<() => void>(() => {
+        if (isNullish(props.autocommitDelayMs)) {
+            return () => { /* Do nothing if the prop is nullish. */ };
+        }
+        else {
+            return debounce(
+                () => {
+                    tinyMceInstance.value?.execCommand("mceTriggerChange");
+                }, props.autocommitDelayMs
+            );
+        }
+    });
+
+    // #endregion Functions
 
     // #region Event Handlers
 
     /** Event handler for the mouse being pressed while the pointer is inside the resize element. This starts the resize behavior. */
     function onResizeStart(_event: MouseEvent): void {
+        isResizing.value = true;
+
+        // Prevent page scrolling during resize
+        document.body.style.userSelect = "none"; // Disable text selection
+        document.body.style.overflow = "hidden"; // Disable scrolling
+
         document.addEventListener("mousemove", onResize);
         document.addEventListener("mouseup", onResizeEnd, { once: true });
+
     }
 
     /** Event handler for the mouse being moved while the resizer is being dragged. This resizes the editor. */
@@ -292,8 +357,13 @@
 
     /** Event handler for the mouse being released while the resizer is being dragged. This ends the resize behavior. */
     function onResizeEnd(_event: MouseEvent): void {
+        isResizing.value = false;
         document.removeEventListener("mousemove", onResize);
         resizerElement.value?.addEventListener("mousedown", onResizeStart, { once: true });
+
+        // Re-enable scrolling
+        document.body.style.userSelect = "";
+        document.body.style.overflow = "";
     }
 
     /** Event handler for the code editor toggle off being prevented. */
@@ -302,7 +372,7 @@
         isCodeEditorWarningShown.value = event.isPrevented;
     }
 
-    // #endregion
+    // #endregion Event Handlers
 
     // #region Watchers
 
@@ -323,6 +393,16 @@
     // Clear the resize offset when the `editorHeight` prop changes.
     watch(() => props.editorHeight, () => {
         yOffset.value = 0;
+    });
+
+    watch(yOffset, (value: number) => {
+        if (tinyMceInstance.value) {
+            // Only resize the TinyMCE editor if it is not in edit source code mode.
+            const editorContainer = tinyMceInstance.value.getContainer();
+            if (editorContainer.dataset.editSourceCode !== "true") {
+                editorContainer.style.height = `${props.editorHeight + value}px`;
+            }
+        }
     });
 
     // Disable the editor when the `disabled` prop changes.
@@ -350,7 +430,10 @@
     // Initialize the editor.
     // This gets called after the plugins have been mounted.
     onMounted(() => {
-        if (editorId.value && toolbarId.value) {
+        if (editorId.value) {
+            const assetManagerPluginId = props.enableAssetManager
+                ? assetManagerPlugin.value?.id
+                : undefined;
             // Define the toolbar buttons depending on the toolbar config (light or full).
             // They are displayed in the order in which they are defined
             // and grouped using pipe (|) characters; e.g.,
@@ -361,8 +444,9 @@
             // so no need to create a rockpastefromword plugin at this point.
             // https://www.tiny.cloud/docs/tinymce/6/available-toolbar-buttons/
             const toolbarConfigs: Record<ToolbarConfig, string> = {
-                "light": `${editSourceCodePlugin.value?.id} | bold italic strikethrough link forecolor backcolor styles numlist bullist | removeformat | ${paragraphPlugin.value?.id} | ${mergeFieldPlugin.value?.id} | ${imageBrowserPlugin.value?.id} ${fileBrowserPlugin.value?.id} ${assetManagerPlugin.value?.id} | ${pasteAsPlainTextPlugin.value?.id} | undo redo`,
-                "full": `${editSourceCodePlugin.value?.id} | bold italic underline strikethrough numlist bullist link | undo redo | removeformat | styles forecolor backcolor | fontfamily fontsize superscript subscript table hr | ${paragraphPlugin.value?.id} | ${mergeFieldPlugin.value?.id} | ${imageBrowserPlugin.value?.id} ${fileBrowserPlugin.value?.id} ${assetManagerPlugin.value?.id} | ${pasteAsPlainTextPlugin.value?.id} | help`,
+                "light": `${editSourceCodePlugin.value?.id} | bold italic strikethrough link ${shortLinkPlugin.value?.id} forecolor backcolor styles numlist bullist | removeformat | ${paragraphPlugin.value?.id} | ${mergeFieldPlugin.value?.id} | ${imageBrowserPlugin.value?.id} ${fileBrowserPlugin.value?.id} ${assetManagerPluginId} | ${pasteAsPlainTextPlugin.value?.id} | undo redo`,
+                "light-compact": `${editSourceCodePlugin.value?.id} bold italic strikethrough link ${shortLinkPlugin.value?.id} forecolor backcolor styles numlist bullist ${paragraphPlugin.value?.id} | ${imageBrowserPlugin.value?.id} ${fileBrowserPlugin.value?.id} ${assetManagerPluginId} removeformat ${pasteAsPlainTextPlugin.value?.id} ${mergeFieldPlugin.value?.id} undo redo`,
+                "full": `${editSourceCodePlugin.value?.id} | bold italic underline strikethrough numlist bullist link ${shortLinkPlugin.value?.id} | undo redo | removeformat | styles forecolor backcolor | fontfamily fontsize superscript subscript table hr | ${paragraphPlugin.value?.id} | ${mergeFieldPlugin.value?.id} | ${imageBrowserPlugin.value?.id} ${fileBrowserPlugin.value?.id} ${assetManagerPluginId} | ${pasteAsPlainTextPlugin.value?.id} | help`,
             };
 
             // Get the default system font.
@@ -384,10 +468,9 @@
                 // and have access to the same APIs loaded in the page.
                 // https://www.tiny.cloud/docs/tinymce/6/toolbar-configuration-options/#persistent-inline-editor-toolbar-options
                 selector: `#${editorId.value}`,
-                inline: true,
-                fixed_toolbar_container: `#${toolbarId.value}`,
-                toolbar_persist: true,
+
                 toolbar_mode: "wrap",
+                height: props.editorHeight,
 
                 // The default skin CSS is loaded manually as an import in
                 // @Obsidian/Libs/tinymce.ts, so no need to specify one here.
@@ -397,14 +480,26 @@
                 // and will inherit global Rock styles.
                 content_css: false,
 
+                content_style: `:root {
+                    --color-interface-softest: ${getCssVariableValue("--color-interface-softest")};
+                    --color-interface-strong: ${getCssVariableValue("--color-interface-strong")};
+                }
+
+                body {
+                    font-family: ${defaultSystemFont || "arial,helvetica,sans-serif"};
+                    background-color: var(--color-interface-softest);
+                    color: var(--color-interface-strong);
+                }`,
+
                 // Hide the header menu bar and the footer status bar (which includes the TinyMCE attribution).
                 menubar: false,
                 statusbar: false,
 
                 // Allow the editor to be resizable: true - vertical, false - none, 'both' - horizontal & vertical
-                resize: "both",
+                resize: true,
 
                 // Only include the plugins that are needed to keep TinyMCE leaner.
+                // These also need to be imported in @Obsidian/Libs/tinymce.ts.
                 plugins: "image link lists media searchreplace table help",
 
                 // Set the toolbar buttons.
@@ -557,19 +652,28 @@
 
                     // Handle behavior that should occur after the editor is initialized.
                     editor.on("init", () => {
-                        if (tinyMceInstance.value) {
-                            // Set the initial value.
-                            if (tinyMceValue.value !== internalValue.value) {
-                                tinyMceInstance.value.setContent(internalValue.value);
+                        // Set the initial value.
+                        if (tinyMceValue.value !== internalValue.value) {
+                            editor.setContent(internalValue.value);
 
-                                // Get the new content from the editor after setting it
-                                // just in case it gets manipulated by plugins.
-                                tinyMceValue.value = tinyMceInstance.value.getContent();
-                            }
-
-                            // Set initial enabled state.
-                            setEnabled(!props.disabled);
+                            // Get the new content from the editor after setting it
+                            // just in case it gets manipulated by plugins.
+                            tinyMceValue.value = editor.getContent();
                         }
+
+                        // Set initial enabled state.
+                        setEnabled(!props.disabled);
+
+                        // Add Rock note editor classes.
+                        const noteEditor = editor.getContainer();
+                        noteEditor.classList.add("note-editor", "note-frame", "panel", "panel-default");
+
+                        toolbarElement.value = noteEditor.querySelector(".tox-editor-header") as HTMLElement;
+                        toolbarElement.value?.classList.add("note-toolbar", "panel-heading");
+
+                        const noteEditable = editor.getContentAreaContainer();
+                        noteEditable.parentElement?.classList.add("note-editing-area");
+                        noteEditable.classList.add("note-editable");
                     });
 
                     // Emit model updates when the editor content changes.
@@ -582,11 +686,29 @@
                             internalValue.value = newValue;
                         }
                     });
+
+                    // Automatically commit changes after a short delay to allow for typing.
+                    editor.on("input", (_e): void => {
+                        scheduleAutoCommit.value();
+                    });
+
+                    editor.on("focus", (): void => {
+                        if (noteEditorContainerElement.value) {
+                            noteEditorContainerElement.value.classList.add("focused");
+                        }
+                    });
+
+                    editor.on("blur", (): void => {
+                        if (noteEditorContainerElement.value) {
+                            noteEditorContainerElement.value.classList.remove("focused");
+                        }
+                    });
                 }
             };
 
             // Initialize Tiny MCE.
-            tinymce.init(pluginManager.configureEditorOptions(editorOptions));
+            const configuredEditorOptions = pluginManager.configureEditorOptions(editorOptions);
+            tinymce.init(configuredEditorOptions);
         }
 
         // Add vertical resizing.

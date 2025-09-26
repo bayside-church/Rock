@@ -722,6 +722,17 @@ textarea,
 
   > .panel-heading {
     border-bottom: 1px solid @panel-border;
+    background-color: var(--color-interface-softest);
+    border-bottom-color: var(--color-interface-softer);
+    padding-left: var(--spacing-large);
+    height: 56px; // to match the NextGen grid
+
+    & .panel-title {
+      font-size: var(--font-size-h5);
+      overflow:           hidden;
+      text-overflow:      ellipsis;
+      white-space:        nowrap;
+    }
   }
 
   > .panel-body {
@@ -877,7 +888,7 @@ textarea,
 // grid styles
 
 td.grid-actions {
-  padding: 0 !important;
+  padding: 2px !important;
   font-size: 1em;
 }
 
@@ -1317,6 +1328,12 @@ td.grid-actions {
 }
 
 // splash screen
+.splash-form-btn:has(.btn-register) {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
 #splash {
   #content {
     max-width: 380px;

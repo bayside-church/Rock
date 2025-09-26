@@ -36,6 +36,7 @@ namespace Rock.Field.Types
     /// Field Type used to display a dropdown list of connection opportunities
     /// Stored as ConnectionOpportunity.Guid
     /// </summary>
+    [FieldTypeUsage( FieldTypeUsage.System )]
     [RockPlatformSupport( Utility.RockPlatform.WebForms, Utility.RockPlatform.Obsidian )]
     [Rock.SystemGuid.FieldTypeGuid( Rock.SystemGuid.FieldType.CONNECTION_OPPORTUNITY )]
     public class ConnectionOpportunityFieldType : FieldType, IEntityFieldType, IEntityReferenceFieldType
@@ -296,7 +297,6 @@ namespace Rock.Field.Types
             cbIncludeInactive.AutoPostBack = true;
             cbIncludeInactive.CheckedChanged += OnQualifierUpdated;
             cbIncludeInactive.Label = "Include Inactive";
-            cbIncludeInactive.Text = "Yes";
             cbIncludeInactive.Help = "When set, inactive connection opportunities will be included in the list.";
 
             // Add ConnectionType Filter ddl
@@ -462,20 +462,23 @@ namespace Rock.Field.Types
             var editControl = control as ListControl;
             if ( editControl != null )
             {
-                var includeInactive = configurationValues.ContainsKey( INCLUDE_INACTIVE_KEY ) && configurationValues[INCLUDE_INACTIVE_KEY].Value.AsBoolean();
-                if ( !includeInactive )
+                if ( configurationValues != null )
                 {
-                    var listItem = editControl.Items.FindByValue( value );
-                    if ( listItem == null )
+                    var includeInactive = configurationValues.ContainsKey( INCLUDE_INACTIVE_KEY ) && configurationValues[INCLUDE_INACTIVE_KEY].Value.AsBoolean();
+                    if ( !includeInactive )
                     {
-                        var valueGuid = value.AsGuid();
-                        var connectionOpportunity = new ConnectionOpportunityService( new RockContext() )
-                           .Queryable().AsNoTracking()
-                           .Where( o => o.Guid == valueGuid )
-                           .FirstOrDefault();
-                        if ( connectionOpportunity != null )
+                        var listItem = editControl.Items.FindByValue( value );
+                        if ( listItem == null )
                         {
-                            editControl.Items.Add( new ListItem( connectionOpportunity.Name, connectionOpportunity.Guid.ToString().ToUpper() ) );
+                            var valueGuid = value.AsGuid();
+                            var connectionOpportunity = new ConnectionOpportunityService( new RockContext() )
+                               .Queryable().AsNoTracking()
+                               .Where( o => o.Guid == valueGuid )
+                               .FirstOrDefault();
+                            if ( connectionOpportunity != null )
+                            {
+                                editControl.Items.Add( new ListItem( connectionOpportunity.Name, connectionOpportunity.Guid.ToString().ToUpper() ) );
+                            }
                         }
                     }
                 }

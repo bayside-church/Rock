@@ -45,7 +45,7 @@
                             class="btn btn-link btn-overflow dropdown-toggle"
                             data-toggle="dropdown"
                             :disabled="isRowDisabled">
-                        <i class="fa fa-ellipsis-v"></i>
+                        <i class="ti ti-dots-vertical"></i>
                     </button>
                     <ul class="dropdown-menu">
                         <li>
@@ -53,13 +53,13 @@
                                class="text-danger"
                                href="#"
                                @click.prevent="onPerformAction(ToolboxScheduleRowActionType.Cancel)">
-                                Cancel Confirmation
+                                {{ declineButtonText }}
                             </a>
 
                             <a v-else-if="row.confirmationStatus === ToolboxScheduleRowConfirmationStatus.Declined"
                                href="#"
                                @click.prevent="onPerformAction(ToolboxScheduleRowActionType.Accept)">
-                                Accept Schedule
+                                {{ confirmedButtonText }}
                             </a>
 
                             <a v-else
@@ -80,7 +80,8 @@
                    :attendanceGuid="row.entityGuid"
                    :wasSchedulePreviouslyConfirmed="wasSchedulePreviouslyConfirmed"
                    :isDeclineNoteVisible="isDeclineNoteVisible"
-                   :isDeclineNoteRequired="isDeclineNoteRequired" />
+                   :isDeclineNoteRequired="isDeclineNoteRequired"
+                   @scheduleRowDeclined="onScheduleRowDeclined" />
 </template>
 
 <style scoped>
@@ -135,12 +136,22 @@
         disabled: {
             type: Boolean as PropType<boolean>,
             default: false
-        }
+        },
+
+        confirmedButtonText: {
+            type: String as PropType<string | null | undefined>,
+            required: true
+        },
+
+        declineButtonText: {
+            type: String as PropType<string | null | undefined>,
+            required: true
+        },
     });
 
     const emit = defineEmits<{
-        (e: "removeScheduleRow", entityGuid: string): void,
-        (e: "personGroupScheduleFeedUrlUpdated", personGroupScheduleFeedUrl: string | null | undefined): void
+        (e: "removeScheduleRow", entityGuid: string): void;
+        (e: "personGroupScheduleFeedUrlUpdated", personGroupScheduleFeedUrl: string | null | undefined): void;
     }>();
 
     // #region Values
@@ -236,6 +247,13 @@
     // #region Event Handlers
 
     /**
+     * Handles the scheduleRowDeclined event of the declineReason component.
+     */
+    async function onScheduleRowDeclined(): Promise<void> {
+        props.row.confirmationStatus = ToolboxScheduleRowConfirmationStatus.Declined;
+    }
+
+    /**
      * Handles the `click` event of schedule row action buttons.
      *
      * @param actionType The action type to be performed.
@@ -251,7 +269,8 @@
         const bag: PerformScheduleRowActionRequestBag = {
             selectedPersonGuid: toGuidOrNull(selectedPersonGuid?.value) ?? emptyGuid,
             entityGuid: toGuidOrNull(props.row.entityGuid) ?? emptyGuid,
-            actionType
+            actionType,
+            existingConfirmationStatus: props.row.confirmationStatus
         };
 
         const result = await invokeBlockAction<PerformScheduleRowActionResponseBag>("PerformScheduleRowAction", { bag });

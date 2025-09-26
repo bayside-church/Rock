@@ -24,15 +24,6 @@ import { getFieldConfigurationProps, getFieldEditorProps } from "./utils";
 import { newGuid } from "@Obsidian/Utility/guid";
 import { toNumberOrNull } from "@Obsidian/Utility/numberUtils";
 
-function parseModelValue(modelValue: string | undefined): ClientValue[] {
-    try {
-        return JSON.parse(modelValue ?? "[]") as ClientValue[];
-    }
-    catch {
-        return [];
-    }
-}
-
 export const EditComponent = defineComponent({
     name: "ConditionalScaleField.Edit",
 
@@ -131,13 +122,26 @@ export const ConfigurationComponent = defineComponent({
         };
 
         const onAddClick = (): void => {
-            const range = configuration.value.length;
-            configuration.value.push({ label: "", lowValue: null, highValue: null, color:"", rangeIndex:range + 1 ,guid: newGuid()  });
+            configuration.value.push(defaultValue());
         };
 
         const onRemoveClick = (index: number): void => {
             configuration.value.splice(index, 1);
         };
+
+        function defaultValue(): ClientValue {
+            const range = configuration.value.length;
+            return { label: "", lowValue: null, highValue: null, color: "", rangeIndex: range + 1, guid: newGuid() } as ClientValue;
+        }
+
+        function parseModelValue(modelValue: string | undefined): ClientValue[] {
+            try {
+                return modelValue ? JSON.parse(modelValue) as ClientValue[] : [defaultValue()];
+            }
+            catch {
+                return [];
+            }
+        }
 
         // Watch for changes coming in from the parent component and update our
         // data to match the new information.
@@ -148,7 +152,7 @@ export const ConfigurationComponent = defineComponent({
         });
 
         // Watch for changes in properties that only require a local UI update.
-        watch(configuration, () => maybeUpdateConfiguration(ConfigurationValueKey.ConfigurationJSON, JSON.stringify(configuration.value) ?? ""), {deep : true});
+        watch(configuration, () => maybeUpdateConfiguration(ConfigurationValueKey.ConfigurationJSON, JSON.stringify(configuration.value) ?? ""), { deep: true });
 
         return {
             configuration,
@@ -177,14 +181,14 @@ export const ConfigurationComponent = defineComponent({
                 <NumberBox v-model="value.lowValue" class="conditional-scale-lowValue form-control margin-t-md" placeholder="Low Value" />
             </div>
                 <div class='col-md-2'>
-                    <a href="#" @click.prevent="onRemoveClick(valueIndex)" class="btn btn-sm btn-danger"><i class="fa fa-times"></i></a>
+                    <a href="#" @click.prevent="onRemoveClick(valueIndex)" class="btn btn-sm btn-danger"><i class="ti ti-x"></i></a>
                 </div>
 
         </div>
     </span>
     <hr>
     <div class="control-actions">
-        <a class="btn btn-action btn-square btn-xs" href="#" @click.prevent="onAddClick"><i class="fa fa-plus-circle"></i></a>
+        <a class="btn btn-action btn-square btn-xs" href="#" @click.prevent="onAddClick"><i class="ti ti-circle-plus"></i></a>
     </div>
 </span>
         </div>

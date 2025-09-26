@@ -15,6 +15,7 @@
 // </copyright>
 //
 
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data.Entity;
@@ -22,12 +23,14 @@ using System.Linq;
 
 using Rock.Attribute;
 using Rock.Data;
+using Rock.Enums.AI;
 using Rock.Model;
 using Rock.Obsidian.UI;
 using Rock.Security;
 using Rock.ViewModels.Blocks;
 using Rock.ViewModels.Blocks.Prayer.PrayerRequestList;
 using Rock.Web.Cache;
+using Rock.Web.UI;
 
 namespace Rock.Blocks.Prayer
 {
@@ -38,13 +41,14 @@ namespace Rock.Blocks.Prayer
     [DisplayName( "Prayer Request List" )]
     [Category( "Prayer" )]
     [Description( "Displays a list of prayer requests." )]
-    [IconCssClass( "fa fa-list" )]
+    [IconCssClass( "ti ti-list" )]
     [SupportedSiteTypes( Model.SiteType.Web )]
 
     [LinkedPage( "Detail Page",
         Description = "The page that will show the prayer request details.",
         Key = AttributeKey.DetailPage )]
 
+    [ContextAware( typeof( Rock.Model.Person ) )]
     [Rock.SystemGuid.EntityTypeGuid( "e8be562a-bb24-47a9-b3df-63cfb508f831" )]
     [Rock.SystemGuid.BlockTypeGuid( "e860f577-f30d-4197-87f0-c3dc6132f537" )]
     [CustomizedGrid]
@@ -73,7 +77,7 @@ namespace Rock.Blocks.Prayer
             var builder = GetGridBuilder();
 
             box.IsAddEnabled = GetIsAddEnabled();
-            box.IsDeleteEnabled = BlockCache.IsAuthorized( Authorization.EDIT, RequestContext.CurrentPerson );
+            box.IsDeleteEnabled = GetIsDeleteEnabled();
             box.ExpectedRowCount = null;
             box.NavigationUrls = GetBoxNavigationUrls();
             box.Options = GetBoxOptions();
@@ -103,23 +107,50 @@ namespace Rock.Blocks.Prayer
         }
 
         /// <summary>
+        /// Determines if the delete button should be enabled in the grid.
+        /// <summary>
+        /// <returns>A boolean value that indicates if the delete button should be enabled.</returns>
+        private bool GetIsDeleteEnabled()
+        {
+            return BlockCache.IsAuthorized( Authorization.EDIT, RequestContext.CurrentPerson );
+        }
+
+        /// <summary>
         /// Gets the box navigation URLs required for the page to operate.
         /// </summary>
         /// <returns>A dictionary of key names and URL values.</returns>
         private Dictionary<string, string> GetBoxNavigationUrls()
         {
+            var qryParams = new Dictionary<string, string>();
+            qryParams.Add( "PrayerRequestId", "((Key))" );
+
+            var personContext = GetContextEntity();
+            if ( personContext != null )
+            {
+                qryParams.Add( "PersonId", personContext.Id.ToString() );
+            }
+
             return new Dictionary<string, string>
             {
-                [NavigationUrlKey.DetailPage] = this.GetLinkedPageUrl( AttributeKey.DetailPage, "PrayerRequestId", "((Key))" )
+                [NavigationUrlKey.DetailPage] = this.GetLinkedPageUrl( AttributeKey.DetailPage, qryParams )
             };
         }
 
         /// <inheritdoc/>
         protected override IQueryable<PrayerRequest> GetListQueryable( RockContext rockContext )
         {
-            return base.GetListQueryable( rockContext )
+            var qry = base.GetListQueryable( rockContext )
                 .Include( a => a.Campus )
                 .Include( a => a.Category );
+
+            // Filter by person context if available
+            var personContext = GetContextEntity();
+            if ( personContext != null )
+            {
+                qry = qry.Where( p => p.RequestedByPersonAlias != null && p.RequestedByPersonAlias.PersonId == personContext.Id );
+            }
+
+            return qry;
         }
 
         /// <inheritdoc/>
@@ -136,7 +167,64 @@ namespace Rock.Blocks.Prayer
                 .AddField( "prayerCount", a => a.PrayerCount )
                 .AddField( "flagCount", a => a.FlagCount )
                 .AddField( "isApproved", a => a.IsApproved )
+                .AddTextField( "moderationFlags", a => GetModerationFlagsText( a.ModerationFlags ) )
                 .AddAttributeFields( GetGridAttributes() );
+        }
+
+        /// <summary>
+        /// Converts a ModerationFlags bitmask to the text that will be displayed as a warning on the Grid.
+        /// </summary>
+        private string GetModerationFlagsText( ModerationFlags flags )
+        {
+            if ( flags == ModerationFlags.None )
+            {
+                return string.Empty;
+            }
+
+            var tooltipText = string.Empty;
+
+            // Iterate through each defined flag and add its name if set.
+            foreach ( ModerationFlags flag in Enum.GetValues( typeof( ModerationFlags ) ) )
+            {
+                if ( flag != ModerationFlags.None && flags.HasFlag( flag ) )
+                {
+                    tooltipText += GetTooltipText( flag );
+                }
+            }
+
+            return tooltipText;
+        }
+
+        /// <summary>
+        /// Get the tooltip text for a given ModerationFlag.
+        /// </summary>
+        /// <param name="flag">The given moderation flag</param>
+        /// <returns>The Tooltip text</returns>
+        private string GetTooltipText( ModerationFlags flag )
+        {
+            switch ( flag )
+            {
+                case ModerationFlags.Hate:
+                    return "Flagged for hate. ";
+
+                case ModerationFlags.Threat:
+                    return "Flagged for threatening content. ";
+
+                case ModerationFlags.SelfHarm:
+                    return "Flagged for self-harm. ";
+
+                case ModerationFlags.Sexual:
+                    return "Flagged for sexual content. ";
+
+                case ModerationFlags.SexualMinor:
+                    return "Flagged for sexual content involving minors. ";
+
+                case ModerationFlags.Violent:
+                    return "Flagged for violent content. ";
+
+                default:
+                    return string.Empty;
+            }
         }
 
         #endregion

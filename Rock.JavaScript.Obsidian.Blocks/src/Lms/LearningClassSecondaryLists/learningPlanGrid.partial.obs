@@ -1,8 +1,11 @@
 <!-- Copyright by the Spark Development Network; Licensed under the Rock Community License -->
 <template>
-    <Grid :data="gridDataSource"
+    <Grid
+          :definition="gridDefinitionBag"
+          :data="gridDataSource"
           keyField="idKey"
           title="Learning Plan"
+          itemTerm="Activity"
           :entityTypeGuid="EntityType.LearningActivity"
           :expectedRowCount="5"
           :isCountMessageVisible="false"
@@ -25,9 +28,10 @@
                 title="Assign To"
                 field="assignTo"
                 :filter="pickExistingValueFilter"
-                visiblePriority="xs">
+                width="130px"
+                visiblePriority="sm">
             <template #format="{ row }">
-                <span :class="assignToIcons[row.assignTo] + ' fa-2x ml-4'" :style="'color: ' + assignToColors[row.assignTo]"></span>
+                <span :class="assignToIcons[row.assignTo] + ' ml-4'" :style="'color: ' + assignToColors[row.assignTo]"></span>
             </template>
         </Column>
 
@@ -35,12 +39,11 @@
                 name="componentName"
                 title="Type"
                 field="componentName"
+                width="15%"
                 :filter="pickExistingValueFilter"
                 visiblePriority="xs">
             <template #format="{ row }">
-                <span class="label label-default component-label" :style="'background-color: oklch(from ' + row.componentHighlightColor + ' calc(l + .60) c h);'">
-                    <span :style="'color: ' + row.componentHighlightColor"><i :class="row.componentIconCssClass"></i> &nbsp;{{ row.componentName }}</span>
-                </span>
+                <span v-html="getComponentHtml(row)"></span>
             </template>
         </Column>
 
@@ -61,7 +64,8 @@
                 field="completions"
                 :filter="numberValueFilter"
                 :filterValue="getCompletionsRowValue"
-                visiblePriority="sm">
+                width="160px"
+                visiblePriority="md">
             <template #format="{ row }">
                 <span v-html="getCompletionsHtml(row)"></span>
             </template>
@@ -78,12 +82,8 @@
                 title=""
                 visiblePriority="md">
             <template #format="{ row }">
-                <span v-if="row.isAttentionNeeded" class="fa-stack mr-3">
-                    <i class="fa fa-square fa-stack-2x fa-2x" style="color: #a9551d"></i>
-                    <i :class="row.isAttentionNeeded ? 'fa fa-chart-bar fw fa-stack-1x' : 'fw'" style="color: white"></i>
-                </span>
-
-                <span :class="row.hasStudentComments ? 'fa fa-comment-alt fw fa-2x' : 'fw'" style="color: #2f699f"></span>
+                <span :class="row.isAttentionNeeded ? 'attention-needed-icon ti ti-chart-bar fw mr-3' : 'fw'" title="Requires grading or facilitator action"></span>
+                <span :class="row.hasStudentComments ? 'student-comments-icon ti ti-message' : 'fw'" title="Student commented on this assignment"></span>
             </template>
         </Column>
 
@@ -97,11 +97,13 @@
     import Grid, { Column, NumberColumn, numberValueFilter, TextColumn, textValueFilter, DeleteColumn, ReorderColumn, pickExistingValueFilter } from "@Obsidian/Controls/grid";
     import { useInvokeBlockAction } from "@Obsidian/Utility/block";
     import { GridDataBag } from "@Obsidian/ViewModels/Core/Grid/gridDataBag";
+    import { GridDefinitionBag } from "@Obsidian/ViewModels/Core/Grid/gridDefinitionBag";
+    import { RockColor } from "@Obsidian/Core/Utilities/rockColor";
 
     const invokeBlockAction = useInvokeBlockAction();
 
-    const assignToIcons: Array<string> = ["fa fa-user-graduate", "fa fa-chalkboard-teacher"];
-    const assignToColors: Array<string> = ["#2f699f", "#a9551d"];
+    const assignToIcons: Array<string> = ["ti ti-user", "ti ti-chalkboard-teacher"];
+    const assignToColors: Array<string> = ["var(--color-info-strong)", "var(--color-warning-strong)"];
 
     const emit = defineEmits<{
         (e: "deleteClick", idKey: string, gridData: GridDataBag | undefined): void;
@@ -111,23 +113,19 @@
     }>();
 
     const props = defineProps({
+        gridDefinitionBag: {
+            type: Object as PropType<GridDefinitionBag>,
+            required: true
+        },
 
         isAddEnabled: {
             type: Object as PropType<boolean>,
-            required: true,
             default: false
         },
 
         isDeleteEnabled: {
             type: Object as PropType<boolean>,
-            required: true,
             default: false
-        },
-
-        getDataActionName: {
-            type: Object as PropType<string>,
-            required: true,
-            default: "GetGridData"
         }
     });
 
@@ -138,23 +136,22 @@
 
     const isAddEnabled = ref(props.isAddEnabled);
     const isDeleteEnabled = ref(props.isDeleteEnabled);
+    const gridDefinitionBag = ref(props.gridDefinitionBag);
 
     // #endregion
 
     // #region Functions
 
-    /**
-     * Called when a row has been selected by the individual.
-     *
-     * @param key The key of the row that was selected.
-     */
-    function onSelectItem(key: string): void {
-        emit("rowClick", key);
-    }
+    function getComponentHtml(row: Record<string, unknown>): string {
+        const pair = RockColor.calculateColorPair(new RockColor(row.componentHighlightColor as string));
+        const backgroundColor = pair.backgroundColor.toRgba();
+        const foreColor = pair.foregroundColor.toRgba();
+        const iconCssClass = row.componentIconCssClass as string;
 
-
-    function onAddItemClicked(): void {
-        emit("addClick");
+        return `
+            <span class="label label-default component-label" style="background-color: ${backgroundColor}; color: ${foreColor};">
+                <i class="${iconCssClass}" style="color: ${foreColor}"></i>${row.componentName}
+            </span>`;
     }
 
     function getCompletionsHtml(row: Record<string, unknown>): string {
@@ -192,7 +189,7 @@
      * Called when the grid is requesting the row data be loaded.
      */
     async function loadGridData(): Promise<GridDataBag> {
-        const result = await invokeBlockAction<GridDataBag>(props.getDataActionName);
+        const result = await invokeBlockAction<GridDataBag>("GetLearningPlan");
 
         if (result.isSuccess && result.data) {
             gridData = reactive(result.data);
@@ -206,6 +203,19 @@
     // #endregion
 
     // #region Event Handlers
+
+    /**
+     * Called when a row has been selected by the individual.
+     *
+     * @param key The key of the row that was selected.
+     */
+    function onSelectItem(key: string): void {
+        emit("rowClick", key);
+    }
+
+    function onAddItemClicked(): void {
+        emit("addClick");
+    }
 
     // #endregion
 

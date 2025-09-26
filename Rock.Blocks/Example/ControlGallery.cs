@@ -32,7 +32,7 @@ namespace Rock.Blocks.Example
     [DisplayName( "Control Gallery" )]
     [Category( "Obsidian > Example" )]
     [Description( "Allows the user to try out various controls." )]
-    [IconCssClass( "fa fa-flask" )]
+    [IconCssClass( "ti ti-flask" )]
     [SupportedSiteTypes( Model.SiteType.Web )]
 
     [BooleanField( "Show Reflection",
@@ -82,6 +82,7 @@ namespace Rock.Blocks.Example
             securityGrant.AddRule( new AssetAndFileManagerSecurityGrantRule( Rock.Security.Authorization.VIEW ) );
             securityGrant.AddRule( new AssetAndFileManagerSecurityGrantRule( Rock.Security.Authorization.EDIT ) );
             securityGrant.AddRule( new AssetAndFileManagerSecurityGrantRule( Rock.Security.Authorization.DELETE ) );
+            securityGrant.AddRule( new EmailEditorSecurityGrantRule() );
 
             return securityGrant.ToToken();
         }

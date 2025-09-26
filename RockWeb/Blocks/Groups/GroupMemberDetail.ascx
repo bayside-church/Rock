@@ -65,6 +65,10 @@
                                 <asp:ListItem Text="Email" Value="1" />
                                 <asp:ListItem Text="SMS" Value="2" />
                             </Rock:RockRadioButtonList>
+                            <asp:Panel ID="pnlChatPreferences" runat="server">
+                                <Rock:RockCheckBox ID="cbIsChatMuted" runat="server" Label="Is Chat Muted" Help="If enabled, notifications for the chat channel are muted for this person." />
+                                <Rock:RockCheckBox ID="cbIsChatBanned" runat="server" Label="Is Chat Banned" Help="If enabled, this person is banned from the chat channel." />
+                            </asp:Panel>
                             <Rock:RockControlWrapper id="rcwLinkedRegistrations" runat="server" Label="Registration">
                                 <ul class="list-unstyled">
                                     <asp:Repeater ID="rptLinkedRegistrations" runat="server">
@@ -100,7 +104,7 @@
                                     <Columns>
                                         <Rock:RockBoundField DataField="FormattedScheduleName" HeaderText="Schedule" />
                                         <Rock:RockBoundField DataField="LocationName" HeaderText="Location" />
-                                        <Rock:LinkButtonField ID="btnEditGroupPreferenceAssignment" CssClass="btn btn-default btn-sm" Text="<i class='fa fa-pencil'></i>" OnClick="btnEditGroupPreferenceAssignment_Click" />
+                                        <Rock:LinkButtonField ID="btnEditGroupPreferenceAssignment" CssClass="btn btn-default btn-sm" Text="<i class='ti ti-pencil'></i>" OnClick="btnEditGroupPreferenceAssignment_Click" />
                                         <Rock:DeleteField OnClick="btnDeleteGroupPreferenceAssignment_Click" />
                                     </Columns>
                                 </Rock:Grid>
@@ -150,8 +154,8 @@
                         <asp:LinkButton ID="btnRefreshRequirements" runat="server" data-shortcut-key="r" ToolTip="Alt+r" Text="Refresh Requirements" CssClass="btn btn-default" OnClick="btnRefreshRequirements_Click" CausesValidation="false" />
                         <asp:LinkButton ID="btnSaveThenAdd" runat="server" data-shortcut-key="a" ToolTip="Alt+a" Text="Save Then Add" CssClass="btn btn-link" OnClick="btnSaveThenAdd_Click" />
                         <asp:LinkButton ID="btnCancel" runat="server" data-shortcut-key="c" ToolTip="Alt+c" Text="Cancel" CssClass="btn btn-link" OnClick="btnCancel_Click" CausesValidation="false" />
-                        <asp:LinkButton ID="btnShowMoveDialog" runat="server" CssClass="btn btn-default btn-square btn-sm pull-right" OnClick="btnShowMoveDialog_Click" ToolTip="Move to another group" CausesValidation="false"><i class="fa fa-external-link"></i></asp:LinkButton>
-                        <asp:LinkButton ID="btnShowCommunicationDialog" runat="server" CssClass="btn btn-default btn-square btn-sm pull-right" ToolTip="Quick Communication" OnClick="btnShowCommunicationDialog_Click"><i class="fa fa-envelope-o"></i></asp:LinkButton>
+                        <asp:LinkButton ID="btnShowMoveDialog" runat="server" CssClass="btn btn-default btn-square btn-sm pull-right" OnClick="btnShowMoveDialog_Click" ToolTip="Move to another group" CausesValidation="false"><i class="ti ti-external-link"></i></asp:LinkButton>
+                        <asp:LinkButton ID="btnShowCommunicationDialog" runat="server" CssClass="btn btn-default btn-square btn-sm pull-right" ToolTip="Quick Communication" OnClick="btnShowCommunicationDialog_Click"><i class="ti ti-mail"></i></asp:LinkButton>
                     </div>
 
                 </div>

@@ -22,6 +22,8 @@ using System.IO;
 using System.Linq;
 using System.Text;
 
+using Microsoft.EntityFrameworkCore;
+
 using Rock.Attribute;
 using Rock.Data;
 using Rock.Model;
@@ -67,7 +69,6 @@ namespace Rock.Jobs
         IsRequired = false,
         Order = 4 )]
 
-    [RockInternal( "1.16" )]
     internal class PostUpdateDataMigrationsReplaceWebFormsBlocksWithObsidianBlocks : RockJob
     {
         #region Keys
@@ -122,6 +123,28 @@ namespace Rock.Jobs
         ///   <c>true</c> to delete the old block type from Rock; otherwise, <c>false</c> Keep the old block type.
         /// </value>
         private string MigrationStrategy => this.GetAttributeValue( AttributeKey.MigrationStrategy );
+
+        private readonly Dictionary<string, string> AttributeFixes = new Dictionary<string, string>( StringComparer.OrdinalIgnoreCase )
+        {
+            {
+                "E664BB02-D501-40B0-AAD6-D8FA0E63438B",
+                @"
+                DECLARE @FundraisingListBlockTypeId int = (SELECT ISNULL([Id], 0) 
+                                                            FROM [BlockType] 
+                                                            WHERE [Guid] = 'e664bb02-d501-40b0-aad6-d8fa0e63438b')
+
+                UPDATE [A]
+                SET [A].[Key] = 'DetailPage',
+                    [A].[Name] = 'Detail Page'
+                FROM [Attribute] AS [A]
+                INNER JOIN [EntityType] AS [ET] ON [ET].[Id] = [A].[EntityTypeId]
+                WHERE [ET].[Name] = 'Rock.Model.Block'
+                    AND [A].[EntityTypeQualifierColumn] = 'BlockTypeId'
+                    AND [A].[EntityTypeQualifierValue] = @FundraisingListBlockTypeId
+                    AND [A].[Key] = 'DetailsPage'"
+            }
+        };
+
 
         #endregion
 
@@ -191,7 +214,21 @@ namespace Rock.Jobs
             {
                 using ( var rockContext = new RockContext() )
                 {
-                    rockContext.Database.CommandTimeout = commandTimeout;
+                    // Check if the blockTypeGuidPair.Key exists in our AttributeFixes dictionary
+                    var oldBlockTypeGuid = blockTypeGuidPair.Key;
+                    if ( AttributeFixes.ContainsKey( oldBlockTypeGuid.ToString() ) )
+                    {
+                        rockContext.Database.ExecuteSqlCommand( AttributeFixes[oldBlockTypeGuid.ToString()] );
+
+                        // After we update the attribute we need to flush the cache for the Attributes of that Block Type.
+                        var blockTypeId = BlockTypeCache.GetId( oldBlockTypeGuid );
+                        if ( blockTypeId.HasValue )
+                        {
+                            AttributeCache.FlushAttributesForBlockType( blockTypeId.Value );
+                        }
+                    }
+
+                    rockContext.Database.SetCommandTimeout( commandTimeout );
                     var jobMigration = new JobMigration( rockContext );
                     var migrationHelper = new MigrationHelper( jobMigration );
                     ReplaceBlocksOfOneBlockTypeWithBlocksOfAnotherBlockType( blockTypeGuidPair.Key, blockTypeGuidPair.Value, rockContext, migrationHelper );
@@ -219,10 +256,8 @@ namespace Rock.Jobs
         {
             var oldBlockTypeId = BlockTypeCache.GetId( oldBlockTypeGuid );
             // If the old block is not found in the Cache, it mostly likely was deleted in a previous migration in a previous version.
-            // So we merely log it to the exception table and continue
             if ( !oldBlockTypeId.HasValue )
             {
-                ExceptionLogService.LogException( $"BlockType could not be found for guid '{oldBlockTypeGuid}' for the current block" );
                 return;
             }
 
@@ -349,7 +384,14 @@ namespace Rock.Jobs
                 newBlockPreferences.Add( newBlockPersonPreference );
                 var newBlockPersonPreferenceKeyPrefix = PersonPreferenceService.GetPreferencePrefix( blockEntityType.GetEntityType(), newBlockPersonPreference.EntityId.ToIntSafe() );
                 var oldBlockPersonPreferenceKeyPrefix = PersonPreferenceService.GetPreferencePrefix( blockEntityType.GetEntityType(), oldBlockPersonPreference.EntityId.ToIntSafe() );
-                newBlockPersonPreference.Key = $"{newBlockPersonPreferenceKeyPrefix}{oldBlockPersonPreference.Key.Substring( oldBlockPersonPreferenceKeyPrefix.Length )}";
+                if ( oldBlockPersonPreference.Key.Contains( oldBlockPersonPreferenceKeyPrefix ) && oldBlockPersonPreference.Key.Length > oldBlockPersonPreferenceKeyPrefix.Length )
+                {
+                    newBlockPersonPreference.Key = $"{newBlockPersonPreferenceKeyPrefix}{oldBlockPersonPreference.Key.Substring( oldBlockPersonPreferenceKeyPrefix.Length )}";
+                }
+                else
+                {
+                    newBlockPersonPreference.Key = $"{newBlockPersonPreferenceKeyPrefix}{oldBlockPersonPreference.Key}";
+                }
             }
 
             personPreferenceService.AddRange( newBlockPreferences );

@@ -9,31 +9,165 @@
 @color-base-primary: red(@brand-primary), green(@brand-primary), blue(@brand-primary);
 
 :root {
+  --base-interface-strongest: #0a0a0a;
+  --base-interface-stronger: #0D1117;
+  --base-interface-strong: #3D444D;
+  --base-interface-medium: #8B8BA7;
+  --base-interface-soft: #D9D9E3;
+  --base-interface-softer: #F8F8FC;
+  --base-interface-softest: #fdfdfd;
+  --base-critical: #ee7725;
+  --base-danger: #D70015;
+  --base-info: #005DD7;
+  --base-success: #01A11E;
+  --base-primary: #FF791D;
+  --base-warning: #E58600;
+  --base-link: #006DCC;
+  --base-secondary: #83758F;
+  --base-gender-male: #1A8AE5;
+  --base-gender-female: #DE69C3;
+
+  // INTERFACE COLORS
+  --color-interface-strongest: var(--base-interface-strongest);
+  --color-interface-stronger: var(--base-interface-stronger);
+  --color-interface-strong: var(--base-interface-strong);
+  --color-interface-medium: var(--base-interface-medium);
+  --color-interface-soft: var(--base-interface-soft);
+  --color-interface-softer: var(--base-interface-softer);
+  --color-interface-softest: var(--base-interface-softest);
+  // APPLICATION COLORS
+  --color-critical-soft: var(--base-critical);
+  --color-critical-strong: var(--base-critical);
+  --color-critical-tint: var(--base-critical);
+  --color-critical-shade: var(--base-critical);
+  --color-danger-soft: var(--base-danger);
+  --color-danger-strong: var(--base-danger);
+  --color-danger-tint: var(--base-danger);
+  --color-danger-shade: var(--base-danger);
+  --color-info-soft: var(--base-info);
+  --color-info-strong: var(--base-info);
+  --color-info-tint: var(--base-info);
+  --color-info-shade: var(--base-info);
+  --color-success-soft: var(--base-success);
+  --color-success-strong: var(--base-success);
+  --color-success-tint: var(--base-success);
+  --color-success-shade: var(--base-success);
+  --color-warning-soft: var(--base-warning);
+  --color-warning-strong: var(--base-warning);
+  --color-warning-tint: var(--base-warning);
+  --color-warning-shade: var(--base-warning);
+  // SYSTEM COLORS
+  --color-primary-soft: var(--base-primary);
+  --color-primary: var(--base-primary);
+  --color-primary-tint: var(--base-primary);
+  --color-primary-shade: var(--base-primary);
+  --color-link: var(--base-link);
+  --color-link-tint: var(--base-link);
+  --color-link-shade: var(--base-link);
+  --color-secondary: var(--base-secondary);
+  --color-secondary-tint: var(--base-secondary);
+  --color-secondary-shade: var(--base-secondary);
+  // CATEGORICAL COLORS
+  --color-categorical-1: #007aff;
+  --color-categorical-2: #5856D6;
+  --color-categorical-3: #4cd964;
+  --color-categorical-4: #ff2d55;
+  --color-categorical-5: #ff9500;
+  --color-categorical-6: #5ac8fa;
+  --color-categorical-7: #ffcc00;
+  --color-categorical-8: #8e8e93;
+  // DIVERGING COLORS
+  --color-diverging-1: #2507b7;
+  --color-diverging-2: #3109f5;
+  --color-diverging-3: #6447f7;
+  --color-diverging-4: #9884fa;
+  --color-diverging-5: #CBC1FC;
+  --color-diverging-6: #E5EEF9;
+  --color-diverging-7: #C8F5F0;
+  --color-diverging-8: #92ece2;
+  --color-diverging-9: #5be2d4;
+  --color-diverging-10: #22c8b7;
+  --color-diverging-11: #1ca394;
+  // SEQUENTIAL COLORS
+  --color-sequential-1: #1a844a;
+  --color-sequential-2: #209f58;
+  --color-sequential-3: #25b967;
+  --color-sequential-4: #2AD476;
+  --color-sequential-5: #45D987;
+  --color-sequential-6: #5FDE98;
+  --color-sequential-7: #7AE4A9;
+  --color-sequential-8: #94E9BA;
+  --color-sequential-9: #AFEECB;
+  --color-sequential-10: #C9F4DC;
+  --color-sequential-11: #E4F9ED;
+  // FONT SIZES
+  --font-size-xsmall: 12px;
+  --font-size-small: 14px;
+  --font-size-regular: 16px;
+  --font-size-h1: 44px;
+  --font-size-h2: 36px;
+  --font-size-h3: 28px;
+  --font-size-h4: 22px;
+  --font-size-h5: 18px;
+  --font-size-h6: 16px;
+  // FONT WEIGHTS
+  --font-weight-light: 300;
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --font-weight-black: 900;
+  // LINE HEIGHTS
+  --line-height-normal: 1.5;
+  --line-height-tight: 1.1;
+  --line-height-compact: 1.055;
+  // SPACING
+  --spacing-tiny: 4px;
+  --spacing-xsmall: 8px;
+  --spacing-small: 12px;
+  --spacing-medium: 16px;
+  --spacing-large: 24px;
+  --spacing-xlarge: 48px;
+  --spacing-huge: 80px;
+  // BORDER RADIUS
+  --rounded-tiny: 2px;
+  --rounded-xsmall: 4px;
+  --rounded-small: 6px;
+  --rounded-medium: 8px;
+  --rounded-large: 12px;
+  --rounded-xlarge: 16px;
+  --rounded-huge: 24px;
+  --box-shadow: ~"rgba(145, 158, 171, 0.2) 0px 0px 2px 0px,rgba(145, 158, 171, 0.12) 0px 12px 24px -4px";
+  // GENDER COLORS
+  /*
+  --color-gender-male-bg: #E8F3FC;
+  --color-gender-female-bg: #FCE8FA;
+  --color-gender-male-text: #1A8AE5;
+  --color-gender-female-text: #DE69C3;
+  */
+
+  /*
+      Legacy CSS Variables Below
+      ---------------------------------------
+  */
   --theme-darkest: @gray-darker;
   --theme-dark: @gray-dark;
   --theme-medium: @gray;
   --theme-light: @gray-lighter;
   --theme-lightest: @gray-lightest;
-
   --theme-white: @white;
   --theme-black: #343A40;
-
   --text-color: @text-color;
-
   --color-primary: @brand-primary;
   --color-success: @brand-success;
   --color-info: @brand-info;
   --color-warning: @brand-warning;
   --color-danger: @brand-danger;
-
   --gutter-x: @grid-gutter-width;
-
   --panel-border: @panel-border;
   --panel-body-padding: @panel-body-padding;
-
   --fa-font-face: @fa-font-face;
   --fa-theme-weight: @fa-theme-weight;
-
   --border-radius-base: @border-radius-base;
   --color-base-primary: @color-base-primary;
   --focus-state-border: 1px solid @input-border-focus;
@@ -47,6 +181,41 @@
   --input-placeholder: @input-color-placeholder;
 }
 
+@supports (color: color-mix(in srgb, red 50%, white 50%)) {
+  :root {
+    --tint-white-percentage: 50%;
+    --shade-black-percentage: 15%;
+    --color-critical-tint: ~"color-mix(in srgb, var(--base-critical) 50%, transparent var(--tint-white-percentage))";
+    --color-critical-soft: ~"color-mix(in srgb, var(--base-critical) 7%,   transparent var(--tint-white-percentage))";
+    --color-critical-shade: ~"color-mix(in srgb, var(--base-critical) 100%, #000 var(--shade-black-percentage))";
+    --color-danger-tint: ~"color-mix(in srgb, var(--base-danger) 50%, transparent var(--tint-white-percentage))";
+    --color-danger-soft: ~"color-mix(in srgb, var(--base-danger) 7%,   transparent var(--tint-white-percentage))";
+    --color-danger-shade: ~"color-mix(in srgb, var(--base-danger) 100%, #000 var(--shade-black-percentage))";
+    --color-info-tint: ~"color-mix(in srgb, var(--base-info) 50%, transparent var(--tint-white-percentage))";
+    --color-info-soft: ~"color-mix(in srgb, var(--base-info) 7%,   transparent var(--tint-white-percentage))";
+    --color-info-shade: ~"color-mix(in srgb, var(--base-info) 100%, #000 var(--shade-black-percentage))";
+    --color-success-tint: ~"color-mix(in srgb, var(--base-success) 50%, transparent var(--tint-white-percentage))";
+    --color-success-soft: ~"color-mix(in srgb, var(--base-success) 7%,   transparent var(--tint-white-percentage))";
+    --color-success-shade: ~"color-mix(in srgb, var(--base-success) 100%, #000 var(--shade-black-percentage))";
+    --color-warning-tint: ~"color-mix(in srgb, var(--base-warning) 50%, transparent var(--tint-white-percentage))";
+    --color-warning-soft: ~"color-mix(in srgb, var(--base-warning) 7%,   transparent var(--tint-white-percentage))";
+    --color-warning-shade: ~"color-mix(in srgb, var(--base-warning) 100%, #000 var(--shade-black-percentage))";
+    --color-primary-tint: ~"color-mix(in srgb, var(--base-primary) 50%, transparent var(--tint-white-percentage))";
+    --color-primary-soft: ~"color-mix(in srgb, var(--base-primary) 7%,   transparent var(--tint-white-percentage))";
+    --color-primary-shade: ~"color-mix(in srgb, var(--base-primary) 100%, #000 var(--shade-black-percentage))";
+    --color-link-tint: ~"color-mix(in srgb, var(--base-link) 50%, transparent var(--tint-white-percentage))";
+    --color-link-shade: ~"color-mix(in srgb, var(--base-link) 100%, #000 var(--shade-black-percentage))";
+    --color-secondary-tint: ~"color-mix(in srgb, var(--base-secondary) 50%, transparent var(--tint-white-percentage))";
+    --color-secondary-shade: ~"color-mix(in srgb, var(--base-secondary) 100%, #000 var(--shade-black-percentage))";
+    --color-gender-male-tint:   ~"color-mix(in srgb, var(--base-gender-male) 50%, transparent var(--tint-white-percentage))";
+    --color-gender-male-soft:   ~"color-mix(in srgb, var(--base-gender-male) 7%, transparent var(--tint-white-percentage))";
+    --color-gender-male-shade:  ~"color-mix(in srgb, var(--base-gender-male) 100%, #000 var(--shade-black-percentage))";
+    --color-gender-female-tint:   ~"color-mix(in srgb, var(--base-gender-female) 50%, transparent var(--tint-white-percentage))";
+    --color-gender-female-soft:   ~"color-mix(in srgb, var(--base-gender-female) 7%, transparent var(--tint-white-percentage))";
+    --color-gender-female-shade:  ~"color-mix(in srgb, var(--base-gender-female) 100%, #000 var(--shade-black-percentage))";
+  }
+}
+
 // 1. Imports
 //--------------------------------
 @import "_rock-mixins.less";
@@ -57,13 +226,13 @@
 @import "./JCrop/jcrop.less";
 @import "./chosen/bootstrap-chosen-variables.less";
 @import "./chosen/bootstrap-chosen.less";
-
 .fa-font-face( @fa-theme-weight-name, @fa-edition );
 // Single quotes are required for LESS compilation in Rock
 .fa-font-face( 'brands' );
 
 // import as less files so they are concatenated properly
 @import (less) "./summernote/summernote.min.css";
+@import (less) "styles-v2/icons/tabler-icon.css";
 
 @import "_page-admin.less";
 @import "_modal.less";
@@ -81,20 +250,27 @@
 @import "_blocks-groups.less";
 @import "_blocks-finance.less";
 @import "_blocks-crm.less";
+@import "_blocks-lms.less";
 @import "_blocks-communication.less";
 @import "_blocks-workflow.less";
 @import "_blocks-events.less";
 @import "_components.less";
 
 @import "_page-specific.less";
+@import "_tox-overrides.less";
 
 @import "_scroll.less";
 @import "_helpers.less";
 
 @import "./Bootstrap/mixins.less";
 
-.imports(true) { @import "_legacy-badges.less"; }
-.imports(false) {  }
+.imports(true) {
+  @import "_legacy-badges.less";
+}
+
+.imports(false) {
+}
+
 .imports(@enable-legacy-badges);
 
 // 2. HTML Overrides
@@ -110,6 +286,7 @@ iframe {
 .form-row {
   .make-row(10px);
   .clearfix();
+
   & > .col,
   & > [class*="col-"] {
     padding-right: 5px;
@@ -161,7 +338,7 @@ iframe {
 
 // context help
 a.help {
-  margin-left: 6px;
+  margin-left: 2px;
   color: @help-color;
   outline: 0;
 }
@@ -214,7 +391,6 @@ a.warning {
     overflow-y: visible;
     font-size: @font-size-base;
   }
-
   // Added to Support Right Aligned Dropdowns
   .dropdown-right & {
     right: 0;
@@ -239,6 +415,7 @@ a.warning {
 
   .dropdown-item-danger {
     color: @brand-danger;
+
     &:hover {
       color: #fff;
       background-color: @brand-danger;
@@ -294,7 +471,6 @@ th[align="right"] {
 .form-right {
   margin-bottom: 12px;
   text-align: right;
-
   .clearfix();
 
   .control-label {
@@ -373,7 +549,6 @@ th[align="right"] {
     background-color: @popover-title-bg;
     border-bottom: 1px solid darken(@popover-title-bg, 5%);
     border-radius: 5px 5px 0 0;
-
     .clearfix();
 
     img {
@@ -428,6 +603,10 @@ th[align="right"] {
     //   color: @panel-heading-text-color;
     // }
 
+    .panel-header-actions {
+      margin-right: 1rem !important;
+    }
+
     .panel-title {
       small {
         opacity: .5;
@@ -475,7 +654,6 @@ th[align="right"] {
       margin-bottom: 0;
     }
   }
-
   // .panel-body {
   //   border-radius: 0 0 @border-radius-base @border-radius-base;
   // }
@@ -664,8 +842,10 @@ th[align="right"] {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
+
     .actions {
       margin: -4px 0 -4px auto;
+
       a {
         margin-left: 4px;
       }
@@ -688,7 +868,6 @@ th[align="right"] {
             line-height: 1.5;
             // force long words to wrap
             overflow-wrap: break-word;
-
             // force link attributes to clamp to one line with ellipsis without using block
             > a {
               display: inline-block;
@@ -707,7 +886,6 @@ th[align="right"] {
         label {
           margin-bottom: 3px;
         }
-
       }
     }
 
@@ -723,7 +901,6 @@ th[align="right"] {
     .form-group + h4 {
       margin-top: 24px;
     }
-
     // styles for matrix attributes
     .form-group.static-control.matrix-attribute label {
       width: 100%;
@@ -734,7 +911,8 @@ th[align="right"] {
       width: 100%;
     }
 
-    i.fa.fa-bars {
+    i.fa.fa-bars,
+    i.ti.ti-menu-2 {
       cursor: pointer;
     }
   }
@@ -746,7 +924,6 @@ th[align="right"] {
 
 .panel-block {
   border-top-color: @panel-top-border-color;
-
   .panel-variant(@panel-border; @panel-heading-text-color; @panel-heading-bg; @panel-heading-border;);
 
   > .panel-heading {
@@ -826,6 +1003,7 @@ th[align="right"] {
       > [class*="col-"] {
         padding-top: @panel-body-padding;
         padding-bottom: @panel-body-padding;
+
         &:not(:last-child),
         &.show-divider {
           border-bottom: 1px solid @panel-border;
@@ -875,7 +1053,6 @@ th[align="right"] {
 .panel-analytics {
   .panel-body {
     padding: ~"0 calc(var(--gutter-x) * 0.5)";
-
     // & > .row > [class*="col-"]:first-child {
     //   padding-top: 15px;
     //   padding-bottom: 15px;
@@ -936,7 +1113,6 @@ th[align="right"] {
   color: @panel-heading-text-color;
   cursor: pointer;
   border-bottom: 1px solid @panel-border;
-
   .clearfix();
 
   i {
@@ -977,7 +1153,9 @@ th[align="right"] {
 
 .badge {
   .fa-square::before,
-  .fa-circle::before {
+  .fa-circle::before,
+  .ti-square::before,
+  .ti-circle::before {
     display: block;
     width: 1em;
     height: 1em;
@@ -985,7 +1163,8 @@ th[align="right"] {
     background: currentColor;
   }
 
-  .fa-circle::before {
+  .fa-circle::before,
+  .ti-circle::before {
     border-radius: 50%;
   }
 }
@@ -1010,7 +1189,6 @@ th[align="right"] {
 .btn.aspNetDisabled {
   pointer-events: none; // Future-proof disabling of clicks
   cursor: not-allowed;
-
   .opacity(.65);
   .box-shadow(none);
 }
@@ -1055,6 +1233,7 @@ th[align="right"] {
 
   &.google {
     color: @btn-default-color;
+
     &:before {
       background-image: url("/Assets/Icons/googlesigninicon.svg");
       background-size: contain;
@@ -1096,6 +1275,7 @@ th[align="right"] {
 
 .btn-overflow {
   color: @text-muted;
+
   &:hover,
   &:focus {
     color: @text-color;
@@ -1155,7 +1335,7 @@ th[align="right"] {
 }
 
 .alert {
-  .help{
+  .help {
     border-bottom: 0;
   }
 }
@@ -1170,7 +1350,9 @@ th[align="right"] {
 
 // modify BS3 to use fontawesome for carousel icons
 .carousel-control .fa-chevron-left,
-.carousel-control .fa-chevron-right {
+.carousel-control .fa-chevron-right,
+.carousel-control .ti-chevron-left,
+.carousel-control .ti-chevron-right {
   position: absolute;
   top: 50%;
   z-index: 5;
@@ -1178,11 +1360,13 @@ th[align="right"] {
   margin-top: -10px;
 }
 
-.carousel-control .fa-chevron-left {
+.carousel-control .fa-chevron-left,
+.carousel-control .ti-chevron-left {
   left: 40px;
 }
 
-.carousel-control .fa-chevron-right {
+.carousel-control .fa-chevron-right,
+.carousel-control .ti-chevron-right {
   right: 40px;
 }
 
@@ -1241,6 +1425,7 @@ div.aspNetDisabled {
 .btn-outline-default {
   .button-outline-variant(@btn-default-color; @btn-default-bg; @btn-default-border);
 }
+
 .btn-outline-primary {
   .button-outline-variant(@btn-primary-color; @btn-primary-bg; @btn-primary-border);
 }
@@ -1268,11 +1453,13 @@ div.aspNetDisabled {
     background-color: darken(@btn-danger-bg, 10%);
     border-color: darken(@btn-danger-border, 25%);
   }
+
   &:hover {
     color: @btn-danger-color;
     background-color: darken(@btn-danger-bg, 10%);
     border-color: darken(@btn-danger-border, 12%);
   }
+
   &:active,
   &.active,
   .open > .dropdown-toggle& {
@@ -1289,6 +1476,7 @@ div.aspNetDisabled {
       border-color: darken(@btn-danger-border, 25%);
     }
   }
+
   &.disabled,
   &[disabled],
   fieldset[disabled] & {
@@ -1313,7 +1501,6 @@ div.aspNetDisabled {
 .badge-bar {
   display: flex;
   align-items: center;
-
   --badge-size: 36px;
 
   .badge {
@@ -1375,6 +1562,7 @@ div.aspNetDisabled {
   text-align: center;
   max-width: 580px;
   margin: 32px auto;
+
   .text {
     padding: 0 6px;
     text-transform: uppercase;
@@ -1392,4 +1580,26 @@ div.aspNetDisabled {
     border: 1px solid @panel-border;
     flex: 1;
   }
+}
+
+
+
+/* Implement Bootstrap v4 borderless tables. */
+.table.table-borderless > tbody > tr > td,
+.table.table-borderless > tbody > tr > th {
+  border: 0;
+}
+
+.modal.container.modal-content.rock-modal:has(.ant-select-dropdown) {
+  overflow: visible;
+
+  .modal-header {
+    border-top-left-radius: inherit;
+    border-top-right-radius: inherit;
+  }
+}
+
+.modal.container.modal-content.rock-modal form {
+  border-bottom-right-radius: inherit;
+  border-bottom-left-radius: inherit;
 }

@@ -27,14 +27,15 @@
                       :filter="pickExistingValueFilter"
                       :filterValue="getPersonRowValue"
                       visiblePriority="xs"
-                      width="20%"/>
+                      width="20%" />
 
         <DateColumn name="lastPromotedDateTime"
                     title="Last Suggested"
                     field="lastPromotedDateTime"
                     :filter="dateValueFilter"
                     visiblePriority="md"
-                    itemClass="grid-item-pull-left"
+                    headerClass="title-right"
+                    itemClass="justify-content-end text-right"
                     width="170" />
 
         <TextColumn name="reasonNote"
@@ -42,13 +43,14 @@
                     field="reasonNote"
                     :filter="textValueFilter"
                     visiblePriority="xs"
-                    width="5%"/>
+                    width="5%" />
 
         <Column name="status"
                 title="Status"
                 field="status"
                 :filter="pickExistingValueFilter"
                 :filterValue="getStatusRowFilterValue"
+                :quickFilterValue="getStatusRowFilterValue"
                 visiblePriority="xs">
             <template #format="{ row }">
                 <div v-html="getStatusLabel(row.status)" />
@@ -60,17 +62,18 @@
                         field="statusChangedDateTime"
                         :filter="dateValueFilter"
                         visiblePriority="md"
-                        itemClass="grid-item-pull-left"
-                        width="200"/>
+                        headerClass="title-right"
+                        itemClass="justify-content-end text-right"
+                        width="200" />
 
         <template #gridFooterAppend>
             <div class="d-flex" style="padding: var(--table-cell-padding-y) var(--table-cell-padding-x) var(--table-cell-padding-y) var(--table-cell-padding-x);">
                 <RockButton @click="onFollowClick" :btnType="BtnType.Primary" :btnSize="BtnSize.Small" class="mr-2">
-                    <i class='fa fa-flag'></i> Follow
+                    <i class='ti ti-flag'></i> Follow
                 </RockButton>
 
                 <RockButton @click="onIgnoreClick" :btnSize="BtnSize.Small">
-                    <i class='fa fa-flag-o'></i> Ignore
+                    <i class='ti ti-flag'></i> Ignore
                 </RockButton>
             </div>
         </template>
@@ -81,9 +84,8 @@
 </template>
 
 <style>
-.grid-item-pull-left {
-    flex-direction: column;
-    align-items: end;
+.title-right .grid-column-title {
+    text-align: right;
 }
 </style>
 

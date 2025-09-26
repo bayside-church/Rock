@@ -17,6 +17,7 @@
 
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Data.Entity;
 using System.Linq;
 
 using Rock.Attribute;
@@ -36,7 +37,7 @@ namespace Rock.Blocks.Cms
     [DisplayName( "Route List" )]
     [Category( "CMS" )]
     [Description( "Displays a list of page routes." )]
-    [IconCssClass( "fa fa-list" )]
+    [IconCssClass( "ti ti-list" )]
     [SupportedSiteTypes( Model.SiteType.Web )]
 
     [LinkedPage( "Detail Page",
@@ -111,14 +112,15 @@ namespace Rock.Blocks.Cms
         {
             return new Dictionary<string, string>
             {
-                [NavigationUrlKey.DetailPage] = this.GetLinkedPageUrl( AttributeKey.DetailPage, "PageRouteId", "((Key))" )
+                [NavigationUrlKey.DetailPage] = this.GetLinkedPageUrl( AttributeKey.DetailPage, new Dictionary<string, string> { ["PageRouteId"] = "((Key))", ["autoEdit"] = "true", ["returnUrl"] = this.GetCurrentPageUrl() } )
             };
         }
 
         /// <inheritdoc/>
         protected override IQueryable<PageRoute> GetListQueryable( RockContext rockContext )
         {
-            return new PageRouteService( rockContext ).Queryable();
+            return new PageRouteService( rockContext ).Queryable()
+                .Include( p => p.Page.Layout.Site );
         }
 
         /// <inheritdoc/>

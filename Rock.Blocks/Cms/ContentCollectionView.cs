@@ -45,7 +45,7 @@ namespace Rock.Blocks.Cms
     [DisplayName( "Content Collection View" )]
     [Category( "CMS" )]
     [Description( "Displays the search results of a particular content collection." )]
-    [IconCssClass( "fa fa-book-open" )]
+    [IconCssClass( "ti ti-book" )]
     [SupportedSiteTypes( Model.SiteType.Web, Model.SiteType.Mobile )]
 
     #region Block Attributes
@@ -72,6 +72,12 @@ namespace Rock.Blocks.Cms
         DefaultBooleanValue = true,
         Category = "CustomSetting",
         Key = AttributeKey.ShowSort )]
+
+    [BooleanField( "Auto Focus",
+        Description = "Decide whether the textbox should automatically receive focus when the page loads.",
+        DefaultBooleanValue = true,
+        Category = "CustomSetting",
+        Key = AttributeKey.AutoFocus )]
 
     [IntegerField( "Number Of Results",
         Description = "The number of results to include.",
@@ -172,12 +178,27 @@ namespace Rock.Blocks.Cms
         Category = "CustomSetting",
         Key = AttributeKey.SegmentBoostAmount )]
 
+    [BooleanField("Show Unapproved Items",
+        Description = "Determines if unapproved items should be shown.",
+        DefaultBooleanValue = false,
+        Category = "CustomSetting",
+        Key = AttributeKey.IncludeUnapproved )]
+
     #endregion
 
     [Rock.SystemGuid.EntityTypeGuid( "16C3A9D7-DD61-4971-8FE0-EEE09AEF703F" )]
     [Rock.SystemGuid.BlockTypeGuid( "CC387575-3530-4CD6-97E0-1F449DCA1869" )]
     public class ContentCollectionView : RockBlockType, IHasCustomActions
     {
+        #region Properties
+
+        /// <summary>
+        /// Gets a list of the enabled sort orders setting.
+        /// </summary>
+        protected List<string> EnabledSortOrders => GetAttributeValue( AttributeKey.EnabledSortOrders ).SplitDelimitedValues().ToList();
+
+        #endregion
+
         #region Keys
 
         private static class AttributeKey
@@ -189,6 +210,8 @@ namespace Rock.Blocks.Cms
             public const string ShowFullTextSearch = "ShowFullTextSearch";
 
             public const string ShowSort = "ShowSort";
+
+            public const string AutoFocus = "AutoFocus";
 
             public const string NumberOfResults = "NumberOfResults";
 
@@ -217,6 +240,8 @@ namespace Rock.Blocks.Cms
             public const string SegmentBoostAmount = "SegmentBoostAmount";
 
             public const string RequestFilterBoostAmount = "RequestFilterBoostAmount";
+
+            public const string IncludeUnapproved = "IncludeUnapproved";
         }
 
         private static class SortOrdersKey
@@ -747,7 +772,7 @@ namespace Rock.Blocks.Cms
             var query = new SearchQueryBag
             {
                 Text = RequestContext.GetPageParameter( "q" ),
-                Order = RequestContext.GetPageParameter( "s" )?.ConvertToEnumOrNull<SearchOrder>() ?? SearchOrder.Relevance,
+                Order = GetInitialSortOrder(),
                 Filters = new Dictionary<string, string>()
             };
 
@@ -774,6 +799,23 @@ namespace Rock.Blocks.Cms
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// Gets the initial enabled sort order.
+        /// </summary>
+        /// <returns></returns>
+        private SearchOrder GetInitialSortOrder()
+        {
+            var sortParam = RequestContext.GetPageParameter( "s" )?.ConvertToEnumOrNull<SearchOrder>();
+            if ( sortParam.HasValue )
+            {
+                return sortParam.Value;
+            }
+
+            var firstEnabledSortOrder = EnabledSortOrders?.FirstOrDefault()?.ConvertToEnumOrNull<SearchOrder>();
+
+            return firstEnabledSortOrder ?? SearchOrder.Relevance;
         }
 
         /// <summary>
@@ -1150,6 +1192,16 @@ namespace Rock.Blocks.Cms
                 } );
             }
 
+            var includeUnapproved = this.GetAttributeValue( AttributeKey.IncludeUnapproved ).AsBooleanOrNull() ?? false;
+            if( !includeUnapproved )
+            {
+                searchQuery.Add( new SearchField
+                {
+                    Name = nameof( IndexDocumentBase.IsApproved ),
+                    Value = "true"
+                } );
+            }
+
             var searchOptions = new SearchOptions
             {
                 Offset = offset,
@@ -1269,7 +1321,7 @@ namespace Rock.Blocks.Cms
             {
                 actions.Add( new BlockCustomActionBag
                 {
-                    IconCssClass = "fa fa-edit",
+                    IconCssClass = "ti ti-edit",
                     Tooltip = "Settings",
                     ComponentFileUrl = "/Obsidian/Blocks/CMS/contentCollectionViewCustomSettings.obs"
                 } );
@@ -1334,10 +1386,11 @@ namespace Rock.Blocks.Cms
                 ShowFilters = GetAttributeValue( AttributeKey.ShowFiltersPanel ).AsBoolean(),
                 ShowFullTextSearch = GetAttributeValue( AttributeKey.ShowFullTextSearch ).AsBoolean(),
                 ShowSort = GetAttributeValue( AttributeKey.ShowSort ).AsBoolean(),
+                AutoFocus = GetAttributeValue( AttributeKey.AutoFocus ).AsBoolean(),
                 NumberOfResults = GetAttributeValue( AttributeKey.NumberOfResults ).AsIntegerOrNull(),
                 SearchOnLoad = GetAttributeValue( AttributeKey.SearchOnLoad ).AsBoolean(),
                 GroupResultsBySource = GetAttributeValue( AttributeKey.GroupResultsBySource ).AsBoolean(),
-                EnabledSortOrders = GetAttributeValue( AttributeKey.EnabledSortOrders ).SplitDelimitedValues().ToList(),
+                EnabledSortOrders = EnabledSortOrders,
                 TrendingTerm = GetAttributeValue( AttributeKey.TrendingTerm ),
                 GroupHeaderTemplate = GetAttributeValue( AttributeKey.GroupHeaderTemplate ),
                 ItemTemplate = GetItemTemplate(),
@@ -1438,6 +1491,7 @@ namespace Rock.Blocks.Cms
                     ShowFiltersPanel = GetAttributeValue( AttributeKey.ShowFiltersPanel ).AsBoolean(),
                     ShowFullTextSearch = GetAttributeValue( AttributeKey.ShowFullTextSearch ).AsBoolean(),
                     ShowSort = GetAttributeValue( AttributeKey.ShowSort ).AsBoolean(),
+                    AutoFocus = GetAttributeValue( AttributeKey.AutoFocus ).AsBoolean(),
                     NumberOfResults = GetAttributeValue( AttributeKey.NumberOfResults ).AsIntegerOrNull(),
                     SearchOnLoad = GetAttributeValue( AttributeKey.SearchOnLoad ).AsBoolean(),
                     GroupResultsBySource = GetAttributeValue( AttributeKey.GroupResultsBySource ).AsBoolean(),
@@ -1452,7 +1506,8 @@ namespace Rock.Blocks.Cms
                     SegmentBoostAmount = GetAttributeValue( AttributeKey.SegmentBoostAmount ).AsDecimalOrNull(),
                     RequestFilterBoostAmount = GetAttributeValue( AttributeKey.RequestFilterBoostAmount ).AsDecimalOrNull(),
                     GroupHeaderTemplate = GetAttributeValue( AttributeKey.GroupHeaderTemplate ),
-                    SiteType = ( PageCache?.Layout?.Site?.SiteType ?? Model.SiteType.Web ).ToString().ToLower()
+                    SiteType = ( PageCache?.Layout?.Site?.SiteType ?? Model.SiteType.Web ).ToString().ToLower(),
+                    IncludeUnapproved = GetAttributeValue( AttributeKey.IncludeUnapproved ).AsBoolean()
                 };
 
                 return ActionOk( new CustomSettingsBox<CustomSettingsBag, CustomSettingsOptionsBag>
@@ -1520,6 +1575,9 @@ namespace Rock.Blocks.Cms
                 box.IfValidProperty( nameof( box.Settings.ShowSort ),
                     () => block.SetAttributeValue( AttributeKey.ShowSort, box.Settings.ShowSort.ToString() ) );
 
+                box.IfValidProperty( nameof( box.Settings.AutoFocus ),
+                                           () => block.SetAttributeValue( AttributeKey.AutoFocus, box.Settings.AutoFocus.ToString() ) );
+
                 box.IfValidProperty( nameof( box.Settings.NumberOfResults ),
                     () => block.SetAttributeValue( AttributeKey.NumberOfResults, box.Settings.NumberOfResults.ToString() ) );
 
@@ -1561,6 +1619,9 @@ namespace Rock.Blocks.Cms
 
                 box.IfValidProperty( nameof( box.Settings.GroupHeaderTemplate ),
                     () => block.SetAttributeValue( AttributeKey.GroupHeaderTemplate, box.Settings.GroupHeaderTemplate ) );
+
+                box.IfValidProperty( nameof( box.Settings.IncludeUnapproved ),
+                    () => block.SetAttributeValue( AttributeKey.IncludeUnapproved, box.Settings.IncludeUnapproved.ToString() ) );
 
                 block.SaveAttributeValues( rockContext );
 

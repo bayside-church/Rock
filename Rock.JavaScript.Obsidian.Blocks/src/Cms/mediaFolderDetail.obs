@@ -1,8 +1,8 @@
 <!-- Copyright by the Spark Development Network; Licensed under the Rock Community License -->
 <template>
-    <NotificationBox v-if="blockError" alertType="warning" v-text="blockError" />
+    <NotificationBox v-if="blockError" alertType="warning" v-html="blockError" />
 
-    <NotificationBox v-if="errorMessage" alertType="danger" v-text="errorMessage" />
+    <NotificationBox v-if="errorMessage" alertType="danger" v-html="errorMessage" />
 
     <DetailBlock v-if="!blockError"
                  v-model:mode="panelMode"
@@ -17,6 +17,7 @@
                  :isEditVisible="isEditable"
                  :isFollowVisible="false"
                  :isSecurityHidden="true"
+                 :isFullScreenVisible="false"
                  @cancelEdit="onCancelEdit"
                  @delete="onDelete"
                  @edit="onEdit"
@@ -46,11 +47,9 @@
     import { DetailBlockBox } from "@Obsidian/ViewModels/Blocks/detailBlockBox";
     import { MediaFolderBag } from "@Obsidian/ViewModels/Blocks/Cms/MediaFolderDetail/mediaFolderBag";
     import { MediaFolderDetailOptionsBag } from "@Obsidian/ViewModels/Blocks/Cms/MediaFolderDetail/mediaFolderDetailOptionsBag";
-
     const config = useConfigurationValues<DetailBlockBox<MediaFolderBag, MediaFolderDetailOptionsBag>>();
     const invokeBlockAction = useInvokeBlockAction();
     const securityGrant = getSecurityGrant(config.securityGrantToken);
-
     // #region Values
 
     const blockError = ref("");
@@ -64,6 +63,7 @@
     // The properties that are being edited in the UI. This is used to
     // inform the server which incoming values have valid data in them.
     const validProperties = [
+        "attributeValues",
         "contentChannel",
         "contentChannelAttribute",
         "description",
@@ -106,7 +106,7 @@
 
         if (mediaFolderViewBag.value?.isContentChannelSyncEnabled) {
             labels.push({
-                iconCssClass: "fa fa-exchange",
+                iconCssClass: "ti ti-switch-3",
                 type: "info"
             });
         }
@@ -259,4 +259,5 @@
         mediaFolderEditBag.value = config.entity;
         panelMode.value = DetailPanelMode.Add;
     }
+
 </script>

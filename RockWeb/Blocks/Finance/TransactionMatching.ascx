@@ -32,13 +32,13 @@
                         Add Family
                     </asp:LinkButton>
 
-                    <asp:LinkButton ID="btnFilter" runat="server" CssClass="btn btn-xs btn-square btn-default" OnClick="btnFilter_Click"><i class="fa fa-gear" title="Filter Accounts"></i></asp:LinkButton>
+                    <asp:LinkButton ID="btnFilter" runat="server" CssClass="btn btn-xs btn-square btn-default" OnClick="btnFilter_Click"><i class="ti ti-settings" title="Filter Accounts"></i></asp:LinkButton>
                 </div>
                 <div class="rock-fullscreen-toggle js-fullscreen-trigger"></div>
             </div>
 
             <div class="panel-body styled-scroll">
-                <Rock:NotificationBox ID="nbNoUnmatchedTransactionsRemaining" runat="server" NotificationBoxType="Success" Text="<i class='fa fa-check-circle'></i> There are no more unmatched transactions in this batch. Click “Done” to change the batch status from 'Pending' to 'Open' and return to batch details to close this batch." />
+                <Rock:NotificationBox ID="nbNoUnmatchedTransactionsRemaining" runat="server" NotificationBoxType="Success" Text="<i class='ti ti-circle-check'></i> There are no more unmatched transactions in this batch. Click “Done” to change the batch status from 'Pending' to 'Open' and return to batch details to close this batch." />
 
                 <div class="actions">
                     <asp:LinkButton ID="lbFinish" runat="server" CssClass="btn btn-default" OnClick="lbFinish_Click">Done</asp:LinkButton>
@@ -173,7 +173,7 @@
                         <asp:LinkButton ID="btnPrevious" runat="server" data-shortcut-key="arrowleft" Text="Previous" ToolTip="Alt+🡄" CssClass="btn btn-default" OnClick="btnPrevious_Click">Previous</asp:LinkButton>
                         <div class="pull-right">
                             <asp:LinkButton ID="btnCancel" runat="server" CssClass="btn btn-default" Visible="false" OnClick="btnCancel_Click">Cancel</asp:LinkButton>
-                            <asp:LinkButton ID="btnNext" runat="server" data-shortcut-key="arrowright" Text="Next" ToolTip="Alt+🡆" CssClass="btn btn-primary" OnClick="btnNext_Click">Next <i class="fa fa-chevron-right"></i></asp:LinkButton>
+                            <asp:LinkButton ID="btnNext" runat="server" data-shortcut-key="arrowright" Text="Next" ToolTip="Alt+🡆" CssClass="btn btn-primary" OnClick="btnNext_Click">Next <i class="ti ti-chevron-right"></i></asp:LinkButton>
                         </div>
                     </div>
 
@@ -325,7 +325,7 @@
                     <div class="row">
                         <div class="col-sm-6">
                             <Rock:AccountPicker ID="apDisplayedPersonalAccounts" runat="server" AllowMultiSelect="true" Label="Displayed Accounts" DisplayActiveOnly="true" />
-                            <Rock:RockCheckBox ID="cbOnlyShowSelectedAccounts" runat="server" Label="Limit to Existing" Text="Yes"
+                            <Rock:RockCheckBox ID="cbOnlyShowSelectedAccounts" runat="server" Label="Limit to Existing"
                                 Help="If a transaction already has allocated amounts (i.e teller import), should only the accounts with values be displayed by default." />
                             <Rock:AccountPicker ID="apOptionalPersonalAccounts" runat="server" AllowMultiSelect="true" Label="Optional Accounts" DisplayActiveOnly="true" />
                         </div>

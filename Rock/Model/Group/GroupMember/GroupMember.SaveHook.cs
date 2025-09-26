@@ -20,7 +20,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 
+using Rock.Communication.Chat;
+using Rock.Communication.Chat.Sync;
 using Rock.Data;
+using Rock.Enums.Lms;
 using Rock.Tasks;
 using Rock.Transactions;
 using Rock.Web.Cache;
@@ -336,6 +339,15 @@ namespace Rock.Model
                     }
                 }
 
+                // If we need to send a real-time notification then do so after
+                // this change has been committed to the database.
+                if ( ShouldSendRealTimeMessage() )
+                {
+                    var groupMemberState = new GroupMemberService.GroupMemberUpdatedState( Entity, State );
+
+                    new SendGroupMemberRealTimeNotificationsTransaction( groupMemberState ).Enqueue( true );
+                }
+
                 base.PostSave();
 
                 // if this is a GroupMember record on a Family, ensure that AgeClassification, PrimaryFamily,
@@ -359,6 +371,12 @@ namespace Rock.Model
                         }
                     }
                 }
+
+                // Adds a LearningParticipant record with default values
+                // if the GroupMember is in an 'LMS Class' group type
+                // and the LearningParticipant record doesn't yet exist.
+                // This supports using GroupMember workflow actions for LMS participants.
+                AddLearningParticipantIfNotExists( rockContext );
 
                 if ( State == EntityContextState.Added || State == EntityContextState.Modified )
                 {
@@ -411,6 +429,47 @@ namespace Rock.Model
                 }
 
                 SendUpdateGroupMemberMessage();
+
+                if ( RockContext.IsRockToChatSyncEnabled && ChatHelper.IsChatEnabled )
+                {
+                    Task.Run( async () =>
+                    {
+                        using ( var chatHelper = new ChatHelper() )
+                        {
+                            var syncCommand = new SyncGroupMemberToChatCommand
+                            {
+                                GroupId = Entity.GroupId,
+                                PersonId = Entity.PersonId,
+                            };
+
+                            await chatHelper.SyncGroupMembersToChatProviderAsync( new List<SyncGroupMemberToChatCommand> { syncCommand } );
+                        }
+                    } );
+                }
+            }
+
+            /// <summary>
+            /// Determines if we need to send any real-time messages for the
+            /// changes made to this entity.
+            /// </summary>
+            /// <returns><c>true</c> if a message should be sent, <c>false</c> otherwise.</returns>
+            private bool ShouldSendRealTimeMessage()
+            {
+                if ( !RockContext.IsRealTimeEnabled )
+                {
+                    return false;
+                }
+
+                if ( PreSaveState == EntityContextState.Added )
+                {
+                    return true;
+                }
+                else if ( PreSaveState == EntityContextState.Deleted )
+                {
+                    return true;
+                }
+
+                return false;
             }
 
             /// <summary>
@@ -449,6 +508,48 @@ namespace Rock.Model
                 }
 
                 updateGroupMemberMsg.Send();
+            }
+
+            /// <summary>
+            /// If the GroupMember was just added to an LMS class, ensure they have a corresponding LearningParticipant record.
+            /// </summary>
+            /// <remarks>
+            /// This supports using GroupMember workflow actions for LMS participants.
+            /// </remarks>
+            /// <param name="rockContext">The <see cref="RockContext"/> to use.</param>
+            private void AddLearningParticipantIfNotExists( RockContext rockContext )
+            {
+                if ( State != EntityContextState.Added )
+                {
+                    return;
+                }
+
+                var groupTypeGuid = GroupTypeCache.GetGuid( Entity.GroupTypeId );
+
+                if ( groupTypeGuid != SystemGuid.GroupType.GROUPTYPE_LMS_CLASS.AsGuid() )
+                {
+                    return;
+                }
+
+                rockContext.Database.ExecuteSqlCommand( $@"
+IF NOT EXISTS (
+    SELECT 1 FROM [dbo].[LearningParticipant] ex WHERE ex.Id = @p0
+)
+BEGIN
+    INSERT [dbo].[LearningParticipant] (
+        [Id],
+        [LearningCompletionStatus],
+        [LearningGradePercent],
+        [LearningClassId]
+    )
+    VALUES (
+        @p0,
+        {LearningCompletionStatus.Incomplete.ToIntSafe()},
+        0,
+        @p1
+    )
+END
+", Entity.Id, Entity.GroupId );
             }
         }
     }

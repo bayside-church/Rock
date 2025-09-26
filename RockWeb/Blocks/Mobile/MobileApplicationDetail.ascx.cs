@@ -261,7 +261,14 @@ namespace RockWeb.Blocks.Mobile
             ddlEditLockTabletOrientation.Items.Add( new ListItem( "Portrait", ( ( int ) DeviceOrientation.Portrait ).ToString() ) );
             ddlEditLockTabletOrientation.Items.Add( new ListItem( "Landscape", ( ( int ) DeviceOrientation.Landscape ).ToString() ) );
 
+            ddlCssFramework.Items.Clear();
+            ddlCssFramework.Items.Add( new ListItem( "Default (.NET MAUI)", ( ( int ) MobileStyleFramework.Standard ).ToString() ) );
+
+            ddlCssFramework.Items.Add( new ListItem( "Blended (XF + MAUI)", ( ( int ) MobileStyleFramework.Blended ).ToString() ) );
+            ddlCssFramework.Items.Add( new ListItem( "Legacy (Xamarin Forms)", ( ( int ) MobileStyleFramework.Legacy ).ToString() ) );
+
             imgEditHeaderImage.BinaryFileTypeGuid = Rock.SystemGuid.BinaryFiletype.DEFAULT.AsGuid();
+            imgEditHeaderDarkImage.BinaryFileTypeGuid = Rock.SystemGuid.BinaryFiletype.DEFAULT.AsGuid();
             imgEditPreviewThumbnail.BinaryFileTypeGuid = Rock.SystemGuid.BinaryFiletype.DEFAULT.AsGuid();
 
             rblEditApplicationType.BindToEnum<ShellType>();
@@ -272,6 +279,17 @@ namespace RockWeb.Blocks.Mobile
             cpEditPersonAttributeCategories.EntityTypeQualifierValue = EntityTypeCache.Get( typeof( Person ) ).Id.ToString();
 
             dvpCampusFilter.EntityTypeId = EntityTypeCache.GetId( Rock.SystemGuid.EntityType.CAMPUS ) ?? 0;
+        }
+
+        /// <summary>
+        /// Called when the selected index of the style framework drop down list changes.
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        public void StyleFramework_SelectedIndexChanged( object sender, EventArgs e )
+        {
+            var styleFramework = ( MobileStyleFramework ) ddlCssFramework.SelectedValue.AsInteger();
+            UpdateStyleFrameworkVisibility( styleFramework );
         }
 
         /// <summary>
@@ -493,10 +511,15 @@ namespace RockWeb.Blocks.Mobile
             cbCompressUpdatePackages.Checked = additionalSettings.IsPackageCompressionEnabled;
             tbAuth0ClientDomain.Text = additionalSettings.Auth0Domain;
             tbAuth0ClientId.Text = additionalSettings.Auth0ClientId;
+            dvpAuth0ConnectionStatus.DefinedTypeId = DefinedTypeCache.Get( Rock.SystemGuid.DefinedType.PERSON_CONNECTION_STATUS ).Id;
+            dvpAuth0ConnectionStatus.SelectedDefinedValueId = additionalSettings.Auth0ConnectionStatusValueId ?? DefinedValueCache.Get( Rock.SystemGuid.DefinedValue.PERSON_CONNECTION_STATUS_VISITOR.AsGuid() ).Id;
+            dvpAuth0RecordStatus.DefinedTypeId = DefinedTypeCache.Get( Rock.SystemGuid.DefinedType.PERSON_RECORD_STATUS ).Id;
+            dvpAuth0RecordStatus.SelectedDefinedValueId = additionalSettings.Auth0RecordStatusValueId ?? DefinedValueCache.Get( Rock.SystemGuid.DefinedValue.PERSON_RECORD_STATUS_PENDING.AsGuid() ).Id;
+
             tbEntraClientId.Text = additionalSettings.EntraClientId;
             tbEntraTenantId.Text = additionalSettings.EntraTenantId;
 
-            if( additionalSettings.EntraAuthenticationComponent != null )
+            if ( additionalSettings.EntraAuthenticationComponent != null )
             {
                 compEntraAuthComponent.SetValue( additionalSettings.EntraAuthenticationComponent.ToString() );
             }
@@ -514,6 +537,8 @@ namespace RockWeb.Blocks.Mobile
             ppEditLoginPage.SetValue( site.LoginPageId );
             ppEditProfilePage.SetValue( additionalSettings.ProfilePageId );
             ppEditInteractiveExperiencePage.SetValue( additionalSettings.InteractiveExperiencePageId );
+            ppEditChatPage.SetValue( additionalSettings.ChatPageId );
+
             ppCommunicationViewPage.SetValue( additionalSettings.CommunicationViewPageId );
             ppEditSmsConversationPage.SetValue( additionalSettings.SmsConversationPageId );
 
@@ -527,6 +552,9 @@ namespace RockWeb.Blocks.Mobile
             {
                 nbPageViewRetentionPeriodDays.Text = interactionChannelForSite.RetentionDuration.ToString();
             }
+
+            site.LoadAttributes();
+            avcAttributes.AddEditControls( site, Rock.Security.Authorization.EDIT, CurrentPerson );
 
             //
             // Set the API Key.
@@ -562,22 +590,41 @@ namespace RockWeb.Blocks.Mobile
                     return;
                 }
 
-                
-               
-                cbNavbarTransclucent.Checked = additionalSettings.IOSEnableBarTransparency;
-                ddlNavbarBlurStyle.Visible = cbNavbarTransclucent.Checked;
-                ddlNavbarBlurStyle.BindToEnum<IOSBlurStyle>();
-                ddlNavbarBlurStyle.SetValue((int) additionalSettings.IOSBarBlurStyle);
-                
-                cpEditBarBackgroundColor.Value = additionalSettings.BarBackgroundColor;
+                var colors = additionalSettings.DownhillSettings.ApplicationColors;
+                UpdateStyleFrameworkVisibility( additionalSettings.DownhillSettings.MobileStyleFramework );
+
+                ddlCssFramework.SetValue( ( int ) additionalSettings.DownhillSettings.MobileStyleFramework );
+                cpInterfaceStrongest.Value = colors.InterfaceStrongest;
+                cpInterfaceStronger.Value = colors.InterfaceStronger;
+                cpInterfaceStrong.Value = colors.InterfaceStrong;
+                cpInterfaceMedium.Value = colors.InterfaceMedium;
+                cpInterfaceSoft.Value = colors.InterfaceSoft;
+                cpInterfaceSofter.Value = colors.InterfaceSofter;
+                cpInterfaceSoftest.Value = colors.InterfaceSoftest;
+
+                cpPrimaryStrong.Value = colors.PrimaryStrong;
+                cpPrimarySoft.Value = colors.PrimarySoft;
+                cpSecondaryStrong.Value = colors.SecondaryStrong;
+                cpSecondarySoft.Value = colors.SecondarySoft;
+                cpBrandStrong.Value = colors.BrandStrong;
+                cpBrandSoft.Value = colors.BrandSoft;
+
+                cpSuccessStrong.Value = colors.SuccessStrong;
+                cpSuccessSoft.Value = colors.SuccessSoft;
+                cpInfoStrong.Value = colors.InfoStrong;
+                cpInfoSoft.Value = colors.InfoSoft;
+                cpDangerStrong.Value = colors.DangerStrong;
+                cpDangerSoft.Value = colors.DangerSoft;
+                cpWarningStrong.Value = colors.WarningStrong;
+                cpWarningSoft.Value = colors.WarningSoft;
+
                 cpEditMenuButtonColor.Value = additionalSettings.MenuButtonColor;
                 cpEditActivityIndicatorColor.Value = additionalSettings.ActivityIndicatorColor;
                 cpTextColor.Value = additionalSettings.DownhillSettings.TextColor;
                 cpHeadingColor.Value = additionalSettings.DownhillSettings.HeadingColor;
                 cpBackgroundColor.Value = additionalSettings.DownhillSettings.BackgroundColor;
 
-                ceEditCssStyles.Text = additionalSettings.CssStyle ?? string.Empty;
-
+#pragma warning disable CS0618 // Type or member is obsolete
                 cpPrimary.Value = additionalSettings.DownhillSettings.ApplicationColors.Primary;
                 cpSecondary.Value = additionalSettings.DownhillSettings.ApplicationColors.Secondary;
                 cpSuccess.Value = additionalSettings.DownhillSettings.ApplicationColors.Success;
@@ -588,18 +635,50 @@ namespace RockWeb.Blocks.Mobile
                 cpDark.Value = additionalSettings.DownhillSettings.ApplicationColors.Dark;
                 cpBrand.Value = additionalSettings.DownhillSettings.ApplicationColors.Brand;
                 cpInfo.Value = additionalSettings.DownhillSettings.ApplicationColors.Info;
+#pragma warning restore CS0618 // Type or member is obsolete
 
-                nbRadiusBase.Text = decimal.ToInt32( additionalSettings.DownhillSettings.RadiusBase ).ToStringSafe();
+                cbNavbarTransclucent.Checked = additionalSettings.IOSEnableBarTransparency;
+                ddlNavbarBlurStyle.Visible = cbNavbarTransclucent.Checked;
+                ddlNavbarBlurStyle.BindToEnum<IOSBlurStyle>();
+                ddlNavbarBlurStyle.SetValue( ( int ) additionalSettings.IOSBarBlurStyle );
+
+                cpBarBackgroundColor.Value = additionalSettings.BarBackgroundColor;
+
+                ceEditCssStyles.Text = additionalSettings.CssStyle ?? string.Empty;
 
                 nbFontSizeDefault.Text = decimal.ToInt32( additionalSettings.DownhillSettings.FontSizeDefault ).ToStringSafe();
 
                 imgEditHeaderImage.BinaryFileId = site.FavIconBinaryFileId;
+                imgEditHeaderDarkImage.BinaryFileId = additionalSettings.DarkFavIconBinaryFileId;
             }
         }
 
         public void CbNavbarTransclucent_CheckedChanged( object sender, EventArgs e )
         {
             ddlNavbarBlurStyle.Visible = ( sender as CheckBox ).Checked;
+        }
+
+        /// <summary>
+        /// Updates the visible panels based on the provided style framework.
+        /// </summary>
+        /// <param name="styleFramework"></param>
+        private void UpdateStyleFrameworkVisibility( MobileStyleFramework styleFramework )
+        {
+            switch ( styleFramework )
+            {
+                case MobileStyleFramework.Standard:
+                    pnlLegacyStyles.Visible = false;
+                    pnlMauiStyles.Visible = true;
+                    break;
+                case MobileStyleFramework.Blended:
+                    pnlLegacyStyles.Visible = true;
+                    pnlMauiStyles.Visible = true;
+                    break;
+                case MobileStyleFramework.Legacy:
+                    pnlLegacyStyles.Visible = true;
+                    pnlMauiStyles.Visible = false;
+                    break;
+            }
         }
 
         /// <summary>
@@ -659,7 +738,11 @@ namespace RockWeb.Blocks.Mobile
 
                     // Add the person to the default mobile rest security group.
                     var groupMember = new GroupMember();
-                    groupMember.PersonId = restPerson.Id;
+                    // GroupMember validation needs access to the full Person record to determine if the individual is a RESTUSER RecordType.
+                    // This check is important because RESTUSERs are allowed to bypass group requirements validation.
+                    // However, during the GroupMember save process, the restPerson.Id is still 0.
+                    // Because of this, we CANNOT set `groupMember.PersonId = restPerson.Id` at this point.
+                    groupMember.Person = restPerson;
                     groupMember.GroupId = mobileApplicationUsersGroup.Id;
                     groupMember.GroupRoleId = groupRoleId.Value;
 
@@ -697,7 +780,7 @@ namespace RockWeb.Blocks.Mobile
         /// <param name="color">The color.</param>
         /// <returns></returns>
         [Obsolete( "Xamarin supports all of the color formatting that our color picker provides, so we don't need to include this." )]
-        [RockObsolete("1.14.1")]
+        [RockObsolete( "1.14.1" )]
         private string ParseColor( string color )
         {
             //
@@ -783,7 +866,7 @@ namespace RockWeb.Blocks.Mobile
             var site = new SiteService( new RockContext() ).Get( siteId );
             var additionalSettings = site.AdditionalSettings.FromJsonOrNull<AdditionalSiteSettings>();
 
-            if( additionalSettings.DeepLinkDomains != null && additionalSettings.DeepLinkDomains.Contains("|") )
+            if ( additionalSettings.DeepLinkDomains != null && additionalSettings.DeepLinkDomains.Contains( "|" ) )
             {
                 var domainsText = additionalSettings.DeepLinkDomains.ReplaceLastOccurrence( "|", "" );
                 domainsText = domainsText.Replace( "|", ", " );
@@ -822,7 +905,7 @@ namespace RockWeb.Blocks.Mobile
                 var pageService = new PageService( context );
                 var page = pageService.Get( guid.Value );
 
-                if( page == null )
+                if ( page == null )
                 {
                     return "No Page";
                 }
@@ -925,9 +1008,7 @@ namespace RockWeb.Blocks.Mobile
             var binaryFileService = new BinaryFileService( rockContext );
             var userLoginService = new UserLoginService( rockContext );
 
-            //
             // Find the site or if we are creating a new one, bootstrap it.
-            //
             var site = siteService.Get( PageParameter( "SiteId" ).AsInteger() );
             if ( site == null )
             {
@@ -938,14 +1019,12 @@ namespace RockWeb.Blocks.Mobile
                 siteService.Add( site );
             }
 
-            //
             // Save the basic settings.
-            //
             site.Name = tbEditName.Text;
             site.IsActive = cbEditActive.Checked;
             site.Description = tbEditDescription.Text;
             site.LoginPageId = ppEditLoginPage.PageId;
-            
+
             var additionalSettings = site.AdditionalSettings.FromJsonOrNull<AdditionalSiteSettings>() ?? new AdditionalSiteSettings();
 
             // Save the deep link settings, if enabled.
@@ -986,14 +1065,13 @@ namespace RockWeb.Blocks.Mobile
             }
             additionalSettings.DownhillSettings.Platform = DownhillPlatform.Mobile;
 
-            //
             // Save the additional settings.
-            //
             additionalSettings.ShellType = rblEditApplicationType.SelectedValueAsEnum<ShellType>();
             additionalSettings.TabLocation = rblEditAndroidTabLocation.SelectedValueAsEnum<TabLocation>();
 
             additionalSettings.PersonAttributeCategories = cpEditPersonAttributeCategories.SelectedValues.AsIntegerList();
             additionalSettings.ProfilePageId = ppEditProfilePage.PageId;
+            additionalSettings.ChatPageId = ppEditChatPage.PageId;
             additionalSettings.InteractiveExperiencePageId = ppEditInteractiveExperiencePage.PageId;
             additionalSettings.CommunicationViewPageId = ppCommunicationViewPage.PageId;
             additionalSettings.SmsConversationPageId = ppEditSmsConversationPage.PageId;
@@ -1009,22 +1087,20 @@ namespace RockWeb.Blocks.Mobile
             additionalSettings.HomepageRoutingLogic = ceEditHomepageRoutingLogic.Text;
             additionalSettings.Auth0ClientId = tbAuth0ClientId.Text;
             additionalSettings.Auth0Domain = tbAuth0ClientDomain.Text;
+            additionalSettings.Auth0ConnectionStatusValueId = dvpAuth0ConnectionStatus.SelectedDefinedValueId;
+            additionalSettings.Auth0RecordStatusValueId = dvpAuth0RecordStatus.SelectedDefinedValueId;
             additionalSettings.EntraClientId = tbEntraClientId.Text;
             additionalSettings.EntraTenantId = tbEntraTenantId.Text;
 
-            if( compEntraAuthComponent.SelectedValue.IsNotNullOrWhiteSpace() )
+            if ( compEntraAuthComponent.SelectedValue.IsNotNullOrWhiteSpace() )
             {
                 additionalSettings.EntraAuthenticationComponent = compEntraAuthComponent.SelectedValueAsGuid().Value;
             }
 
-            //
             // Save the image.
-            //
             site.ThumbnailBinaryFileId = imgEditPreviewThumbnail.BinaryFileId;
 
-            //
             // Ensure the images are persisted.
-            //
             if ( site.SiteLogoBinaryFileId.HasValue )
             {
                 binaryFileService.Get( site.SiteLogoBinaryFileId.Value ).IsTemporary = false;
@@ -1041,9 +1117,7 @@ namespace RockWeb.Blocks.Mobile
                 {
                     rockContext.SaveChanges();
 
-                    //
                     // Save the API Key.
-                    //
                     additionalSettings.ApiKeyId = SaveApiKey( additionalSettings.ApiKeyId, tbEditApiKey.Text, string.Format( "mobile_application_{0}", site.Id ), rockContext );
                     site.AdditionalSettings = additionalSettings.ToJson();
 
@@ -1085,9 +1159,7 @@ namespace RockWeb.Blocks.Mobile
             }
             else
             {
-                //
                 // Save the API Key.
-                //
                 additionalSettings.ApiKeyId = SaveApiKey( additionalSettings.ApiKeyId, tbEditApiKey.Text, string.Format( "mobile_application_{0}", site.Id ), rockContext );
                 additionalSettings.DownhillSettings.Platform = Rock.DownhillCss.DownhillPlatform.Mobile;
                 site.AdditionalSettings = additionalSettings.ToJson();
@@ -1095,9 +1167,14 @@ namespace RockWeb.Blocks.Mobile
                 rockContext.SaveChanges();
             }
 
-            //
+            avcAttributes.GetEditValues( site );
+            rockContext.WrapTransaction( () =>
+            {
+                rockContext.SaveChanges();
+                site.SaveAttributeValues();
+            } );
+
             // Create the default interaction channel for this site, and set the Retention Duration.
-            //
             var interactionChannelService = new InteractionChannelService( rockContext );
             int channelMediumWebsiteValueId = DefinedValueCache.Get( Rock.SystemGuid.DefinedValue.INTERACTIONCHANNELTYPE_WEBSITE.AsGuid() ).Id;
             var interactionChannelForSite = interactionChannelService.Queryable()
@@ -1141,31 +1218,64 @@ namespace RockWeb.Blocks.Mobile
 
                 site.FavIconBinaryFileId = imgEditHeaderImage.BinaryFileId;
 
-                additionalSettings.BarBackgroundColor = cpEditBarBackgroundColor.Value;
+                additionalSettings.DarkFavIconBinaryFileId = imgEditHeaderDarkImage.BinaryFileId;
+                additionalSettings.BarBackgroundColor = cpBarBackgroundColor.Value;
                 additionalSettings.IOSEnableBarTransparency = cbNavbarTransclucent.Checked;
                 additionalSettings.IOSBarBlurStyle = ddlNavbarBlurStyle.SelectedValueAsEnumOrNull<IOSBlurStyle>() ?? IOSBlurStyle.None;
 
-                additionalSettings.MenuButtonColor = cpEditMenuButtonColor.Value;
-                additionalSettings.ActivityIndicatorColor = cpEditActivityIndicatorColor.Value;
-                additionalSettings.DownhillSettings.TextColor = cpTextColor.Value;
-                additionalSettings.DownhillSettings.HeadingColor = cpHeadingColor.Value;
-                additionalSettings.DownhillSettings.BackgroundColor = cpBackgroundColor.Value;
+                var mobileStyleFramework = ddlCssFramework.SelectedValueAsEnum<MobileStyleFramework>();
+                if ( mobileStyleFramework == MobileStyleFramework.Blended || mobileStyleFramework == MobileStyleFramework.Legacy )
+                {
+                    additionalSettings.MenuButtonColor = cpEditMenuButtonColor.Value;
+                    additionalSettings.ActivityIndicatorColor = cpEditActivityIndicatorColor.Value;
+                    additionalSettings.DownhillSettings.TextColor = cpTextColor.Value;
+                    additionalSettings.DownhillSettings.HeadingColor = cpHeadingColor.Value;
+                    additionalSettings.DownhillSettings.BackgroundColor = cpBackgroundColor.Value;
 
-                additionalSettings.DownhillSettings.ApplicationColors.Primary = cpPrimary.Value;
-                additionalSettings.DownhillSettings.ApplicationColors.Secondary = cpSecondary.Value;
-                additionalSettings.DownhillSettings.ApplicationColors.Success = cpSuccess.Value;
-                additionalSettings.DownhillSettings.ApplicationColors.Info = cpInfo.Value;
-                additionalSettings.DownhillSettings.ApplicationColors.Danger = cpDanger.Value;
-                additionalSettings.DownhillSettings.ApplicationColors.Warning = cpWarning.Value;
-                additionalSettings.DownhillSettings.ApplicationColors.Light = cpLight.Value;
-                additionalSettings.DownhillSettings.ApplicationColors.Dark = cpDark.Value;
-                additionalSettings.DownhillSettings.ApplicationColors.Brand = cpBrand.Value;
-                additionalSettings.DownhillSettings.ApplicationColors.Info = cpInfo.Value;
+#pragma warning disable CS0618 // Type or member is obsolete
+                    additionalSettings.DownhillSettings.ApplicationColors.Primary = cpPrimary.Value;
+                    additionalSettings.DownhillSettings.ApplicationColors.Secondary = cpSecondary.Value;
+                    additionalSettings.DownhillSettings.ApplicationColors.Success = cpSuccess.Value;
+                    additionalSettings.DownhillSettings.ApplicationColors.Info = cpInfo.Value;
+                    additionalSettings.DownhillSettings.ApplicationColors.Danger = cpDanger.Value;
+                    additionalSettings.DownhillSettings.ApplicationColors.Warning = cpWarning.Value;
+                    additionalSettings.DownhillSettings.ApplicationColors.Light = cpLight.Value;
+                    additionalSettings.DownhillSettings.ApplicationColors.Dark = cpDark.Value;
+                    additionalSettings.DownhillSettings.ApplicationColors.Brand = cpBrand.Value;
+                    additionalSettings.DownhillSettings.ApplicationColors.Info = cpInfo.Value;
+#pragma warning restore CS0618 // Type or member is obsolete
+                }
 
-                additionalSettings.DownhillSettings.RadiusBase = nbRadiusBase.Text.AsDecimal();
+                if ( mobileStyleFramework == MobileStyleFramework.Blended || mobileStyleFramework == MobileStyleFramework.Standard )
+                {
+                    additionalSettings.DownhillSettings.ApplicationColors.InterfaceStrongest = cpInterfaceStrongest.Value;
+                    additionalSettings.DownhillSettings.ApplicationColors.InterfaceStronger = cpInterfaceStronger.Value;
+                    additionalSettings.DownhillSettings.ApplicationColors.InterfaceStrong = cpInterfaceStrong.Value;
+                    additionalSettings.DownhillSettings.ApplicationColors.InterfaceMedium = cpInterfaceMedium.Value;
+                    additionalSettings.DownhillSettings.ApplicationColors.InterfaceSoft = cpInterfaceSoft.Value;
+                    additionalSettings.DownhillSettings.ApplicationColors.InterfaceSofter = cpInterfaceSofter.Value;
+                    additionalSettings.DownhillSettings.ApplicationColors.InterfaceSoftest = cpInterfaceSoftest.Value;
+
+                    additionalSettings.DownhillSettings.ApplicationColors.PrimaryStrong = cpPrimaryStrong.Value;
+                    additionalSettings.DownhillSettings.ApplicationColors.PrimarySoft = cpPrimarySoft.Value;
+                    additionalSettings.DownhillSettings.ApplicationColors.SecondaryStrong = cpSecondaryStrong.Value;
+                    additionalSettings.DownhillSettings.ApplicationColors.SecondarySoft = cpSecondarySoft.Value;
+                    additionalSettings.DownhillSettings.ApplicationColors.BrandStrong = cpBrandStrong.Value;
+                    additionalSettings.DownhillSettings.ApplicationColors.BrandSoft = cpBrandSoft.Value;
+
+                    additionalSettings.DownhillSettings.ApplicationColors.SuccessStrong = cpSuccessStrong.Value;
+                    additionalSettings.DownhillSettings.ApplicationColors.SuccessSoft = cpSuccessSoft.Value;
+                    additionalSettings.DownhillSettings.ApplicationColors.InfoStrong = cpInfoStrong.Value;
+                    additionalSettings.DownhillSettings.ApplicationColors.InfoSoft = cpInfoSoft.Value;
+                    additionalSettings.DownhillSettings.ApplicationColors.DangerStrong = cpDangerStrong.Value;
+                    additionalSettings.DownhillSettings.ApplicationColors.DangerSoft = cpDangerSoft.Value;
+                    additionalSettings.DownhillSettings.ApplicationColors.WarningStrong = cpWarningStrong.Value;
+                    additionalSettings.DownhillSettings.ApplicationColors.WarningSoft = cpWarningSoft.Value;
+                }
 
                 additionalSettings.DownhillSettings.FontSizeDefault = nbFontSizeDefault.Text.AsDecimal();
                 additionalSettings.DownhillSettings.Platform = Rock.DownhillCss.DownhillPlatform.Mobile;
+                additionalSettings.DownhillSettings.MobileStyleFramework = mobileStyleFramework;
 
                 additionalSettings.CssStyle = ceEditCssStyles.Text;
 
@@ -1251,7 +1361,7 @@ namespace RockWeb.Blocks.Mobile
         /// </summary>
         /// <remarks>
         /// "async void" is not normal, but WebForms has special logic to deal with
-        /// it that allows await to be used and ensures HttpContext is propogated
+        /// it that allows await to be used and ensures HttpContext is propagated
         /// along the async call chain.
         /// </remarks>
         /// <param name="sender">The source of the event.</param>
@@ -1298,7 +1408,9 @@ namespace RockWeb.Blocks.Mobile
             NavigateToLinkedPage( AttributeKey.LayoutDetail, new Dictionary<string, string>
             {
                 { "SiteId", hfSiteId.Value },
-                { "LayoutId", e.RowKeyId.ToString() }
+                { "LayoutId", e.RowKeyId.ToString() },
+                { "autoEdit", "true" },
+                { "returnUrl", Request.RawUrl }
             } );
         }
 

@@ -401,7 +401,7 @@ namespace Rock.Web.UI.Controls
             valueHtml.Append( @"<div class=""controls controls-row form-control-group"">");
             if ( definedValues != null && definedValues.Any() )
             {
-                valueHtml.Append( @"<select class=""form-control input-width-lg js-value-list-input"">" );
+                valueHtml.Append( @"<select class=""form-control js-value-list-input"">" );
                 foreach ( var definedValue in definedValues )
                 {
                     valueHtml.AppendFormat( @"<option value=""{0}"">{1}</option>", definedValue.Key, definedValue.Value );
@@ -410,9 +410,9 @@ namespace Rock.Web.UI.Controls
             }
             else
             {
-                valueHtml.AppendFormat( @"<input class=""form-control input-width-lg js-value-list-input"" type=""text"" placeholder=""{0}""></input>", ValuePrompt );
+                valueHtml.AppendFormat( @"<input class=""form-control js-value-list-input"" type=""text"" placeholder=""{0}""></input>", ValuePrompt );
             }
-            valueHtml.Append( @"<a href=""#"" class=""btn btn-danger btn-square value-list-remove""><i class=""fa fa-times""></i></a></div>" );
+            valueHtml.Append( @"<a href=""#"" class=""btn btn-danger btn-square value-list-remove""><i class=""ti ti-x""></i></a></div>" );
 
             var hfValueHtml = new HtmlInputHidden();
             hfValueHtml.AddCssClass( "js-value-list-html" );
@@ -444,7 +444,7 @@ namespace Rock.Web.UI.Controls
                 }
                 else
                 {
-                    writer.AddAttribute( HtmlTextWriterAttribute.Class, "form-control input-width-lg js-value-list-input" );
+                    writer.AddAttribute( HtmlTextWriterAttribute.Class, "form-control js-value-list-input" );
                     writer.AddAttribute( HtmlTextWriterAttribute.Type, "text" );
                     writer.AddAttribute( "placeholder", ValuePrompt );
                     writer.AddAttribute( HtmlTextWriterAttribute.Value, value );
@@ -459,7 +459,7 @@ namespace Rock.Web.UI.Controls
                 writer.AddAttribute( HtmlTextWriterAttribute.Href, "#" );
                 writer.AddAttribute( HtmlTextWriterAttribute.Class, "btn btn-sm btn-danger value-list-remove" );
                 writer.RenderBeginTag( HtmlTextWriterTag.A );
-                writer.AddAttribute(HtmlTextWriterAttribute.Class, "fa fa-times" );
+                writer.AddAttribute(HtmlTextWriterAttribute.Class, "ti ti-x" );
                 writer.RenderBeginTag( HtmlTextWriterTag.I );
                 writer.RenderEndTag();
                 writer.RenderEndTag();
@@ -486,7 +486,7 @@ namespace Rock.Web.UI.Controls
 
             writer.AddAttribute( HtmlTextWriterAttribute.Href, "#" );
             writer.RenderBeginTag( HtmlTextWriterTag.A );
-            writer.AddAttribute(HtmlTextWriterAttribute.Class, "fa fa-plus-circle");
+            writer.AddAttribute(HtmlTextWriterAttribute.Class, "ti ti-circle-plus");
             writer.RenderBeginTag( HtmlTextWriterTag.I );
 
             writer.RenderEndTag();

@@ -63,6 +63,7 @@ namespace RockWeb.Blocks.Reminders
 
     #endregion Block Attributes
 
+    [Rock.Cms.DefaultBlockRole( Rock.Enums.Cms.BlockRole.System )]
     [Rock.SystemGuid.BlockTypeGuid( Rock.SystemGuid.BlockType.REMINDER_LINKS )]
     public partial class ReminderLinks : RockBlock, IRockBlockType
     {
@@ -269,7 +270,7 @@ namespace RockWeb.Blocks.Reminders
 
             pnlExistingReminders.Visible = true;
 
-            rptReminders.DataSource = reminders;
+            rptReminders.DataSource = reminders.Take( 2 );
             rptReminders.DataBind();
 
             var entityTypeName = EntityTypeCache.Get( contextEntity.TypeId ).FriendlyName;
@@ -323,7 +324,7 @@ namespace RockWeb.Blocks.Reminders
                         .GetReminders( CurrentPersonId.Value, contextEntity.TypeId, null, null )
                         .Where( r => personAliasIds.Contains( r.EntityId ) && !r.IsComplete && r.ReminderDate < RockDateTime.Now ) // only get active reminders for this person.
                         .OrderByDescending( r => r.ReminderDate )
-                        .Take( 2 ); // We're only interested in two reminders for this block.
+                        .Take( 3 ); // We're only interested in two reminders for this block.
 
                     foreach ( var reminder in reminders.ToList() )
                     {
@@ -338,7 +339,7 @@ namespace RockWeb.Blocks.Reminders
                         .GetReminders( CurrentPersonId.Value, contextEntity.TypeId, contextEntity.Id, null )
                         .Where( r => !r.IsComplete && r.ReminderDate < RockDateTime.Now ) // only get active reminders.
                         .OrderByDescending( r => r.ReminderDate )
-                        .Take( 2 ); // We're only interested in two reminders for this block.
+                        .Take( 3 ); // We're only interested in two reminders for this block.
 
                     foreach ( var reminder in reminders.ToList() )
                     {

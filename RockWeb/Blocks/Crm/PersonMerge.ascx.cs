@@ -246,6 +246,12 @@ namespace RockWeb.Blocks.Crm
                 // Process Query String parameter "Set", specifying a set of people to merge.
                 int? setId = PageParameter( "Set" ).AsIntegerOrNull();
 
+                if ( setId == null )
+                {
+                    var mergeIdKey = PageParameter( "Set" );
+                    setId = Rock.Utility.IdHasher.Instance.GetId( mergeIdKey );
+                }
+
                 if ( setId.HasValue )
                 {
                     selectedPersonIds = new EntitySetItemService( new RockContext() )
@@ -311,6 +317,7 @@ namespace RockWeb.Blocks.Crm
             else
             {
                 var selectedPrimaryPersonId = hfSelectedColumnPersonId.Value.AsIntegerOrNull();
+                var showMatchingData = hfSwitchState.Value.AsBoolean();
 
                 // Save the primary header radio button's selection
                 foreach ( var col in gValues.Columns.OfType<MergePersonField>() )
@@ -321,6 +328,17 @@ namespace RockWeb.Blocks.Crm
                         MergeData.PrimaryPersonId = col.PersonId;
                     }
                 }
+
+                if ( showMatchingData )
+                {
+                    gValues.AddCssClass( "show-matching-data" );
+                }
+                else
+                {
+                    gValues.RemoveCssClass( "show-matching-data" );
+                }
+
+                swShowMatchingData.Checked = showMatchingData;
             }
         }
 
@@ -449,6 +467,12 @@ namespace RockWeb.Blocks.Crm
                 {
                     e.Row.Cells[1].AddCssClass( "grid-row-header" );
                 }
+
+                var dataItem = e.Row.DataItem as ValuesRow;
+                if ( dataItem.IsMatchingRow )
+                {
+                    e.Row.AddCssClass( "matching-data" );
+                }
             }
         }
 
@@ -556,6 +580,7 @@ namespace RockWeb.Blocks.Crm
                         primaryPerson.RecordTypeValueId = GetNewIntValue( "RecordType" );
                         primaryPerson.RecordStatusValueId = GetNewIntValue( "RecordStatus" );
                         primaryPerson.RecordStatusReasonValueId = GetNewIntValue( "RecordStatusReason" );
+                        primaryPerson.RecordSourceValueId = GetNewIntValue( "RecordSource" );
                         primaryPerson.ConnectionStatusValueId = GetNewIntValue( "ConnectionStatus" );
                         primaryPerson.IsDeceased = GetNewBoolValue( "Deceased" ) ?? false;
                         primaryPerson.Gender = ( Gender ) GetNewEnumValue( "Gender", typeof( Gender ) );
@@ -563,7 +588,7 @@ namespace RockWeb.Blocks.Crm
                         primaryPerson.SetBirthDate( GetNewDateTimeValue( "BirthDate" ) );
                         primaryPerson.AnniversaryDate = GetNewDateTimeValue( "AnniversaryDate" );
                         primaryPerson.GraduationYear = GetNewIntValue( "GraduationYear" );
-                        primaryPerson.Email = GetNewStringValue( "Email" );
+                        primaryPerson.Email = GetNewStringValue( "Email" )?.Trim().ToLower();
                         primaryPerson.IsEmailActive = GetNewBoolValue( "EmailActive" ) ?? true;
                         primaryPerson.EmailNote = GetNewStringValue( "EmailNote" );
                         primaryPerson.EmailPreference = ( EmailPreference ) GetNewEnumValue( "EmailPreference", typeof( EmailPreference ) );
@@ -1184,6 +1209,7 @@ namespace RockWeb.Blocks.Crm
 
                 var labelCol = new BoundField();
                 labelCol.DataField = "PropertyLabel";
+                labelCol.HeaderStyle.CssClass = "show-matching-data-switch";
                 ////labelCol.HeaderStyle.CssClass = "grid-section-header";
                 gValues.Columns.Add( labelCol );
 
@@ -1811,6 +1837,7 @@ FROM [GroupMember] GMO
 	LEFT OUTER JOIN [GroupMember] GMN
 		ON GMN.[GroupId] = GMO.[GroupId]
 		AND GMN.[PersonId] = @NewId
+        AND GMN.[IsArchived] = 0
 		AND (GTR.[MaxCount] <= 1 OR GMN.[GroupRoleId] = GMO.[GroupRoleId])
 WHERE GMO.[PersonId] = @OldId
 	AND GMN.[Id] IS NULL
@@ -2322,12 +2349,12 @@ AND Attendance.Id != @FirstTimeRecordId
 
                         if ( phoneNumber.IsUnlisted )
                         {
-                            iconHtml += " <span class='label label-info' title='Unlisted' data-toggle='tooltip' data-placement='top'><i class='fa fa-phone-slash'></i></span>";
+                            iconHtml += " <span class='label label-info' title='Unlisted' data-toggle='tooltip' data-placement='top'><i class='ti ti-phone-off'></i></span>";
                         }
 
                         if ( phoneNumber.IsMessagingEnabled )
                         {
-                            iconHtml += " <span class='label label-success' title='SMS Enabled' data-toggle='tooltip' data-placement='top'><i class='fa fa-sms'></i></span>";
+                            iconHtml += " <span class='label label-success' title='SMS Enabled' data-toggle='tooltip' data-placement='top'><i class='ti ti-device-mobile-message'></i></span>";
                         }
 
                         AddProperty( key, phoneType.Value, person.Id, phoneNumber.Number, phoneNumber.NumberFormatted + iconHtml );
@@ -2371,12 +2398,12 @@ AND Attendance.Id != @FirstTimeRecordId
 
                             if ( address.IsMailingLocation )
                             {
-                                iconHtml += " <span class='label label-info' title='Mailing' data-toggle='tooltip' data-placement='top'><i class='fa fa-envelope'></i></span>";
+                                iconHtml += " <span class='label label-info' title='Mailing' data-toggle='tooltip' data-placement='top'><i class='ti ti-mail'></i></span>";
                             }
 
                             if ( address.IsMappedLocation )
                             {
-                                iconHtml += " <span class='label label-success' title='Mapped' data-toggle='tooltip' data-placement='top'><i class='fa fa-map-marker'></i></span>";
+                                iconHtml += " <span class='label label-success' title='Mapped' data-toggle='tooltip' data-placement='top'><i class='ti ti-map-pin'></i></span>";
                             }
 
                             var addressKey = key;
@@ -2593,9 +2620,9 @@ AND Attendance.Id != @FirstTimeRecordId
 
             ValuesRow headingRow = null;
 
-            // Only show properties that match the selected headingKeys, and have more than one distinct value.
+            // Show properties the user can view that match headingKeys or contain non-empty values.
             var visibleProperties = Properties.Where( p => ( p.HasViewPermission || _ShowSecuredProperties )
-                                                           && ( headingKeys.Contains( p.Key ) || p.Values.Select( v => v.Value ?? string.Empty ).Distinct().Count() > 1 ) )
+                                                           && ( headingKeys.Contains( p.Key ) || p.Values.Any( v => !string.IsNullOrEmpty( v.Value ) ) ) )
                                               .ToList();
 
             foreach ( var personProperty in visibleProperties )
@@ -2603,6 +2630,24 @@ AND Attendance.Id != @FirstTimeRecordId
                 var valuesRow = new ValuesRow();
                 valuesRow.PersonProperty = personProperty;
                 valuesRow.PersonPersonPropertyList = new List<ValuesRowPersonPersonProperty>();
+
+                // Check if this row should be considered "matching" and set the IsMatchingRow property
+                if ( personProperty.Key != "Email" )
+                {
+                    if ( personProperty.Values.Select( v => v.Value ?? string.Empty ).Distinct().Count() == 1 )
+                    {
+                        valuesRow.IsMatchingRow = true;
+                    }
+                }
+                else
+                {
+                    // Disregard capitalization for email addresses
+                    if ( personProperty.Values.Select( v => v.Value?.Trim().ToLower() ?? string.Empty ).Distinct().Count() == 1 )
+                    {
+                        valuesRow.IsMatchingRow = true;
+                    }
+                }
+
                 foreach ( var person in People )
                 {
                     ValuesRowPersonPersonProperty valuesRowPersonPersonProperty = new ValuesRowPersonPersonProperty();
@@ -2676,6 +2721,7 @@ AND Attendance.Id != @FirstTimeRecordId
             AddProperty( "RecordType", person.Id, person.RecordTypeValue );
             AddProperty( "RecordStatus", person.Id, person.RecordStatusValue );
             AddProperty( "RecordStatusReason", person.Id, person.RecordStatusReasonValue );
+            AddProperty( "RecordSource", person.Id, person.RecordSourceValue );
             AddProperty( "ConnectionStatus", person.Id, person.ConnectionStatusValue );
             AddProperty( "Deceased", person.Id, person.IsDeceased );
             AddProperty( "Gender", person.Id, person.Gender );
@@ -3045,6 +3091,8 @@ AND Attendance.Id != @FirstTimeRecordId
         /// The person property.
         /// </value>
         public PersonProperty PersonProperty { get; internal set; }
+
+        public bool IsMatchingRow { get; set; }
     }
 
     /// <summary>

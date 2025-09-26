@@ -30,6 +30,7 @@ namespace Rock.Field.Types
     /// Field used to save and display value filter
     /// </summary>
     [Serializable]
+    [FieldTypeUsage( FieldTypeUsage.System )]
     [RockPlatformSupport( Utility.RockPlatform.WebForms, Utility.RockPlatform.Obsidian )]
     [Rock.SystemGuid.FieldTypeGuid( Rock.SystemGuid.FieldType.VALUE_FILTER )]
     public class ValueFilterFieldType : FieldType
@@ -238,7 +239,6 @@ namespace Rock.Field.Types
             {
                 AutoPostBack = true,
                 Label = "Hide Filter mode",
-                Text = "Yes",
                 Help = "When set, filter mode will be hidden."
             };
             cbHideFilterMode.CheckedChanged += OnQualifierUpdated;

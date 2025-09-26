@@ -1,9 +1,8 @@
 <!-- Copyright by the Spark Development Network; Licensed under the Rock Community License -->
 <template>
     <fieldset>
-
         <div class="row">
-            <div class="col-md-6">
+            <div class="col-md-6" v-if="canViewGrades && gradeText">
                 <ValueDetailList :modelValue="leftSideValues" />
             </div>
 
@@ -12,11 +11,18 @@
             </div>
         </div>
 
+        <div class="row">
+            <div class=col-md-12>
+                <StaticFormControl v-if="note" label="Note" :modelValue="note" />
+            </div>
+        </div>
+
         <div class="activities-grid-container">
 
             <Grid light
                   keyField="idKey"
                   itemTerm="Activity"
+                  :rowClass="getRowClass"
                   :data="gridDataSource">
 
                 <TextColumn name="name"
@@ -29,15 +35,14 @@
                         title="Type"
                         visiblePriority="xs">
                     <template #format="{ row }">
-                        <span class="label label-default component-label" :style="'background-color: oklch(from ' + row.componentHighlightColor + ' calc(l + .33) c h);'">
-                            <i :class="row.componentIconCssClass" :style="'color: ' + row.componentHighlightColor"></i>{{ row.componentName }}
-                        </span>
+                        <span v-html="getComponentHtml(row)"></span>
                     </template>
                 </Column>
 
                 <DateColumn
                             name="dateCompleted"
                             title="Date Completed"
+                            field="dateCompleted"
                             visiblePriority="sm">
                 </DateColumn>
 
@@ -45,18 +50,22 @@
                 <DateColumn
                             name="dateAvailable"
                             title="Date Available"
+                            field="dateAvailable"
                             visiblePriority="sm">
                 </DateColumn>
 
                 <DateColumn
                             name="dueDate"
                             title="Due Date"
+                            field="dueDate"
                             visiblePriority="sm">
                 </DateColumn>
 
                 <TextColumn
+                            v-if="canViewGrades"
                             name="grade"
                             title="Grade"
+                            field="grade"
                             visiblePriority="sm">
                 </TextColumn>
             </Grid>
@@ -68,12 +77,16 @@
     import { computed, PropType, reactive, ref } from "vue";
     import ValueDetailList from "@Obsidian/Controls/valueDetailList.obs";
     import Grid, { TextColumn, DateColumn, Column } from "@Obsidian/Controls/grid";
+    import StaticFormControl from "@Obsidian/Controls/staticFormControl.obs";
     import { ValueDetailListItemBuilder } from "@Obsidian/Core/Controls/valueDetailListItemBuilder";
     import { ValueDetailListItem } from "@Obsidian/Types/Controls/valueDetailListItem";
     import { LearningParticipantBag } from "@Obsidian/ViewModels/Blocks/Lms/LearningParticipantDetail/learningParticipantBag";
     import { LearningParticipantDetailOptionsBag } from "@Obsidian/ViewModels/Blocks/Lms/LearningParticipantDetail/learningParticipantDetailOptionsBag";
     import { useInvokeBlockAction } from "@Obsidian/Utility/block";
     import { GridDataBag } from "@Obsidian/ViewModels/Core/Grid/gridDataBag";
+    import { RockColor } from "@Obsidian/Core/Utilities/rockColor";
+    import { RockDateTime } from "@Obsidian/Utility/rockDateTime";
+    import { ConfigurationMode } from "@Obsidian/Enums/Lms/configurationMode";
 
     const invokeBlockAction = useInvokeBlockAction();
 
@@ -94,9 +107,27 @@
 
     // #region Values
 
+    const note = ref(props.modelValue?.note ?? "");
+    const currentGradePercent = ref(props.modelValue?.currentGradePercent ?? 0);
+    const currentGradeText = ref(props.modelValue?.currentGradeText ?? "");
+    const gradeText = computed(() => {
+        const hasGradeText = currentGradeText.value?.trim() !== "";
+        const percentText = currentGradePercent.value ? `${currentGradePercent.value}%` : "";
+
+        if (hasGradeText) {
+            return `${currentGradeText.value} (${percentText})`;
+        }
+
+        return percentText;
+    });
+
+    const isAcademicCalendarMode = computed(() => props.options.configurationMode === ConfigurationMode.AcademicCalendar);
+
     // #endregion
 
     // #region Computed Values
+
+    const canViewGrades = computed(() => props.options.canViewGrades ?? false);
 
     /** The values to display at half-width on the left side of the block. */
     const leftSideValues = computed((): ValueDetailListItem[] => {
@@ -106,9 +137,9 @@
             return valueBuilder.build();
         }
 
-        const gradePercentText = props.modelValue.currentGradePercent ? `(${props.modelValue.currentGradePercent}%)` : "";
-        const gradeText = props.modelValue.currentGradeText ? `${props.modelValue.currentGradeText} ${gradePercentText}` : gradePercentText;
-        valueBuilder.addHtmlValue("", `<h4>Current Grade</h4>${gradeText}`);
+        if (gradeText.value) {
+            valueBuilder.addTextValue("Current Grade", gradeText.value);
+        }
 
         return valueBuilder.build();
     });
@@ -121,8 +152,8 @@
             return valueBuilder.build();
         }
 
-        if (props.modelValue.absences != null) {
-            valueBuilder.addHtmlValue("", `<h4>Absences</h4><div class='label label-${props.modelValue.absencesLabelStyle}'>${props.modelValue.absences}</div>`);
+        if (isAcademicCalendarMode.value === true && props.modelValue.absences != null) {
+            valueBuilder.addHtmlValue("Absences", `<div class='label label-${props.modelValue.absencesLabelStyle}'>${props.modelValue.absences}</div>`);
         }
 
         return valueBuilder.build();
@@ -131,6 +162,28 @@
     // #endregion
 
     // #region Functions
+
+    function getComponentHtml(row: Record<string, unknown>): string {
+        const pair = RockColor.calculateColorPair(new RockColor(row.componentHighlightColor as string));
+        const backgroundColor = pair.backgroundColor.toRgba();
+        const forecolor = pair.foregroundColor.toRgba();
+        const iconCssClass = row.componentIconCssClass as string;
+
+        return `
+            <span class="label label-component" style="background-color: ${backgroundColor}; color: ${forecolor}">
+                <i class="${iconCssClass}" style="color: ${forecolor}"></i>${row.componentName}
+            </span>`;
+    }
+
+    function getRowClass(row: Record<string, unknown>): string {
+        const availableDate = RockDateTime.parseISO(row.dateAvailable as string ?? "");
+        const now = RockDateTime.now();
+        if (availableDate && now.isEarlierThan(availableDate)) {
+            return "text-muted";
+        }
+
+        return "";
+    }
 
     /**
      * Called when the grid is requesting the row data be loaded.

@@ -110,6 +110,18 @@ namespace Rock.Web.UI.Controls
         }
 
         /// <summary>
+        /// Specifies the modal manager (update panel) that  should use
+        /// when closing modals. This fixes an issue where a modal is closed
+        /// by C# code but the "modal-open" CSS class is not removed. This
+        /// causes drop down controls to be clipped.
+        /// </summary>
+        public string ModalManagerId
+        {
+            get => ViewState["ModalManagerId"] as string;
+            set => ViewState["ModalManagerId"] = value;
+        }
+
+        /// <summary>
         /// Gets or sets the activity type unique identifier.
         /// </summary>
         /// <value>
@@ -156,7 +168,7 @@ $('.workflow-action.editable > header').on('click', function () {
     $expanded = $(this).children('input.filter-expanded');
     $expanded.val($expanded.val() == 'True' ? 'False' : 'True');
 
-    $('i.workflow-action-state', this).toggleClass('fa-chevron-down fa-chevron-up');
+    $('i.workflow-action-state', this).toggleClass('ti-chevron-down ti-chevron-up');
 });
 
 // fix so that the Remove button will fire its event, but not the parent event
@@ -203,8 +215,8 @@ $('.workflow-action > .panel-body').on('validation-error', function() {
     $expanded = $header.children('input.filter-expanded');
     $expanded.val('True');
 
-    $('i.workflow-action-state', $header).removeClass('fa-chevron-down');
-    $('i.workflow-action-state', $header).addClass('fa-chevron-up');
+    $('i.workflow-action-state', $header).removeClass('ti-chevron-down');
+    $('i.workflow-action-state', $header).addClass('ti-chevron-up');
 });
 ";
             ScriptManager.RegisterStartupScript( this, this.GetType(), "WorkflowActionTypeEditorScript", script, true );
@@ -304,6 +316,7 @@ $('.workflow-action > .panel-body').on('validation-error', function() {
 
             workflowActionForm.PersonEntryConnectionStatusValueId = DefinedValueCache.GetId( Rock.SystemGuid.DefinedValue.PERSON_CONNECTION_STATUS_VISITOR.AsGuid() );
             workflowActionForm.PersonEntryRecordStatusValueId = DefinedValueCache.GetId( Rock.SystemGuid.DefinedValue.PERSON_RECORD_STATUS_PENDING.AsGuid() );
+            workflowActionForm.PersonEntryRecordSourceValueId = DefinedValueCache.GetId( Rock.SystemGuid.DefinedValue.RECORD_SOURCE_TYPE_WORKFLOW.AsGuid() );
             workflowActionForm.PersonEntryGroupLocationTypeValueId = DefinedValueCache.GetId( Rock.SystemGuid.DefinedValue.GROUP_LOCATION_TYPE_HOME.AsGuid() );
 
             workflowActionForm.Actions = "Submit^^^Your information has been submitted successfully.";
@@ -371,7 +384,7 @@ $('.workflow-action > .panel-body').on('validation-error', function() {
             }
 
             _phActionAttributes.Controls.Clear();
-            Rock.Attribute.Helper.AddEditControls( value, _phActionAttributes, true, ValidationGroup, new List<string>() { "Active", "Order" } );
+            Rock.Attribute.Helper.AddEditControls( value, _phActionAttributes, true, ValidationGroup, new List<string>() { "Active", "Order" }, false, null, true );
         }
 
         /// <summary>
@@ -405,7 +418,7 @@ $('.workflow-action > .panel-body').on('validation-error', function() {
 
             var iDelete = new HtmlGenericControl( "i" );
             _lbDeleteActionType.Controls.Add( iDelete );
-            iDelete.AddCssClass( "fa fa-times" );
+            iDelete.AddCssClass( "ti ti-x" );
 
             _ddlCriteriaAttribute = new RockDropDownList();
             Controls.Add( _ddlCriteriaAttribute );
@@ -448,6 +461,7 @@ $('.workflow-action > .panel-body').on('validation-error', function() {
             Controls.Add( _wfatpEntityType );
             _wfatpEntityType.ID = this.ID + "_wfatpEntityType";
             _wfatpEntityType.Label = "Action Type";
+            _wfatpEntityType.Required = true;
 
             _rlEntityTypeOverview = new RockLiteral();
             Controls.Add( _rlEntityTypeOverview );
@@ -467,6 +481,7 @@ $('.workflow-action > .panel-body').on('validation-error', function() {
             _formEditor = new WorkflowFormEditor();
             Controls.Add( _formEditor );
             _formEditor.ID = this.ID + "_formEditor";
+            _formEditor.ModalManagerId = ModalManagerId;
 
             _phActionAttributes = new PlaceHolder();
             Controls.Add( _phActionAttributes );
@@ -517,10 +532,10 @@ $('.workflow-action > .panel-body').on('validation-error', function() {
                 writer.RenderBeginTag( HtmlTextWriterTag.Div );
 
                 string criteriaExistsClass = _ddlCriteriaAttribute.SelectedValueAsGuid().HasValue ? " criteria-exists" : string.Empty;
-                writer.WriteLine( string.Format( "<a class='btn btn-xs btn-link js-workflow-action-criteria{0}'><i class='fa fa-filter'></i></a>", criteriaExistsClass ) );
-                writer.WriteLine( "<a class='btn btn-xs btn-link workflow-action-reorder'><i class='fa fa-bars'></i></a>" );
-                writer.WriteLine( string.Format( "<a class='btn btn-xs btn-link'><i class='workflow-action-state fa {0}'></i></a>",
-                    Expanded ? "fa fa-chevron-up" : "fa fa-chevron-down" ) );
+                writer.WriteLine( string.Format( "<a class='btn btn-xs btn-link js-workflow-action-criteria{0}'><i class='ti ti-filter'></i></a>", criteriaExistsClass ) );
+                writer.WriteLine( "<a class='btn btn-xs btn-link workflow-action-reorder'><i class='ti ti-menu-2'></i></a>" );
+                writer.WriteLine( string.Format( "<a class='btn btn-xs btn-link'><i class='workflow-action-state ti {0}'></i></a>",
+                    Expanded ? "ti-chevron-up" : "ti-chevron-down" ) );
 
                 if ( IsDeleteEnabled )
                 {

@@ -7,16 +7,6 @@
         <SectionHeader title="Filters" />
 
         <div class="row">
-            <div class="col-md-4">
-                <TextBox v-model="achieverName"
-                         label="Achiever Name" />
-            </div>
-
-            <div class="col-md-4">
-                <DateRangePicker v-model="dateRange"
-                                 label="Start Date"
-                                 :disallowPastDateSelection="false" />
-            </div>
 
             <div class="col-md-4">
                 <DropDownList v-model="status"
@@ -24,8 +14,7 @@
                               :items="statusItems"
                               showBlankItem />
             </div>
-        </div>
-        <div class="row">
+
             <div class="col-md-4">
                 <AchievementTypePicker v-if="showAchievementTypePicker"
                                        v-model="achievementType"
@@ -47,8 +36,6 @@
     import { useVModelPassthrough } from "@Obsidian/Utility/component";
     import { deepEqual } from "@Obsidian/Utility/util";
     import { ListItemBag } from "@Obsidian/ViewModels/Utility/listItemBag";
-    import DateRangePicker from "@Obsidian/Controls/dateRangePicker.obs";
-    import TextBox from "@Obsidian/Controls/textBox.obs";
     import AchievementTypePicker from "@Obsidian/Controls/achievementTypePicker.obs";
 
     const props = defineProps({
@@ -85,6 +72,10 @@
     const status = ref(props.modelValue.status ?? "");
     const isVisible = useVModelPassthrough(props, "visible", emit);
     const statusItems = [
+        {
+            text: "",
+            value: ""
+        },
         {
             text: "Open",
             value: "Open"

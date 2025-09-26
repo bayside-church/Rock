@@ -371,7 +371,7 @@ namespace Rock.Web.UI.Controls
                 ? this.Page.ClientScript.GetPostBackEventReference( new PostBackOptions( this, "TokenReceived" ), false ).Replace( '\'', '"' )
                 : "";
 
-            if ( SiteKey.IsNotNullOrWhiteSpace() && postBackScript.IsNotNullOrWhiteSpace() )
+            if ( SiteKey.IsNotNullOrWhiteSpace() )
             {
                 // Add the cloudflare script tag to head.
                 var additionalAttributes = new Dictionary<string, string> { { "defer", null } };
@@ -503,7 +503,7 @@ namespace Rock.Web.UI.Controls
         #region Support Classes
 
         /// <summary>
-        /// Support class to handle the response Cloudflares captcha reponse
+        /// Support class to handle the response Cloudflares captcha response
         /// </summary>
         private class CloudFlareCaptchaResponse
         {
@@ -547,6 +547,37 @@ namespace Rock.Web.UI.Controls
             ///   <c>true</c> if this instance is valid; otherwise, <c>false</c>.
             /// </value>
             public bool IsValid { get; set; }
+        }
+
+        #endregion
+
+        #region CaptchaService
+
+        /// <summary>
+        /// Service for handling CAPTCHA validation and configuration checks.
+        /// </summary>
+        public static class CaptchaService
+        {
+            /// <summary>
+            /// Determines whether CAPTCHA is properly configured with site and secret keys.
+            /// </summary>
+            /// <returns>True if both keys are present and not empty; otherwise, false.</returns>
+            public static bool IsCaptchaConfigured()
+            {
+                var siteKey = SystemSettings.GetValue( SystemKey.SystemSetting.CAPTCHA_SITE_KEY );
+                var secretKey = SystemSettings.GetValue( SystemKey.SystemSetting.CAPTCHA_SECRET_KEY );
+                return siteKey.IsNotNullOrWhiteSpace() && secretKey.IsNotNullOrWhiteSpace();
+            }
+
+            /// <summary>
+            /// Checks if CAPTCHA validation should be skipped based on block settings and configuration.
+            /// </summary>
+            /// <param name="disableCaptchaAttributeValue">The attribute value for disabling CAPTCHA support.</param>
+            /// <returns>True if CAPTCHA should be disabled; otherwise, false.</returns>
+            public static bool ShouldDisableCaptcha( bool? disableCaptchaAttributeValue )
+            {
+                return ( disableCaptchaAttributeValue ?? false ) || !IsCaptchaConfigured();
+            }
         }
 
         #endregion

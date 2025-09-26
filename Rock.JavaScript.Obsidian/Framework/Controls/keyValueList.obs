@@ -28,11 +28,11 @@
                                 <input v-model="value.key" :class="keyInputClasses" type="text" :placeholder="keyPlaceholder">
                             </template>
 
-                            <a href="#" @click.prevent="onRemoveClick(valueIndex)" class="btn btn-sm btn-danger"><i class="fa fa-times"></i></a>
+                            <a href="#" @click.prevent="onRemoveClick(valueIndex)" class="btn btn-sm btn-danger"><i class="ti ti-x"></i></a>
                         </div>
                     </span>
                     <div class="control-actions">
-                        <a class="btn btn-action btn-square btn-xs" href="#" @click.prevent="onAddClick"><i class="fa fa-plus-circle"></i></a>
+                        <a class="btn btn-action btn-square btn-xs" href="#" @click.prevent="onAddClick"><i class="ti ti-circle-plus"></i></a>
                     </div>
                 </span>
             </div>
@@ -113,8 +113,8 @@
     const keyInputClasses = computed((): string => {
         let classes = "key-value-key form-control";
 
-        if (!props.fullWidth) {
-            classes += " input-width-md";
+        if (props.fullWidth) {
+            classes += " full-width";
         }
 
         return classes;
@@ -123,8 +123,8 @@
     const valueInputClasses = computed((): string => {
         let classes = "key-value-value form-control";
 
-        if (!props.fullWidth) {
-            classes += hasValues.value ? " input-width-lg" : " input-width-md";
+        if (props.fullWidth) {
+            classes += " full-width";
         }
 
         return classes;

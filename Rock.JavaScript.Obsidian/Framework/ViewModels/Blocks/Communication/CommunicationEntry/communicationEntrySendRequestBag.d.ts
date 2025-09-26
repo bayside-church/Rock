@@ -42,11 +42,26 @@ export type CommunicationEntrySendRequestBag = {
     /** Gets or sets the communication unique identifier. */
     communicationGuid: Guid;
 
+    /** Gets or sets the communication list group unique identifier. */
+    communicationListGroupGuid?: Guid | null;
+
+    /** Gets or sets the communication list name. */
+    communicationListName?: string | null;
+
+    /** Gets or sets the number of recipients in the communication list. */
+    communicationListRecipientCount?: number | null;
+
     /** Gets or sets the communication template unique identifier. */
     communicationTemplateGuid?: Guid | null;
 
     /** Gets or sets the email attachment binary files. */
     emailAttachmentBinaryFiles?: ListItemBag[] | null;
+
+    /**
+     * Option to prevent communications from being sent to people with the same email/SMS addresses.
+     * This will mean two people who share an address will not receive a personalized communication, only one of them will.
+     */
+    excludeDuplicateRecipientAddress: boolean;
 
     /** Gets or sets from email address. */
     fromAddress?: string | null;

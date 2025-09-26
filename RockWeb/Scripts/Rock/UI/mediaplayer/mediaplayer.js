@@ -134,6 +134,17 @@ var Rock;
                     plyrOptions.controls = control;
                 }
                 this.player = new Plyr(mediaElement, plyrOptions);
+                let storageData = {};
+                this.player.storage = {
+                    enabled: true,
+                    key: "plyr",
+                    get(key) {
+                        return storageData[key];
+                    },
+                    set(data) {
+                        storageData = Object.assign(Object.assign({}, storageData), data);
+                    }
+                };
                 if (this.isYouTubeEmbed(this.options.mediaUrl)) {
                     let listenrsready = false;
                     this.player.on("statechange", () => {
@@ -247,9 +258,11 @@ var Rock;
                     }
                 }
                 if (startPosition < this.watchBits.length) {
-                    this.player.currentTime = startPosition;
+                    if (this.player.currentTime !== startPosition) {
+                        this.player.currentTime = startPosition;
+                    }
                 }
-                else {
+                else if (this.player.currentTime != 0) {
                     this.player.currentTime = 0;
                 }
                 this.writeDebugMessage(`Set starting position at: ${startPosition}`);

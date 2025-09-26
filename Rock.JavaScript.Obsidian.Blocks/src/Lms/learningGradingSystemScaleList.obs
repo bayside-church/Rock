@@ -1,6 +1,8 @@
 <!-- Copyright by the Spark Development Network; Licensed under the Rock Community License -->
 <template>
-    <Grid :definition="config.gridDefinition ?? undefined"
+    <Grid
+          v-if="hasLoadedData"
+          :definition="config.gridDefinition ?? undefined"
           :data="gridDataSource"
           keyField="idKey"
           itemTerm="Grading Scale"
@@ -19,7 +21,7 @@
                 :filterValue="getRowScaleFilterValue"
                 visiblePriority="xs">
             <template #format="{ row }">
-                <div class="d-flex flex-column text-muted">
+                <div class="d-flex flex-column">
                     <div class="text-semibold">{{ row.name }}</div>
 
                     <div>{{ row.description }}</div>
@@ -27,12 +29,13 @@
             </template>
         </Column>
 
-        <NumberColumn name="threshold"
+        <NumberColumn name="thresholdPercentage"
                       title="Threshold %"
-                      field="threshold"
+                      field="thresholdPercentage"
+                      class="text-right"
                       :filter="numberValueFilter"
                       width="15%"
-                      visiblePriority="xs" />
+                      visiblePriority="sm" />
 
         <BooleanColumn name="isPassing"
                        title="Passing"
@@ -42,8 +45,6 @@
 
         <AttributeColumns :attributes="config.gridDefinition?.attributeFields ?? []" />
 
-        <SecurityColumn />
-
         <DeleteColumn v-if="config.isDeleteEnabled" @click="onDeleteClick" />
     </Grid>
 </template>
@@ -51,7 +52,7 @@
 <script setup lang="ts">
     import { onConfigurationValuesChanged, useConfigurationValues, useInvokeBlockAction, useReloadBlock } from "@Obsidian/Utility/block";
     import { EntityType } from "@Obsidian/SystemGuids/entityType";
-    import Grid, { numberValueFilter, textValueFilter, AttributeColumns, BooleanColumn, NumberColumn, Column, DeleteColumn, ReorderColumn, SecurityColumn } from "@Obsidian/Controls/grid";
+    import Grid, { numberValueFilter, textValueFilter, AttributeColumns, BooleanColumn, NumberColumn, Column, DeleteColumn, ReorderColumn } from "@Obsidian/Controls/grid";
     import { alert } from "@Obsidian/Utility/dialogs";
     import { ListBlockBox } from "@Obsidian/ViewModels/Blocks/listBlockBox";
     import { LearningGradingSystemScaleListOptionsBag } from "@Obsidian/ViewModels/Blocks/Lms/LearningGradingSystemScaleList/learningGradingSystemScaleListOptionsBag";
@@ -67,6 +68,8 @@
 
     const gridDataSource = ref<Promise<GridDataBag>>();
     let gridData: GridDataBag | undefined;
+
+    const hasLoadedData = ref(false);
 
     // #endregion
 
@@ -89,6 +92,8 @@
 
         if (result.isSuccess && result.data) {
             gridData = reactive(result.data);
+            hasLoadedData.value = true;
+
             return gridData;
         }
         else {
@@ -107,7 +112,7 @@
      */
     function onSelectItem(key: string): void {
         if (config.navigationUrls?.[NavigationUrlKey.DetailPage]) {
-            window.location.href = config.navigationUrls[NavigationUrlKey.DetailPage].replace("((Key))", key);
+            window.location.href = config.navigationUrls[NavigationUrlKey.DetailPage].replace("((Key))", key) + "?autoEdit=true&returnUrl=" + encodeURIComponent(window.location.href);
         }
     }
 
@@ -139,7 +144,7 @@
      */
     function onAddItem(): void {
         if (config.navigationUrls?.[NavigationUrlKey.DetailPage]) {
-            window.location.href = config.navigationUrls[NavigationUrlKey.DetailPage].replace("((Key))", "0");
+            window.location.href = config.navigationUrls[NavigationUrlKey.DetailPage].replace("((Key))", "0") + "?autoEdit=true&returnUrl=" + encodeURIComponent(window.location.href);
         }
     }
 

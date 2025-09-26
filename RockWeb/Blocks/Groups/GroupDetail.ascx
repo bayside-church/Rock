@@ -30,6 +30,8 @@
                         <Rock:HighlightLabel ID="hlArchived" runat="server" CssClass="js-archivedgroup-label" LabelType="Danger" Text="Archived" />
                         <Rock:HighlightLabel ID="hlIsPrivate" runat="server" CssClass="js-privategroup-label" LabelType="Default" Text="Private" />
                         <Rock:HighlightLabel ID="hlElevatedSecurityLevel" runat="server" LabelType="Warning" Visible="false" />
+                        <Rock:HighlightLabel ID="hlPeerNetwork" runat="server" LabelType="Info" Visible="false" />
+                        <Rock:HighlightLabel ID="hlChat" runat="server" LabelType="Info" Visible="false" />
                         <Rock:HighlightLabel ID="hlType" runat="server" LabelType="Type" />
                         <Rock:HighlightLabel ID="hlCampus" runat="server" LabelType="Campus" />
                     </div>
@@ -104,7 +106,7 @@
                                             <Rock:RockLiteral ID="lGroupType" runat="server" Label="Group Type" />
                                         </div>
                                         <div class="col-sm-6">
-                                            <Rock:RockCheckBox ID="cbIsSecurityRole" runat="server" Label="Security Role" Text="Yes" AutoPostBack="true" OnCheckedChanged="cbIsSecurityRole_CheckedChanged" />
+                                            <Rock:RockCheckBox ID="cbIsSecurityRole" runat="server" Label="Security Role" AutoPostBack="true" OnCheckedChanged="cbIsSecurityRole_CheckedChanged" />
                                         </div>
                                     </div>
                                     <Rock:GroupPicker ID="gpParentGroup" runat="server" Required="false" Label="Parent Group" OnSelectItem="ddlParentGroup_SelectedIndexChanged" />
@@ -126,8 +128,70 @@
                                     <Rock:CampusPicker ID="cpCampus" runat="server" Label="Campus" />
                                     <Rock:RockDropDownList ID="ddlSignatureDocumentTemplate" runat="server" Label="Require Signed Document"
                                         Help="If members of this group need to have signed a document, select that document type here." />
+                                    <Rock:DefinedValuePicker ID="dvpRecordSource" runat="server" Label="Record Source Override" Help="The record source for group members added to this group. If not set, the group type's record source will be used." />
                                 </div>
                             </div>
+
+                            <%-- Peer Network --%>
+                            <asp:Panel ID="pnlPeerNetworkOverride" runat="server">
+                                <Rock:RockCheckBox ID="cbOverrideRelationshipStrength" runat="server" AutoPostBack="true" Label="Override Relationship Strength" Help="A relationship strength has been set for this group type, but you can override that configuration here." OnCheckedChanged="cbOverrideRelationshipStrength_CheckedChanged" />
+                                <asp:Panel ID="pnlPeerNetwork" runat="server">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <Rock:RockRadioButtonList ID="rblRelationshipStrength" runat="server" Label="Relationship Strength" Help="Sets the relationship strength for individuals in groups of this type. Advanced settings offer additional customization options based on the individual's role in the group." RepeatDirection="Horizontal" AutoPostBack="true" OnSelectedIndexChanged="rblRelationshipStrength_SelectedIndexChanged" CssClass="js-relationship-strength" />
+                                        </div>
+                                        <div id="pnlRelationshipGrowth" runat="server" class="col-md-6">
+                                            <Rock:RockCheckBox ID="cbEnableRelationshipGrowth" runat="server" Label="Enable Relationship Growth Over Time" Help="Enable this setting to allow relationship strength to grow over time as individuals spend more time together in the group." />
+                                        </div>
+                                    </div>
+                                    <div id="pnlShowPeerNetworkAdvancedSettings" runat="server" class="row">
+                                        <div class="col-md-6">
+                                            <Rock:Switch ID="swShowPeerNetworkAdvancedSettings" runat="server" AutoPostBack="true" Text="Show Advanced Settings" OnCheckedChanged="swShowPeerNetworkAdvancedSettings_CheckedChanged" />
+                                        </div>
+                                    </div>
+                                    <asp:Panel ID="pnlPeerNetworkAdvanced" runat="server" Visible="false">
+                                        <Rock:RockLiteral ID="lRelationshipStrenghAdvanced" runat="server">
+                                            You can adjust the relationship score below based on the relationship type of the group members. For instance, if the group members have a strong relationship with the leaders but do not know other non-leaders, you can reduce or eliminate the relationship score percentage between non-leaders.
+                                        </Rock:RockLiteral>
+                                        <div class="d-grid grid-cols-3 gap-2" style="width: max-content;">
+                                            <div></div>
+                                            <div class="d-flex align-items-center">
+                                                <label class="control-label">
+                                                    Leader
+                                                </label>
+                                            </div>
+                                            <div class="d-flex align-items-center">
+                                                <label class="control-label">
+                                                    Non-Leader
+                                                </label>
+                                            </div>
+                                            <div class="d-flex align-items-center">
+                                                <label class="control-label">
+                                                    Leader
+                                                </label>
+                                            </div>
+                                            <div class="d-flex align-items-center">
+                                                <Rock:RockTextBox ID="tbLeaderToLeaderRelationshipMultiplier" runat="server" CssClass="input-width-sm" />
+                                            </div>
+                                            <div class="d-flex align-items-center">
+                                                <Rock:RockTextBox ID="tbLeaderToNonLeaderRelationshipMultiplier" runat="server" CssClass="input-width-sm" />
+                                            </div>
+                                            <div class="d-flex align-items-center">
+                                                <label class="control-label">
+                                                    Non-Leader
+                                                </label>
+                                            </div>
+                                            <div class="d-flex align-items-center">
+                                                <Rock:RockTextBox ID="tbNonLeaderToLeaderRelationshipMultiplier" runat="server" CssClass="input-width-sm" />
+                                            </div>
+                                            <div class="d-flex align-items-center">
+                                                <Rock:RockTextBox ID="tbNonLeaderToNonLeaderRelationshipMultiplier" runat="server" CssClass="input-width-sm" />
+                                            </div>
+                                        </div>
+                                    </asp:Panel>
+                                </asp:Panel>
+                            </asp:Panel>
+
                         </Rock:PanelWidget>
 
                         <%-- RSVP Settings --%>
@@ -186,22 +250,38 @@
                         <Rock:PanelWidget ID="wpScheduling" runat="server" Title="Scheduling">
                             <div class="row">
                                 <div class="col-md-6">
+                                    <Rock:RockCheckBox ID="cbDisableGroupScheduling" runat="server" Label="Disable Group Scheduling" Help="Checking this box will opt the group out from the group scheduling system." />
                                     <Rock:RockCheckBox ID="cbSchedulingMustMeetRequirements" runat="server" Label="Scheduling Must Meet Requirements" Help="Indicates whether group members must meet the group member requirements before they can be scheduled." />
-
+                                </div>
+                                <div class="col-md-6">
+                                    <Rock:RockCheckBox ID="cbDisableScheduleToolboxAccess" runat="server" Label="Disable Schedule Toolbox Access" Help="Checking this will hide the group from the schedule toolbox." />
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-6">
                                     <Rock:RockDropDownList ID="ddlAttendanceRecordRequiredForCheckIn" runat="server" Label="Check-in Requirements" Help="Determines if the person must be scheduled prior to checking in." />
-
-                                    <Rock:PersonPicker ID="ppScheduleCancellationPerson" runat="server" EnableSelfSelection="true" Label="Schedule Cancellation Person to Notify" Help="The person to notify when a person cancels." />
                                 </div>
                                 <div class="col-md-6">
                                 </div>
                             </div>
                             <div class="row">
                                 <div class="col-md-6">
-                                    <Rock:RockCheckBox ID="cbDisableGroupScheduling" runat="server" Label="Disable Group Scheduling" Help="Checking this box will opt the group out from the group scheduling system." />
                                     <Rock:RockDropDownList ID="ddlScheduleConfirmationLogic" runat="server" Label="Schedule Confirmation Logic" Help="Determines if the individual will be asked to Accept or Decline, or if their request will be auto accepted. This setting overrides the group type's setting." />
                                 </div>
                                 <div class="col-md-6">
-                                    <Rock:RockCheckBox ID="cbDisableScheduleToolboxAccess" runat="server" Label="Disable Schedule Toolbox Access" Help="Checking this will hide the group from the schedule toolbox." />
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <Rock:PersonPicker ID="ppScheduleCoordinatorPerson" runat="server" EnableSelfSelection="true" Label="Schedule Coordinator" Help="The person who receives notifications about changes to scheduled individuals." />
+                                </div>
+                                <div class="col-md-6">
+                                    <Rock:RockCheckBoxList ID="cblScheduleCoordinatorNotificationTypes" runat="server" Label="Schedule Coordinator Notification Options" RepeatDirection="Horizontal" Help='Specifies the types of notifications the coordinator receives about scheduled individuals. Leave blank to use the Group Type settings, or select one or more options to override them.' OnSelectedIndexChanged="cblScheduleCoordinatorNotificationTypes_SelectedIndexChanged" AutoPostBack="true">
+                                        <asp:ListItem Value="0" Text="None" />
+                                        <asp:ListItem Value="1" Text="Accept" />
+                                        <asp:ListItem Value="2" Text="Decline" />
+                                        <asp:ListItem Value="4" Text="Self-Schedule" />
+                                    </Rock:RockCheckBoxList>
                                 </div>
                             </div>
                         </Rock:PanelWidget>
@@ -276,6 +356,47 @@
                             </Rock:RockControlWrapper>
                         </Rock:PanelWidget>
 
+                        <%-- Chat --%>
+                        <Rock:PanelWidget ID="wpChat" runat="server" Title="Chat">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <Rock:RockDropDownList ID="ddlIsChatEnabled" runat="server" CssClass="input-width-xl" Label="Enable Chat" Help="If enabled, this group will participate in the chat system as a chat channel.">
+                                        <asp:ListItem Value="" Text="Inherit from Group Type" />
+                                        <asp:ListItem Value="n" Text="No" />
+                                        <asp:ListItem Value="y" Text="Yes" />
+                                    </Rock:RockDropDownList>
+                                    <Rock:RockDropDownList ID="ddlIsLeavingChatChannelAllowed" runat="server" CssClass="input-width-xl" Label="Allow Members to Leave Channel" Help="If enabled, individuals are allowed to leave this chat channel.">
+                                        <asp:ListItem Value="" Text="Inherit from Group Type" />
+                                        <asp:ListItem Value="n" Text="No" />
+                                        <asp:ListItem Value="y" Text="Yes" />
+                                    </Rock:RockDropDownList>
+                                </div>
+                                <div class="col-md-6">
+                                    <Rock:RockDropDownList ID="ddlIsChatChannelPublic" runat="server" CssClass="input-width-xl" Label="Make Channel Public" Help="If enabled, this chat channel is visible to everyone when performing a search. This also implies that the channel may be joined by any person via the chat application.">
+                                        <asp:ListItem Value="" Text="Inherit from Group Type" />
+                                        <asp:ListItem Value="n" Text="No" />
+                                        <asp:ListItem Value="y" Text="Yes" />
+                                    </Rock:RockDropDownList>
+                                    <Rock:RockDropDownList ID="ddlIsChatChannelAlwaysShown" runat="server" CssClass="input-width-xl" Label="Always Show Channel" Help="If enabled, this chat channel is always shown in the channel list even if the person has not joined the channel.">
+                                        <asp:ListItem Value="" Text="Inherit from Group Type" />
+                                        <asp:ListItem Value="n" Text="No" />
+                                        <asp:ListItem Value="y" Text="Yes" />
+                                    </Rock:RockDropDownList>
+                                </div>
+                                <div class="col-md-6">
+                                    <Rock:RockDropDownList ID="ddlChatPushNotificationMode" runat="server" CssClass="input-width-xl" Label="Push Notification Mode" Help="Controls how push notifications are sent for this chat channel.">
+                                        <asp:ListItem Value="" Text="Inherit from Group Type" />
+                                        <asp:ListItem Value="0" Text="All Messages" />
+                                        <asp:ListItem Value="1" Text="Mentions" />
+                                        <asp:ListItem Value="2" Text="Silent" />
+                                    </Rock:RockDropDownList>
+                                </div>
+                                <div class="col-md-6">
+                                    <Rock:ImageUploader ID="imgChatChannelAvatar" runat="server" Label="Channel Avatar" Help="The image to use for this chat channel in the external chat system. Recommended image size is 120x120." />
+                                </div>
+                            </div>
+                        </Rock:PanelWidget>
+
                         <Rock:PanelWidget ID="wpGroupSync" runat="server" Title="Group Sync Settings">
                             <div class="grid">
                                 <Rock:Grid ID="gGroupSyncs" runat="server" AllowPaging="false" DisplayType="Light" ShowHeader="true" RowItemText="Group Sync for Role">
@@ -333,13 +454,14 @@
                             <asp:LinkButton ID="btnDelete" runat="server" Text="Delete" CssClass="btn btn-link" OnClick="btnDelete_Click" CausesValidation="false" />
                             <asp:LinkButton ID="btnArchive" runat="server" Text="Archive" CssClass="btn btn-link js-archive-group" OnClick="btnArchive_Click" CausesValidation="false" />
                             <span class="pull-right">
-                                <asp:HyperLink ID="hlGroupRSVP" runat="server" CssClass="btn btn-sm btn-square btn-default" ToolTip="Group RSVP"><i class="fa fa-user-check"></i></asp:HyperLink>
-                                <asp:HyperLink ID="hlGroupScheduler" runat="server" CssClass="btn btn-sm btn-square btn-default" ToolTip="Group Scheduler"><i class="fa fa-calendar-alt"></i></asp:HyperLink>
-                                <asp:HyperLink ID="hlGroupHistory" runat="server" CssClass="btn btn-sm btn-square btn-default" ToolTip="Group History"><i class="fa fa-history"></i></asp:HyperLink>
-                                <asp:HyperLink ID="hlFundraisingProgress" runat="server" CssClass="btn btn-sm btn-square btn-default" ToolTip="Fundraising"><i class="fa fa-line-chart"></i></asp:HyperLink>
-                                <asp:HyperLink ID="hlAttendance" runat="server" CssClass="btn btn-sm btn-square btn-default" ToolTip="Attendance"><i class="fa fa-check-square-o"></i></asp:HyperLink>
-                                <asp:HyperLink ID="hlMap" runat="server" CssClass="btn btn-sm btn-square btn-default" ToolTip="Interactive Map"><i class="fa fa-map-marker"></i></asp:HyperLink>
-                                <asp:LinkButton ID="btnCopy" runat="server" CssClass="btn btn-sm btn-square btn-default " OnClick="btnCopy_Click" ToolTip="Copies the group and all of its associated authorization rules"><i class="fa fa-clone"></i></asp:LinkButton>
+                                <asp:HyperLink ID="hlGroupPlacement" runat="server" CssClass="btn btn-sm btn-square btn-default" ToolTip="Group Placement"><i class="ti ti-chart-dots-3"></i></asp:HyperLink>
+                                <asp:HyperLink ID="hlGroupRSVP" runat="server" CssClass="btn btn-sm btn-square btn-default" ToolTip="Group RSVP"><i class="ti ti-user-check"></i></asp:HyperLink>
+                                <asp:HyperLink ID="hlGroupScheduler" runat="server" CssClass="btn btn-sm btn-square btn-default" ToolTip="Group Scheduler"><i class="ti ti-calendar-month"></i></asp:HyperLink>
+                                <asp:HyperLink ID="hlGroupHistory" runat="server" CssClass="btn btn-sm btn-square btn-default" ToolTip="Group History"><i class="ti ti-history"></i></asp:HyperLink>
+                                <asp:HyperLink ID="hlFundraisingProgress" runat="server" CssClass="btn btn-sm btn-square btn-default" ToolTip="Fundraising"><i class="ti ti-chart-line"></i></asp:HyperLink>
+                                <asp:HyperLink ID="hlAttendance" runat="server" CssClass="btn btn-sm btn-square btn-default" ToolTip="Attendance"><i class="ti ti-square-check"></i></asp:HyperLink>
+                                <asp:HyperLink ID="hlMap" runat="server" CssClass="btn btn-sm btn-square btn-default" ToolTip="Interactive Map"><i class="ti ti-map-pin"></i></asp:HyperLink>
+                                <asp:LinkButton ID="btnCopy" runat="server" CssClass="btn btn-sm btn-square btn-default " OnClick="btnCopy_Click" ToolTip="Copies the group and all of its associated authorization rules"><i class="ti ti-copy"></i></asp:LinkButton>
                                 <Rock:SecurityButton ID="btnSecurity" runat="server" class="btn btn-sm btn-square btn-security" Title="Secure Group" />
                             </span>
                         </div>
@@ -575,11 +697,11 @@
                         <Rock:RockDropDownList ID="ddlTriggerToStatus" runat="server" Label="To Status of" ValidationGroup="Trigger" />
                         <Rock:RockDropDownList ID="ddlTriggerFromRole" runat="server" Label="From Role of" ValidationGroup="Trigger" DataTextField="Name" DataValueField="Guid" />
                         <Rock:RockDropDownList ID="ddlTriggerToRole" runat="server" Label="To Role of" ValidationGroup="Trigger" DataTextField="Name" DataValueField="Guid" />
-                        <Rock:RockCheckBox ID="cbTriggerFirstTime" runat="server" Label="First Time" Text="Yes" ValidationGroup="Trigger"
+                        <Rock:RockCheckBox ID="cbTriggerFirstTime" runat="server" Label="First Time" ValidationGroup="Trigger"
                             Help="Select this option if workflow should only be started when person attends the group for the first time. Leave this option unselected if the workflow should be started whenever a person attends the group." />
-                        <Rock:RockCheckBox ID="cbTriggerPlacedElsewhereShowNote" runat="server" Label="Show Note" Text="Yes" ValidationGroup="Trigger"
+                        <Rock:RockCheckBox ID="cbTriggerPlacedElsewhereShowNote" runat="server" Label="Show Note" ValidationGroup="Trigger"
                             Help="Select this option if workflow should show UI for entering a note when the member is placed." />
-                        <Rock:RockCheckBox ID="cbTriggerPlacedElsewhereRequireNote" runat="server" Label="Require Note" Text="Yes" ValidationGroup="Trigger"
+                        <Rock:RockCheckBox ID="cbTriggerPlacedElsewhereRequireNote" runat="server" Label="Require Note" ValidationGroup="Trigger"
                             Help="Select this option if workflow should show UI for entering a note and make it required when the member is placed." />
                     </div>
                 </div>
@@ -667,6 +789,35 @@
                     });
                 });
 
+                var $thisBlock = $('#<%= upnlGroupDetail.ClientID %>');
+
+                addRelationshipStrengthTooltips();
+
+                function addRelationshipStrengthTooltips() {
+                    var $relStrength = $thisBlock.find('.js-relationship-strength');
+                    if (!$relStrength.length) {
+                        return;
+                    }
+
+                    addTooltip('0', 'No established relationship or interaction.');
+                    addTooltip('5', 'Basic interactions with a familiar but limited bond.');
+                    addTooltip('10', 'Frequent interactions characterized by a strong and supportive relationship.');
+                    addTooltip('20', 'Intense and trusted relationship with a high level of personal engagement and understanding.');
+
+                    function addTooltip(value, tooltip) {
+                        var $label = $relStrength
+                            .find('input[type="radio"][value="' + value + '"]')
+                            .closest('label');
+
+                        $label.attr('title', tooltip);
+                        $label.tooltip();
+
+                        // Hide the tooltip when a selection is made.
+                        $label.find('input[type="radio"]').on('click', function () {
+                            $label.tooltip('hide');
+                        });
+                    }
+                }
             });
 
         </script>

@@ -33,12 +33,11 @@ namespace Rock.Blocks.Group
     /// <summary>
     /// Displays a list of group requirement types.
     /// </summary>
-
     [DisplayName( "Group Requirement Type List" )]
     [Category( "Group" )]
     [Description( "List of Group Requirement Types." )]
-    [IconCssClass( "fa fa-list" )]
-    // [SupportedSiteTypes( Model.SiteType.Web )]
+    [IconCssClass( "ti ti-list" )]
+    [SupportedSiteTypes( Model.SiteType.Web )]
 
     [LinkedPage( "Detail Page",
         Description = "The page that will show the group requirement type details.",
@@ -110,7 +109,7 @@ namespace Rock.Blocks.Group
         {
             return new Dictionary<string, string>
             {
-                [NavigationUrlKey.DetailPage] = this.GetLinkedPageUrl( AttributeKey.DetailPage, "GroupRequirementTypeId", "((Key))" )
+                [NavigationUrlKey.DetailPage] = this.GetLinkedPageUrl( AttributeKey.DetailPage, new Dictionary<string, string> { ["GroupRequirementTypeId"] = "((Key))", ["autoEdit"] = "true", ["returnUrl"] = this.GetCurrentPageUrl() } )
             };
         }
 

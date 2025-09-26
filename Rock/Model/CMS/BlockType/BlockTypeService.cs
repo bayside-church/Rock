@@ -24,6 +24,7 @@ using System.Reflection;
 using System.Threading;
 
 using Rock.Attribute;
+using Rock.Cms;
 using Rock.Data;
 using Rock.Enums.Cms;
 using Rock.Observability;
@@ -68,6 +69,11 @@ namespace Rock.Model
         }
 
         /// <summary>
+        /// Constant that holds the namespace of Roslyn compilied user controls.
+        /// </summary>
+        private const string ROSLYN_COMPILED_NAMESPACE = "ASP";
+
+        /// <summary>
         /// Lock obj to make sure that we aren't compiling more than one BlockType at a time. This prevents
         /// block types from spending time compiling even though another thread might have started compiling it.
         /// </summary>
@@ -103,6 +109,15 @@ namespace Rock.Model
 
                 try
                 {
+                    /*
+                        05/02/2025 - DSH
+
+                        Additional research shows that internally the BuildManager.GetCompiledType
+                        method uses a lock to prevent concurrent compilation. Meaning, only one
+                        .ascx file can be compiled at a time. So there isn't much we can do to
+                        speed that up. One optimization we could do is to split the work between
+                        Obsidian blocks and WebForms blocks and let those two processes run concurrently.
+                    */
                     /*
                         02/09/2024 - JSC
 
@@ -226,6 +241,12 @@ namespace Rock.Model
                             blockType.Category = Rock.Reflection.GetCategory( type ) ?? string.Empty;
                             blockType.Description = Rock.Reflection.GetDescription( type ) ?? string.Empty;
 
+                            var blockRoleAttribute = type.GetCustomAttribute<DefaultBlockRoleAttribute>( inherit: true );
+                            if ( blockRoleAttribute != null )
+                            {
+                                blockType.DefaultRole = blockRoleAttribute.DefaultRole;
+                            }
+
                             rockContext.SaveChanges();
 
                             // Update the attributes used by the block
@@ -245,6 +266,52 @@ namespace Rock.Model
                         {
                             Debug.WriteLine( $"RegisterEntityBlockTypes failed for {type.FullName} with exception: {thrownException.Message}" );
                             ExceptionLogService.LogException( new Exception( string.Format( "Problem processing block with path '{0}'.", type.FullName ), thrownException ), null );
+                        }
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Finds legacy WebForms block types whose GUIDs match the supplied map and stages their conversion to Obsidian by
+        /// assigning the target <see cref="EntityType"/> and clearing the block's <c>Path</c>. Flushes the cache for each updated block.
+        ///
+        /// NOTE: It's the callers responsibility to save any changes to the blockTypeService.
+        /// </summary>
+        /// <param name="blocksTypesToCheck">Map of block type GUID to the target <see cref="EntityType"/> that will replace the legacy WebForms block type.</param>
+        /// <param name="rockContext">The database context used to query and update block types. The caller is responsible for calling <c>SaveChanges()</c> to persist changes.</param>
+        /// <remarks>
+        /// If a legacy WebForms block should remain (e.g., for a swap), please change its <c>[Rock.SystemGuid.BlockTypeGuid(...)]</c> to a new GUID.
+        /// This method stages updates only and does not call <c>SaveChanges()</c>.
+        /// </remarks>
+        /// 
+        internal static void StagePossibleMigrateWebFormsToObsidianBlock( Dictionary<Guid, EntityType> blocksTypesToCheck, RockContext rockContext )
+        {
+            var blockTypeService = new BlockTypeService( rockContext );
+            var webFormBlocksToMigrateToObsidian = blockTypeService.Queryable()
+                .Where( b => b.EntityTypeId == null && !string.IsNullOrEmpty( b.Path ) && blocksTypesToCheck.Keys.Contains( b.Guid ) )
+                .ToList();
+
+            using ( ObservabilityHelper.StartActivity( "ObsidianMigration: Migrating webforms blocks to Obsidian" ) )
+            {
+                foreach ( var block in webFormBlocksToMigrateToObsidian )
+                {
+                    var entityType = blocksTypesToCheck[block.Guid];
+
+                    // We need to use the entityType and not the entityType.Id because the entityType.Id
+                    // may not be set if the entityType was just added.
+                    block.EntityType = entityType;
+                    block.Path = null;
+
+                    // Look for older blocktypes that were formerly using that EntityId
+                    // and remove them.
+                    if ( entityType.Id != 0 )
+                    {
+                        var oldBlockTypes = blockTypeService.Queryable()
+                            .Where( b => b.Id != block.Id && b.EntityTypeId == entityType.Id );
+                        foreach ( var oldBlockType in oldBlockTypes )
+                        {
+                            blockTypeService.Delete( oldBlockType );
                         }
                     }
                 }
@@ -356,9 +423,35 @@ namespace Rock.Model
                             blockType.Description = Rock.Reflection.GetDescription( controlType ) ?? string.Empty;
 
                             var blockTypeGuidFromAttribute = blockCompiledType.GetCustomAttribute<Rock.SystemGuid.BlockTypeGuidAttribute>( inherit: false )?.Guid;
+
+                            /*
+                                9/5/2025 - N.A.
+
+                                In Web Site–style projects, Roslyn generates a runtime subclass (e.g., "ASP.*") 
+                                that inherits from the code-behind class (our WebForm user controls). When this 
+                                occurs, calling GetCustomAttribute(inherit: false) on this generated subclass 
+                                returns null.
+
+                                To address this, we inspect the *BaseType* for the BlockTypeGuid attribute so
+                                that attributes declared on code-behind classes are still recognized.
+
+                                Reason: Ensure attributes defined on code-behind classes are accessible 
+                                from generated subclasses.
+                            */
+                            if ( blockTypeGuidFromAttribute == null && blockCompiledType.Namespace == ROSLYN_COMPILED_NAMESPACE )
+                            {
+                                blockTypeGuidFromAttribute = blockCompiledType.BaseType.GetCustomAttribute<Rock.SystemGuid.BlockTypeGuidAttribute>( inherit: false )?.Guid;
+                            }
+
                             if ( blockTypeGuidFromAttribute != null && blockType.Guid != blockTypeGuidFromAttribute.Value )
                             {
                                 blockType.Guid = blockTypeGuidFromAttribute.Value;
+                            }
+
+                            var blockRoleAttribute = blockCompiledType.GetCustomAttribute<DefaultBlockRoleAttribute>( inherit: true );
+                            if ( blockRoleAttribute != null )
+                            {
+                                blockType.DefaultRole = blockRoleAttribute.DefaultRole;
                             }
 
                             rockContext.SaveChanges();
@@ -407,7 +500,7 @@ namespace Rock.Model
         /// This flag was added to help test the obsidian blocks in dev machines. It needs to be removed once all the Website
         /// blocks have been migrated to obsidian.</param>
         /// <returns></returns>
-        [RockInternal( "1.17", true )]
+        [RockInternal( "17.0", true )]
         public static List<BlockTypeCache> BlockTypesToDisplay( SiteType siteType, bool showAllWebsitesBlocks = false )
         {
             // Convert the SiteType Enum to the one of type SiteTypeFlag. Throw an exception if the conversion fails.
@@ -530,7 +623,7 @@ namespace Rock.Model
         /// <param name="physWebAppPath">A <see cref="System.String" /> containing the physical path to Rock on the server.</param>
         /// <param name="page">The <see cref="System.Web.UI.Page" />.</param>
         /// <param name="refreshAll">if set to <c>true</c> will refresh name, category, and description for all block types (not just the new ones)</param>
-        [RockObsolete( "1.17.1" )]
+        [RockObsolete( "17.1" )]
         [Obsolete( "This method is deprecated and will be removed in a future version. Please use the overload without the System.Web.UI.Page parameter." )]
         public static void RegisterBlockTypes( string physWebAppPath, System.Web.UI.Page page, bool refreshAll = false )
         {

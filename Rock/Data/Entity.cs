@@ -34,7 +34,7 @@ namespace Rock.Data
     /// </summary>
     /// <typeparam name="T">The Type entity that is being referenced <example>Entity&lt;Person&gt;</example></typeparam>
     [DataContract]
-    public abstract class Entity<T> : IEntity, ILavaDataDictionary, Lava.ILiquidizable
+    public abstract class Entity<T> : IEntity, ILavaDataDictionary
         where T : Entity<T>, new()
     {
         #region Entity Properties
@@ -688,6 +688,8 @@ namespace Rock.Data
         /// Creates a DotLiquid compatible dictionary that represents the current entity object.
         /// </summary>
         /// <returns>DotLiquid compatible dictionary.</returns>
+        [Obsolete( "DotLiquid is no longer supported." )]
+        [RockObsolete( "18.0" )]
         public object ToLiquid()
         {
             return this;

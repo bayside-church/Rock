@@ -128,5 +128,22 @@ namespace Rock.ViewModels.Blocks.Core.CampusDetail
         /// The closed date.
         /// </value>
         public DateTime? ClosedDate { get; set; }
+
+        /// <summary>
+        /// Get or sets the Country Code of the Phone Number
+        /// </summary>
+        /// <value>The Phone Number Country Code.</value>
+        public string PhoneNumberCountryCode { get; set; }
+
+        /// <summary>
+        /// Gets or sets the campus topics. The Campus Topic is a Defined Value.
+        /// </summary>
+        /// <value>The campus topics.</value>
+        public List<CampusTopicBag> CampusTopics { get; set; }
+
+        /// <summary>
+        /// Gets or sets the campus average weekend attendance.
+        /// </summary>
+        public int? AverageWeekendAttendance { get; set; }
     }
 }

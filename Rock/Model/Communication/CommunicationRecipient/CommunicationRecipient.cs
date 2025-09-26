@@ -1,4 +1,4 @@
-// <copyright>
+﻿// <copyright>
 // Copyright by the Spark Development Network
 //
 // Licensed under the Rock Community License (the "License");
@@ -23,6 +23,8 @@ using System.Data.Entity.ModelConfiguration;
 using System.Linq;
 using System.Runtime.Serialization;
 using Newtonsoft.Json.Linq;
+
+using Rock.Cms.ContentCollection.Attributes;
 using Rock.Data;
 using Rock.Lava;
 
@@ -34,6 +36,7 @@ namespace Rock.Model
     [RockDomain( "Communication" )]
     [Table( "CommunicationRecipient" )]
     [DataContract]
+    [CodeGenerateRest]
     [Rock.SystemGuid.EntityTypeGuid( "3EC89B90-6692-451E-A48F-0D2ADEBA05BC")]
     public partial class CommunicationRecipient : Model<CommunicationRecipient>
     {
@@ -99,7 +102,25 @@ namespace Rock.Model
         public DateTime? SendDateTime { get; set; }
 
         /// <summary>
-        /// Gets or sets the datetime that communication was opened by recipient.
+        /// Gets or sets the datetime that communication was first attempted.
+        /// </summary>
+        /// <value>
+        /// The date time that communication was first attempted.
+        /// </value>
+        [DataMember]
+        public DateTime? FirstSendAttemptDateTime { get; set; }
+
+        /// <summary>
+        /// Gets or sets the datetime that communication was delivered to the recipient.
+        /// </summary>
+        /// <value>
+        /// The delivered date time.
+        /// </value>
+        [DataMember]
+        public DateTime? DeliveredDateTime { get; set; }
+
+        /// <summary>
+        /// Gets or sets the datetime that communication was opened by the recipient.
         /// </summary>
         /// <value>
         /// The opened date time.
@@ -133,8 +154,12 @@ namespace Rock.Model
         /// <value>
         /// The unique message identifier.
         /// </value>
+        /// A simple index was added to the UniqueMessageId field due to a known usage in core for Twilio.  
+        /// It was also reported by Bill at Bema that a similar issue with ClearStream was causing poor performance. 
+        /// While we usually prefer to create crafted covering indexes with composite and include columns—this case justified a single-column index.
         [DataMember]
         [MaxLength( 100 )]
+        [IndexField]
         public string UniqueMessageId { get; set; }
 
         /// <summary>
@@ -158,6 +183,33 @@ namespace Rock.Model
         /// </value>
         [DataMember]
         public string SentMessage { get; set; }
+
+        /// <summary>
+        /// Gets or sets the datetime when the recipient unsubscribed.
+        /// </summary>
+        /// <value>
+        /// The unsubscribe date time.
+        /// </value>
+        [DataMember]
+        public DateTime? UnsubscribeDateTime { get; set; }
+
+        /// <summary>
+        /// Gets or sets the unsubscribe level.
+        /// </summary>
+        /// <value>
+        /// The unsubscribe level.
+        /// </value>
+        [DataMember]
+        public UnsubscribeLevel? UnsubscribeLevel { get; set; }
+
+        /// <summary>
+        /// Gets or sets the datetime when the recipient marked this communication as spam.
+        /// </summary>
+        /// <value>
+        /// The spam complaint date time.
+        /// </value>
+        [DataMember]
+        public DateTime? SpamComplaintDateTime { get; set; }
 
         /// <summary>
         /// Gets or sets the personal device identifier.

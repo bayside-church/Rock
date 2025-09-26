@@ -23,6 +23,7 @@ using System.Runtime.Serialization;
 using Newtonsoft.Json;
 
 using Rock.Data;
+using Rock.Enums.Cms;
 using Rock.Lava;
 using Rock.Security;
 using Rock.Web.Cache;
@@ -41,6 +42,8 @@ namespace Rock.Model
     [RockDomain( "CMS" )]
     [Table( "Block" )]
     [DataContract]
+    [CodeGenerateRest]
+    [EnableAttributeQualification( nameof( Id ) )]
     [Rock.SystemGuid.EntityTypeGuid( Rock.SystemGuid.EntityType.BLOCK )]
     public partial class Block : Model<Block>, IOrdered, ICacheable
     {
@@ -106,6 +109,7 @@ namespace Rock.Model
         /// </example>
         [Required]
         [DataMember( IsRequired = true )]
+        [EnableAttributeQualification]
         public int BlockTypeId { get; set; }
 
         /// <summary>
@@ -191,6 +195,13 @@ namespace Rock.Model
         /// </value>
         [DataMember]
         public string AdditionalSettings { get; set; }
+
+        /// <summary>
+        /// The role that has been assigned to this Block. This will override
+        /// the BlockType's default role.
+        /// </summary>
+        [DataMember]
+        public BlockRole? Role { get; set; }
 
         #endregion
 

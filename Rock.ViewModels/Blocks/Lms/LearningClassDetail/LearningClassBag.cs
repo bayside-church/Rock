@@ -42,6 +42,11 @@ namespace Rock.ViewModels.Blocks.Lms.LearningClassDetail
         public string CourseName { get; set; }
 
         /// <summary>
+        /// Gets or sets the default LearningGradingSystem defined by the LearningProgram.
+        /// </summary>
+        public ListItemBag DefaultGradingSystem { get; set; }
+
+        /// <summary>
         /// Gets or sets the optional description of the group.
         /// </summary>
         public string Description { get; set; }
@@ -52,9 +57,14 @@ namespace Rock.ViewModels.Blocks.Lms.LearningClassDetail
         public List<LearningClassFacilitatorBag> Facilitators { get; set; }
 
         /// <summary>
-        /// Gets or sets the related Rock.Model.LearningGradingSystem.
+        /// Gets or sets the related LearningGradingSystem.
         /// </summary>
         public ListItemBag GradingSystem { get; set; }
+
+        /// <summary>
+        /// Gets or sets the GroupCapacity (maximum allowed students override).
+        /// </summary>
+        public int? GroupCapacity { get; set; }
 
         /// <summary>
         /// Gets or sets a flag indicating if this is an active group. This value is required.
@@ -67,9 +77,9 @@ namespace Rock.ViewModels.Blocks.Lms.LearningClassDetail
         public bool IsPublic { get; set; }
 
         /// <summary>
-        /// Gets or Sets the Location that is associated with the Class.
+        /// Gets or Sets the Location that is associated with the LearningClass.
         /// </summary>
-        public ListItemBag Location { get; set; }
+        public LearningClassLocationBag Location { get; set; }
 
         /// <summary>
         /// Gets or sets the Name of the Group. This property is required.
@@ -100,8 +110,13 @@ namespace Rock.ViewModels.Blocks.Lms.LearningClassDetail
     /// <summary>
     /// The facilitator details for the Learning Class Detail block.
     /// </summary>
-    public class LearningClassFacilitatorBag: EntityBagBase
+    public class LearningClassFacilitatorBag : EntityBagBase
     {
+        /// <summary>
+        /// Gets or sets the facilitator Person Id.
+        /// </summary>
+        public int FacilitatorPersonId { get; set; }
+
         /// <summary>
         /// Gets or sets the email for the facilitator.
         /// </summary>

@@ -17,11 +17,13 @@
 
 using System;
 using System.Collections.Generic;
+using System.Data.Entity;
 using System.Linq;
 using System.Threading.Tasks;
 
 using Rock.Communication;
 using Rock.Data;
+using Rock.Utility;
 using Rock.Web.Cache;
 
 namespace Rock.Model
@@ -82,10 +84,19 @@ namespace Rock.Model
             /// <summary>
             /// Gets or sets the recipients.
             /// </summary>
+            /// <remarks>
+            /// Use <see cref="RecipientPrimaryPersonAliasIds"/> if the primary person alias identifiers are already known.
+            /// </remarks>
             /// <value>
             /// The recipients.
             /// </value>
             public List<RockEmailMessageRecipient> Recipients { get; set; }
+
+            /// <summary>
+            /// Gets or sets the primary person alias identifiers of the recipients.
+            /// </summary>
+            /// <remarks>This can be used instead of <see cref="Recipients"/> if the primary person alias identifiers are already known.</remarks>
+            public List<int> RecipientPrimaryPersonAliasIds { get; set; }
 
             /// <summary>
             /// Gets or sets from name.
@@ -136,7 +147,7 @@ namespace Rock.Model
             public bool BulkCommunication { get; set; }
 
             /// <summary>
-            /// Gets or sets the send date time.
+            /// Gets or sets the datetime that communication was sent. This also indicates that communication shouldn't attempt to send again.
             /// </summary>
             /// <value>
             /// The send date time.
@@ -166,15 +177,32 @@ namespace Rock.Model
             /// The system communication identifier.
             /// </value>
             public int? SystemCommunicationId { get; set; }
+
+            /// <summary>
+            /// Gets or sets the name of the communication.
+            /// </summary>
+            public string Name { get; set; }
+
+            /// <summary>
+            /// Gets or sets the future send date for the communication. This allows a user to schedule when a communication is sent 
+            /// and the communication will not be sent until that date and time.
+            /// </summary>
+            public DateTime? FutureSendDateTime { get; set; }
+
+            /// <summary>
+            /// Gets or sets the communication template identifier.
+            /// </summary>
+            public int? CommunicationTemplateId { get; set; }
         }
 
         /// <summary>
-        /// Creates the email communication.
+        /// Creates the email communication and adds it to the context.
         /// </summary>
         /// <param name="createEmailCommunicationArgs">The create email communication arguments.</param>
         /// <returns></returns>
         public Communication CreateEmailCommunication( CreateEmailCommunicationArgs createEmailCommunicationArgs )
         {
+            var recipientPrimaryPersonAliasIds = createEmailCommunicationArgs.RecipientPrimaryPersonAliasIds;
             var recipients = createEmailCommunicationArgs.Recipients;
             var senderPersonAliasId = createEmailCommunicationArgs.SenderPersonAliasId;
             var fromName = createEmailCommunicationArgs.FromName;
@@ -186,44 +214,68 @@ namespace Rock.Model
             var sendDateTime = createEmailCommunicationArgs.SendDateTime;
             var recipientStatus = createEmailCommunicationArgs.RecipientStatus;
             var systemCommunicationId = createEmailCommunicationArgs.SystemCommunicationId;
+            var name = createEmailCommunicationArgs.Name;
+            var futureSendDateTime = createEmailCommunicationArgs.FutureSendDateTime;
 
-            var recipientsWithPersonIds = recipients.Where( a => a.PersonId.HasValue ).Select( a => a.PersonId ).ToList();
-            var recipientEmailsUnknownPersons = recipients.Where( a => a.PersonId == null ).Select( a => a.EmailAddress );
-
-            /*
-             * 4-MAY-2022 DMV
-             *
-             * In tracking down alleged duplicate communications we discovered
-             * that duplicates could be sent to the same person if they are in the
-             * recipient list more that once with mulitple Person Alias IDs.
-             * This could have occured through a person merge or other data changes
-             * in Rock. This code removes those duplicates from the list before
-             * sending the communication.
-             *
-             */
-
-            var recipientPersonList = new PersonAliasService( ( RockContext ) Context )
-                .GetPrimaryAliasQuery()
-                .Where( pa => recipientsWithPersonIds.Contains( pa.PersonId ) )
-                .Select( a => a.Person )
-                .ToList();
-
-            if ( !recipientPersonList.Any() && recipientEmailsUnknownPersons.Any( a => a != null ) )
+            if ( recipientPrimaryPersonAliasIds == null )
             {
-                // For backwards compatibility, if no PersonIds where specified, but there are recipients that are only specified by EmailAddress, take a guess at the personIds by looking for matching email addresses
-                recipientPersonList = new PersonService( ( RockContext ) Context )
-                .Queryable()
-                .Where( p => recipientEmailsUnknownPersons.Contains( p.Email ) )
-                .ToList();
+                recipientPrimaryPersonAliasIds = new List<int>();
             }
 
-            if ( !recipientPersonList.Any() )
+            if ( !recipientPrimaryPersonAliasIds.Any() )
+            {
+                // Get the recipient primary person alias identifiers from the Recipients collection.
+                var recipientsWithPersonIds = recipients.Where( a => a.PersonId.HasValue ).Select( a => a.PersonId ).ToList();
+                var recipientEmailsUnknownPersons = recipients.Where( a => a.PersonId == null ).Select( a => a.EmailAddress );
+
+                /*
+                 * 4-MAY-2022 DMV
+                 *
+                 * In tracking down alleged duplicate communications we discovered
+                 * that duplicates could be sent to the same person if they are in the
+                 * recipient list more that once with mulitple Person Alias IDs.
+                 * This could have occured through a person merge or other data changes
+                 * in Rock. This code removes those duplicates from the list before
+                 * sending the communication.
+                 *
+                 */
+
+                var recipientPersonList = new PersonAliasService( ( RockContext ) Context )
+                    .GetPrimaryAliasQuery()
+                    .Where( pa => recipientsWithPersonIds.Contains( pa.PersonId ) )
+                    .Select( a => a.Person )
+                    .ToList();
+
+                if ( !recipientPersonList.Any() && recipientEmailsUnknownPersons.Any( a => a != null ) )
+                {
+                    // For backwards compatibility, if no PersonIds where specified, but there are recipients that are only specified by EmailAddress, take a guess at the personIds by looking for matching email addresses
+                    recipientPersonList = new PersonService( ( RockContext ) Context )
+                    .Queryable()
+                    .Where( p => recipientEmailsUnknownPersons.Contains( p.Email ) )
+                    .ToList();
+                }
+
+                foreach ( var person in recipientPersonList )
+                {
+                    var personAliasId = person.PrimaryAliasId;
+
+                    if ( !personAliasId.HasValue )
+                    {
+                        continue;
+                    }
+
+                    recipientPrimaryPersonAliasIds.Add( personAliasId.Value );
+                }
+            }
+
+            if ( !recipientPrimaryPersonAliasIds.Any() )
             {
                 return null;
             }
 
             var communication = new Communication
             {
+                CommunicationTemplateId = createEmailCommunicationArgs.CommunicationTemplateId,
                 CommunicationType = CommunicationType.Email,
                 Status = CommunicationStatus.Approved,
                 ReviewedDateTime = RockDateTime.Now,
@@ -235,26 +287,26 @@ namespace Rock.Model
             communication.FromEmail = fromAddress.TrimForMaxLength( communication, "FromEmail" );
             communication.ReplyToEmail = replyTo.TrimForMaxLength( communication, "ReplyToEmail" );
             communication.Subject = subject.TrimForMaxLength( communication, "Subject" );
+            communication.Name = name.TrimForMaxLength( communication, "Name" );
             communication.Message = message;
             communication.IsBulkCommunication = bulkCommunication;
-            communication.FutureSendDateTime = null;
+            communication.FutureSendDateTime = futureSendDateTime;
             communication.SendDateTime = sendDateTime;
             communication.SystemCommunicationId = systemCommunicationId;
             Add( communication );
 
-            // add each person as a recipient to the communication
-            foreach ( var person in recipientPersonList )
+            // Add each person as a recipient to the communication.
+            var emailMediumEntityTypeId = EntityTypeCache.Get( SystemGuid.EntityType.COMMUNICATION_MEDIUM_EMAIL.AsGuid() ).Id;
+            foreach ( var personAliasId in recipientPrimaryPersonAliasIds )
             {
-                var personAliasId = person.PrimaryAliasId;
-                if ( !personAliasId.HasValue )
-                    continue;
-
                 var communicationRecipient = new CommunicationRecipient
                 {
-                    PersonAliasId = personAliasId.Value,
+                    PersonAliasId = personAliasId,
                     Status = recipientStatus,
-                    SendDateTime = sendDateTime
+                    SendDateTime = sendDateTime,
+                    MediumEntityTypeId = emailMediumEntityTypeId
                 };
+
                 communication.Recipients.Add( communicationRecipient );
             }
 
@@ -330,12 +382,24 @@ namespace Rock.Model
             public Person FromPerson { get; set; }
 
             /// <summary>
+            /// Gets or sets "from" primary person alias identifier.
+            /// </summary>
+            /// <remarks>This can be used instead of <see cref="FromPerson"/> if the primary person alias identifier is already known.</remarks>
+            public int? FromPrimaryPersonAliasId { get; set; }
+
+            /// <summary>
             /// Converts to personaliasid.
             /// </summary>
             /// <value>
             /// To person alias identifier.
             /// </value>
             public int? ToPersonAliasId { get; set; }
+
+            /// <summary>
+            /// Gets or sets the primary person alias identifiers of the recipients.
+            /// </summary>
+            /// <remarks>This can be used instead of <see cref="ToPersonAliasId"/> if there are multiple recipients and the primary person alias identifiers are already known.</remarks>
+            public List<int> ToPrimaryPersonAliasIds { get; set; }
 
             /// <summary>
             /// Gets or sets the message.
@@ -389,6 +453,17 @@ namespace Rock.Model
             /// The system communication identifier.
             /// </value>
             public int? SystemCommunicationId { get; set; }
+
+            /// <summary>
+            /// Gets or sets the future send date for the communication. This allows a user to schedule when a communication is sent 
+            /// and the communication will not be sent until that date and time.
+            /// </summary>
+            public DateTime? FutureSendDateTime { get; set; }
+
+            /// <summary>
+            /// Gets or sets the communication template identifier.
+            /// </summary>
+            public int? CommunicationTemplateId { get; set; }
         }
 
         /// <summary>
@@ -402,10 +477,23 @@ namespace Rock.Model
             var responseCode = createSMSCommunicationArgs.ResponseCode;
             var communicationName = createSMSCommunicationArgs.CommunicationName;
             var fromPerson = createSMSCommunicationArgs.FromPerson;
+            var fromPrimaryPersonAliasId = createSMSCommunicationArgs.FromPrimaryPersonAliasId;
             var message = createSMSCommunicationArgs.Message;
             var fromPhone = createSMSCommunicationArgs.FromSystemPhoneNumber;
             var systemCommunicationId = createSMSCommunicationArgs.SystemCommunicationId;
             var toPersonAliasId = createSMSCommunicationArgs.ToPersonAliasId;
+            var toPersonAliasIds = createSMSCommunicationArgs.ToPrimaryPersonAliasIds;
+            var futureSendDateTime = createSMSCommunicationArgs.FutureSendDateTime;
+
+            if ( toPersonAliasIds == null )
+            {
+                toPersonAliasIds = new List<int>();
+
+                if ( toPersonAliasId.HasValue )
+                {
+                    toPersonAliasIds.Add( toPersonAliasId.Value );
+                }
+            }
 
             if ( responseCode.IsNullOrWhiteSpace() )
             {
@@ -413,30 +501,38 @@ namespace Rock.Model
             }
 
             // add communication for reply
-            var communication = new Rock.Model.Communication
+            var communication = new Communication
             {
                 Name = communicationName,
+                CommunicationTemplateId = createSMSCommunicationArgs.CommunicationTemplateId,
                 CommunicationType = CommunicationType.SMS,
                 Status = CommunicationStatus.Approved,
                 ReviewedDateTime = RockDateTime.Now,
                 // NOTE: if this communication was created from a mobile device, fromPerson should never be null since a Nameless Person record should have been created if a regular person record wasn't found
-                ReviewerPersonAliasId = fromPerson?.PrimaryAliasId,
-                SenderPersonAliasId = fromPerson?.PrimaryAliasId,
+                ReviewerPersonAliasId = fromPrimaryPersonAliasId ?? fromPerson?.PrimaryAliasId,
+                SenderPersonAliasId = fromPrimaryPersonAliasId ?? fromPerson?.PrimaryAliasId,
                 IsBulkCommunication = false,
                 SMSMessage = message,
                 SmsFromSystemPhoneNumberId = fromPhone.Id,
-                SystemCommunicationId = systemCommunicationId
+                SystemCommunicationId = systemCommunicationId,
+                FutureSendDateTime = futureSendDateTime
             };
 
-            if ( toPersonAliasId != null )
+            if ( toPersonAliasIds.Any() )
             {
-                var recipient = new Rock.Model.CommunicationRecipient();
-                recipient.Status = CommunicationRecipientStatus.Pending;
-                recipient.PersonAliasId = toPersonAliasId.Value;
-                recipient.ResponseCode = responseCode;
-                recipient.MediumEntityTypeId = EntityTypeCache.Get( "Rock.Communication.Medium.Sms" ).Id;
-                recipient.SentMessage = message;
-                communication.Recipients.Add( recipient );
+                foreach ( var personAliasId in toPersonAliasIds )
+                {
+                    var recipient = new CommunicationRecipient
+                    {
+                        Status = CommunicationRecipientStatus.Pending,
+                        PersonAliasId = personAliasId,
+                        ResponseCode = responseCode,
+                        MediumEntityTypeId = EntityTypeCache.Get( "Rock.Communication.Medium.Sms" ).Id,
+                        SentMessage = message // This is probably not needed but leaving for now for backward compatibility.
+                    };
+
+                    communication.Recipients.Add( recipient );
+                }
             }
 
             Add( communication );
@@ -444,75 +540,245 @@ namespace Rock.Model
         }
 
         /// <summary>
-        /// Gets the queued communications.
+        /// Information needed to create a Push communication with CommunicationRecipient(s) and add it to the context.
         /// </summary>
-        /// <param name="expirationDays">The expiration days.</param>
-        /// <param name="delayMinutes">The delay minutes.</param>
-        /// <param name="includeFuture">if set to <c>true</c> [include future].</param>
-        /// <param name="includePendingApproval">if set to <c>true</c> communications that haven't been approved yet will be included.</param>
+        public sealed class CreatePushCommunicationArgs
+        {
+            /// <summary>
+            /// Gets or sets the communication template identifier.
+            /// </summary>
+            public int? CommunicationTemplateId { get; set; }
+
+            /// <summary>
+            /// Gets or sets the name of the communication.
+            /// </summary>
+            public string Name { get; set; }
+
+            /// <summary>
+            /// Gets or sets the push message.
+            /// </summary>
+            public string PushMessage { get; set; }
+
+            /// <summary>
+            /// Gets or sets the push data. This is a JSON string that contains additional data to be sent with the push notification.
+            /// </summary>
+            public string PushData { get; set; }
+
+            /// <summary>
+            /// Gets or sets the push image binary file identifier.
+            /// </summary>
+            public int? PushImageBinaryFileId { get; set; }
+
+            /// <summary>
+            /// Gets or sets the push open action.
+            /// </summary>
+            public PushOpenAction? PushOpenAction { get; set; }
+
+            /// <summary>
+            /// Gets or sets the push open message. This is a message that will be displayed when the user opens the push notification.
+            /// </summary>
+            public string PushOpenMessage { get; set; }
+
+            /// <summary>
+            /// Gets or sets the push open message JSON. This is a JSON string that contains structured content that will be displayed when the user opens the push notification.
+            /// </summary>
+            public string PushOpenMessageJson { get; set; }
+
+            /// <summary>
+            /// Gets or sets the push title. This is the title of the push notification that will be displayed to the user.
+            /// </summary>
+            public string PushTitle { get; set; }
+
+            /// <summary>
+            /// Gets or sets the future send date for the communication. This allows a user to schedule when a communication is sent
+            /// </summary>
+            public DateTime? FutureSendDateTime { get; set; }
+
+            /// <summary>
+            /// Gets or sets the from person alias identifier. This is used to set the sender of the communication.
+            /// </summary>
+            public int? FromPersonAliasId { get; set; }
+
+            /// <summary>
+            /// Gets or sets the list of person alias identifiers to which the push notification will be sent.
+            /// </summary>
+            public List<int> ToPersonAliasIds { get; set; }
+        }
+
+        /// <summary>
+        /// Creates a Push communication with a CommunicationRecipient and adds it to the context.
+        /// </summary>
+        /// <param name="createPushCommunicationArgs">The create Push communication arguments.</param>
         /// <returns></returns>
+        public Communication CreatePushCommunication( CreatePushCommunicationArgs createPushCommunicationArgs )
+        {
+            var communication = new Communication
+            {
+                CommunicationTemplateId = createPushCommunicationArgs.CommunicationTemplateId,
+                CommunicationType = CommunicationType.PushNotification,
+                Status = CommunicationStatus.Approved,
+                ReviewedDateTime = RockDateTime.Now,
+                ReviewerPersonAliasId = createPushCommunicationArgs.FromPersonAliasId,
+                SenderPersonAliasId = createPushCommunicationArgs.FromPersonAliasId,
+                IsBulkCommunication = false,
+                PushMessage = createPushCommunicationArgs.PushMessage,
+                PushData = createPushCommunicationArgs.PushData,
+                PushImageBinaryFileId = createPushCommunicationArgs.PushImageBinaryFileId,
+                PushOpenAction = createPushCommunicationArgs.PushOpenAction,
+                PushOpenMessage = createPushCommunicationArgs.PushOpenMessage,
+                PushOpenMessageJson = createPushCommunicationArgs.PushOpenMessageJson,
+                FutureSendDateTime = createPushCommunicationArgs.FutureSendDateTime
+            };
+
+            communication.Name = createPushCommunicationArgs.Name.TrimForMaxLength( communication, nameof( Communication.Name ) );
+            communication.PushTitle = createPushCommunicationArgs.PushTitle.TrimForMaxLength( communication, nameof( Communication.Name ) );
+
+            if ( createPushCommunicationArgs.ToPersonAliasIds?.Any() == true )
+            {
+                var pushMediumEntityTypeId = EntityTypeCache.GetId( SystemGuid.EntityType.COMMUNICATION_MEDIUM_PUSH_NOTIFICATION.AsGuid() );
+                foreach ( var personAliasId in createPushCommunicationArgs.ToPersonAliasIds )
+                {
+                    var recipient = new CommunicationRecipient
+                    {
+                        Status = CommunicationRecipientStatus.Pending,
+                        PersonAliasId = personAliasId,
+                        MediumEntityTypeId = pushMediumEntityTypeId,
+                    };
+
+                    communication.Recipients.Add( recipient );
+                }
+            }
+
+            Add( communication );
+            return communication;
+        }        
+
+        /// <summary>
+        /// The number of minutes in the past to consider a previously-locked-for-sending communication recipient as expired.
+        /// This will be used to retry sending a communication to recipients who get stuck in the "Sending" status.
+        /// </summary>
+        internal static int PreviousSendLockExpiredMinutes = -240;
+
+        /// <summary>
+        /// Gets the queued communications based on the provided arguments.
+        /// </summary>
+        /// <param name="expirationDays">How many days in the past to look for queued communications before considering them as expired.</param>
+        /// <param name="delayMinutes">How long to wait after a communication was approved before considering it as queued.</param>
+        /// <param name="includeFuture">Whether to include ALL unsent communications that have a FutureSendDateTime on or
+        /// after (RockDateTime.Now minus <paramref name="expirationDays"/>), regardless of then they were created or
+        /// approved.
+        /// <para>
+        /// IMPORTANT: This will also include any communications that DON'T have a FutureSendDateTime, as long as they're
+        /// eligible to send based on the provided <paramref name="expirationDays"/>, <paramref name="delayMinutes"/>
+        /// and <paramref name="includePendingApproval"/> arguments.
+        /// </para>
+        /// <para>BE CAREFUL! Only use this option if you truly understand the implications.</para>
+        /// </param>
+        /// <param name="includePendingApproval">Whether to include communications that haven't been approved yet.</param>
+        /// <returns>The queued communications based on the provided arguments.</returns>
         public IQueryable<Communication> GetQueued( int expirationDays, int delayMinutes, bool includeFuture, bool includePendingApproval )
         {
-            var beginWindow = RockDateTime.Now.AddDays( 0 - expirationDays );
-            var endWindow = RockDateTime.Now.AddMinutes( 0 - delayMinutes );
             var currentDateTime = RockDateTime.Now;
 
-            // Conditions for communications that should be queued for Sending (indicated by includeFuture == false and includePending == false)
-            // -  communications that haven't been sent yet (SendDateTime is null)
-            // -  communication is approved (or includePendingApproval == false)
-            // - FutureSendDateTime is not set (not scheduled), and communication was created within a reasonable window based on expiration days (for example, no older than 3 days ago)
-            //   - OR - FutureSendDateTime IS set (scheduled), and the FutureSendDateTime is Now (or within the expiration window)
+            // Include communications that were approved (or created, for legacy plugins) on or AFTER this date/time.
+            var earliestDateTime = currentDateTime.AddDays( 0 - expirationDays );
 
-            // Limit to communications that haven't been sent yet
-            var queuedQry = Queryable().Where( c => !c.SendDateTime.HasValue );
+            // Include communications that were approved (or created, for legacy plugins) on or BEFORE this date/time.
+            var latestDateTime = currentDateTime.AddMinutes( 0 - delayMinutes );
 
-            var qryPendingRecipients = new CommunicationRecipientService( ( RockContext ) Context )
-                .Queryable()
-                .Where( a => a.Status == CommunicationRecipientStatus.Pending )
-                .Select( cr => new { Id = cr.CommunicationId } );
+            // Limit to communications that haven't been sent yet. Note that communications are only stamped with a
+            // SendDateTime value once Rock has attempted to send to all of its recipients.
+            var queuedCommunicationsQry = Queryable().Where( c => !c.SendDateTime.HasValue );
 
             if ( includePendingApproval )
             {
-                // Also limit to communications that are Approved or Pending Approval
-                queuedQry = queuedQry.Where( c => c.Status == CommunicationStatus.Approved || c.Status == CommunicationStatus.PendingApproval );
+                // Also limit to communications that are approved or pending approval.
+                queuedCommunicationsQry = queuedCommunicationsQry.Where( c =>
+                    c.Status == CommunicationStatus.Approved
+                    || c.Status == CommunicationStatus.PendingApproval
+                );
             }
             else
             {
-                // Also limit to communications that are Approved
-                queuedQry = queuedQry.Where( c => c.Status == CommunicationStatus.Approved );
+                // Also limit to communications that are Approved.
+                queuedCommunicationsQry = queuedCommunicationsQry.Where( c => c.Status == CommunicationStatus.Approved );
             }
 
-            if ( includeFuture )
-            {
-                // Also limit to communications that have either been created within a reasonable timeframe (typically no older than 3 days ago) or are Scheduled to be sent at some point
-                queuedQry = queuedQry.Where( c =>
-                    // Use the reviewed date to get the communications to send
-                    ( !c.FutureSendDateTime.HasValue && c.ReviewedDateTime.HasValue && c.ReviewedDateTime.Value >= beginWindow && c.ReviewedDateTime.Value <= endWindow )
-                    // Use the created date to get the communications to send this is for communications that are created by legacy plugins that have switched to using reviewed date.
-                    || ( !c.FutureSendDateTime.HasValue && !c.ReviewedDateTime.HasValue && c.CreatedDateTime.HasValue && c.CreatedDateTime.Value >= beginWindow && c.CreatedDateTime.Value <= endWindow )
-                    // Get all future communications.
-                    || ( c.FutureSendDateTime.HasValue && c.FutureSendDateTime.Value >= beginWindow ) );
-            }
-            else
-            {
-                // Also limit to communications that have either been created within a reasonable timeframe (typically no older than 3 days ago)
-                // or are Scheduled to be sent (also within that reasonable timeframe. In other words, if it was scheduled to be sent, but stil hasn't been sent 3 days after it was scheduled, don't include it)
-                queuedQry = queuedQry.Where( c =>
-                    // Use the reviewed date to get the communications to send
-                    ( !c.FutureSendDateTime.HasValue && c.ReviewedDateTime.HasValue && c.ReviewedDateTime.Value >= beginWindow && c.ReviewedDateTime.Value <= endWindow )
-                    // Use the created date to get the communications to send this is for communications that are created by legacy plugins that have switched to using reviewed date.
-                    || ( !c.FutureSendDateTime.HasValue && !c.ReviewedDateTime.HasValue && c.CreatedDateTime.HasValue && c.CreatedDateTime.Value >= beginWindow && c.CreatedDateTime.Value <= endWindow )
-                    // Get all future communication that are need to be sent.
-                    || ( c.FutureSendDateTime.HasValue && c.FutureSendDateTime.Value >= beginWindow && c.FutureSendDateTime.Value <= currentDateTime ) );
-            }
+            // Also limit to communications that:
+            //
+            // [EITHER] (
+            //      FutureSendDateTime is on or AFTER the earliest date/time
+            //      [AND] (
+            //          [EITHER] Include all future communications (includeFuture == true)
+            //          [OR] FutureSendDateTime is on or BEFORE the current date/time
+            //      )
+            // )
+            // [OR] (
+            //      Don't have a FutureSendDateTime
+            //      [AND] Have been created within a reasonable timeframe (typically no older than 3 days ago)
+            //      [AND] Have been created long enough ago (beyond any specified delay period, typically 30 minutes)
+            // )
+            queuedCommunicationsQry = queuedCommunicationsQry.Where( c =>
 
-            // just in case SendDateTime is null (pre-v8 communication), also limit to communications that either have a ListGroupId or has PendingRecipients
-            var listGroupQuery = Queryable().Where( c => c.ListGroupId.HasValue ).Select( c => new { c.Id } );
-            var communicationListQry = qryPendingRecipients.Union( listGroupQuery );
+                // First, try to use the future send date to get the queued communications. Note that for this case, we
+                // don't care WHEN the communication was created or approved; it might have been scheduled well in advance,
+                // and is just now coming due to be sent -OR- the caller dictated to query ALL future communications.
+                (
+                    c.FutureSendDateTime.HasValue
+                    && c.FutureSendDateTime.Value >= earliestDateTime
+                    && (
+                        includeFuture == true
+                        || c.FutureSendDateTime.Value <= currentDateTime
+                    )
+                )
+
+                // Next, try to use the reviewed date to get the queued communications.
+                || (
+                    !c.FutureSendDateTime.HasValue
+                    && c.ReviewedDateTime.HasValue
+                    && c.ReviewedDateTime.Value >= earliestDateTime
+                    && c.ReviewedDateTime.Value <= latestDateTime
+                )
+
+                // Finally, try to use the created date to get the queued communications.
+                // This is for communications that are created by legacy plugins that have not switched to using reviewed date.
+                || (
+                    !c.FutureSendDateTime.HasValue
+                    && !c.ReviewedDateTime.HasValue
+                    && c.CreatedDateTime.HasValue
+                    && c.CreatedDateTime.Value >= earliestDateTime
+                    && c.CreatedDateTime.Value <= latestDateTime
+                )
+            );
+
+            // Just in case SendDateTime is null (pre-v8 communication), also limit to communications that either have a
+            // ListGroupId or have pending (or previous-lock-expired) recipients.
+            var commIdsWithListGroupIdQry = Queryable()
+                .Where( c => c.ListGroupId.HasValue )
+                .Select( c => c.Id )
+                .Distinct();
+
+            var previousSendLockExpiredDateTime = currentDateTime.AddMinutes( PreviousSendLockExpiredMinutes );
+            var commIdsWithPendingRecipientsQry = new CommunicationRecipientService( ( RockContext ) Context )
+                .Queryable()
+                .Where( a =>
+                    a.Status == CommunicationRecipientStatus.Pending
+                    || (
+                        a.Status == CommunicationRecipientStatus.Sending
+                        && a.ModifiedDateTime < previousSendLockExpiredDateTime
+                    )
+                )
+                .Select( cr => cr.CommunicationId )
+                .Distinct();
+
+            var commIdsWithRecipientsQry = commIdsWithListGroupIdQry.Union( commIdsWithPendingRecipientsQry );
 
             var returnQry = Queryable()
-                .Where( c => queuedQry.Any( c2 => c2.Id == c.Id ) )
-                .Where( c => communicationListQry.Any( c2 => c2.Id == c.Id ) );
+                .Where( c =>
+                    queuedCommunicationsQry.Any( queuedCommunication => queuedCommunication.Id == c.Id )
+                    && commIdsWithRecipientsQry.Any( commIdWithRecipients => commIdWithRecipients == c.Id )
+                );
+
             return returnQry;
         }
 
@@ -632,6 +898,43 @@ namespace Rock.Model
                 .Clients
                 .Channel( channelName )
                 .ConversationMarkedAsRead( conversationKey );
+        }
+
+        /// <summary>
+        /// Send all real time notifications for a conversation that has had
+        /// a change to its read status on a new background Task.
+        /// </summary>
+        /// <param name="conversationKey">The key that identifies the conversation that was read.</param>
+        /// <param name="readStatus">The read status that the conversation was changed to.</param>
+        internal static void SendConversationReadStatusChangedRealTimeNotificationsInBackground( string conversationKey, bool readStatus )
+        {
+            Task.Run( async () =>
+            {
+                try
+                {
+                    await SendConversationReadStatusChangedRealTimeNotificationsAsync( conversationKey, readStatus );
+                }
+                catch ( Exception ex )
+                {
+                    ExceptionLogService.LogException( ex );
+                }
+            } );
+        }
+
+        /// <summary>
+        /// Send all real time notifications for a conversation that had a change to its read status.
+        /// </summary>
+        /// <param name="conversationKey">The key that identifies the conversation that was changed.</param>
+        /// <param name="readStatus">The read status that the conversation was changed to.</param>
+        /// <returns>A Task representing the asynchronous operation.</returns>
+        internal static async Task SendConversationReadStatusChangedRealTimeNotificationsAsync( string conversationKey, bool readStatus )
+        {
+            var channelName = RealTime.Topics.ConversationParticipantTopic.GetChannelForConversationKey( conversationKey );
+
+            await RealTime.RealTimeHelper.GetTopicContext<RealTime.Topics.IConversationParticipant>()
+                .Clients
+                .Channel( channelName )
+                .ConversationReadStatusChanged( conversationKey, readStatus );
         }
 
         /// <summary>
@@ -824,6 +1127,8 @@ namespace Rock.Model
         /// <param name="communicationId">The communication identifier.</param>
         /// <param name="currentPersonAliasId">The current person alias identifier.</param>
         /// <returns></returns>
+        [Obsolete( "Use CopyWithBulkInsert() instead." )]
+        [RockObsolete( "18.0" )]
         public Communication Copy( int communicationId, int? currentPersonAliasId )
         {
             var dataContext = ( RockContext ) Context;
@@ -854,18 +1159,20 @@ namespace Rock.Model
                 // This will avoid an issue where a copied communication will include the same person multiple times
                 // if they have been merged since the original communication was created
                 var primaryAliasRecipients = communicationRecipientService.Queryable()
-                    .Where( a => a.CommunicationId == communication.Id )
-                    .Select( a => new
+                    .Where( cr => cr.CommunicationId == communication.Id )
+                    .Select( cr => new
                     {
-                        a.PersonAlias.Person,
-                        a.AdditionalMergeValuesJson,
-                        a.PersonAliasId
+                        cr.PersonAlias.Person,
+                        cr.AdditionalMergeValuesJson,
+                        cr.PersonAliasId,
+                        cr.MediumEntityTypeId
                     } ).ToList()
                     .GroupBy( a => a.Person.PrimaryAliasId )
-                    .Select( s => new
+                    .Select( grouping => new
                     {
-                        PersonAliasId = s.Key,
-                        AdditionalMergeValuesJson = s.Where( a => a.PersonAliasId == s.Key ).Select( x => x.AdditionalMergeValuesJson ).FirstOrDefault()
+                        PersonAliasId = grouping.Key,
+                        AdditionalMergeValuesJson = grouping.Where( a => a.PersonAliasId == grouping.Key ).Select( x => x.AdditionalMergeValuesJson ).FirstOrDefault(),
+                        MediumEntityTypeId = grouping.Where( a => a.PersonAliasId == grouping.Key ).Select( x => x.MediumEntityTypeId ).FirstOrDefault()
                     } )
                     .Where( s => s.PersonAliasId.HasValue )
                     .ToList();
@@ -877,7 +1184,8 @@ namespace Rock.Model
                         PersonAliasId = primaryAliasRecipient.PersonAliasId.Value,
                         Status = CommunicationRecipientStatus.Pending,
                         StatusNote = string.Empty,
-                        AdditionalMergeValuesJson = primaryAliasRecipient.AdditionalMergeValuesJson
+                        AdditionalMergeValuesJson = primaryAliasRecipient.AdditionalMergeValuesJson,
+                        MediumEntityTypeId = primaryAliasRecipient.MediumEntityTypeId
                     } );
                 }
 
@@ -893,6 +1201,193 @@ namespace Rock.Model
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// Copies and saves the specified communication using bulk insert for the recipients.
+        /// </summary>
+        /// <param name="communicationId">The communication identifier.</param>
+        /// <param name="currentPersonAliasId">The current person alias identifier.</param>
+        /// <returns>The identifier of the new communication if successfully copied and saved.</returns>
+        public int? CopyWithBulkInsert( int communicationId, int? currentPersonAliasId )
+        {
+            var newCommunication = Copy(
+                communicationId,
+                currentPersonAliasId, new CopyArgs
+                {
+                    IsRecipientCopyingDisabled = true,
+                    IsFutureSendDateCopyingDisabled = true
+                } );
+            return newCommunication?.Id;
+        }
+
+        /// <summary>
+        /// Additional arguments used when copying a communication.
+        /// </summary>
+        internal sealed class CopyArgs
+        {
+            /// <summary>
+            /// Gets or sets whether to disable copying recipients.
+            /// </summary>
+            public bool IsRecipientCopyingDisabled { get; set; }
+
+            /// <summary>
+            /// Gets or sets whether to disable copying the future send date.
+            /// </summary>
+            public bool IsFutureSendDateCopyingDisabled { get; set; }
+        }
+
+        /// <summary>
+        /// Creates a copy of a communication and saves it to the context.
+        /// </summary>
+        internal Communication Copy( int communicationId, int? currentPersonAliasId, CopyArgs copyArgs )
+        {
+            var isRecipientCopyingDisabled = copyArgs?.IsRecipientCopyingDisabled == true;
+            var isFutureSendDateCopyingDisabled = copyArgs?.IsFutureSendDateCopyingDisabled == true;
+
+            var communication = Queryable()
+                .AsNoTracking()
+                .Include( c => c.Attachments )
+                .FirstOrDefault( c => c.Id == communicationId );
+
+            if ( communication == null )
+            {
+                return null;
+            }
+
+            var newCommunication = communication.Clone( false );
+            Add( newCommunication );
+
+            var now = RockDateTime.Now;
+
+            newCommunication.CreatedByPersonAlias = null;
+            newCommunication.CreatedByPersonAliasId = currentPersonAliasId;
+            newCommunication.CreatedDateTime = now;
+            newCommunication.ModifiedByPersonAlias = null;
+            newCommunication.ModifiedByPersonAliasId = currentPersonAliasId;
+            newCommunication.ModifiedDateTime = now;
+            newCommunication.Id = 0;
+            newCommunication.Guid = Guid.Empty;
+            newCommunication.SenderPersonAliasId = currentPersonAliasId;
+            newCommunication.Status = CommunicationStatus.Draft;
+            newCommunication.ReviewerPersonAlias = null;
+            newCommunication.ReviewerPersonAliasId = null;
+            newCommunication.ReviewedDateTime = null;
+            newCommunication.ReviewerNote = string.Empty;
+            newCommunication.SendDateTime = null;
+
+            if ( isFutureSendDateCopyingDisabled )
+            {
+                newCommunication.FutureSendDateTime = null;
+            }
+
+            foreach ( var attachment in communication.Attachments.ToList() )
+            {
+                var newAttachment = new CommunicationAttachment
+                {
+                    BinaryFileId = attachment.BinaryFileId,
+                    CommunicationType = attachment.CommunicationType
+                };
+
+                newCommunication.Attachments.Add( newAttachment );
+            }
+
+            var rockContext = ( RockContext ) Context;
+            rockContext.SaveChanges();
+
+            if ( !isRecipientCopyingDisabled )
+            {
+                // Get the recipients from the original communication, but only for recipients that are using the
+                // person's primary alias ID. This will avoid an issue where a copied communication will include the
+                // same person multiple times if they have been merged since the original communication was created.
+                var primaryAliasRecipients = new CommunicationRecipientService( rockContext )
+                    .Queryable()
+                    .Where( cr => cr.CommunicationId == communication.Id )
+                    .Select( cr => new
+                    {
+                        cr.PersonAlias.Person,
+                        cr.AdditionalMergeValuesJson,
+                        cr.PersonAliasId,
+                        cr.MediumEntityTypeId
+                    } )
+                    .ToList()
+                    .GroupBy( a => a.Person.PrimaryAliasId )
+                    .Select( grouping => new
+                    {
+                        PersonAliasId = grouping.Key,
+                        AdditionalMergeValuesJson = grouping.Where( a => a.PersonAliasId == grouping.Key ).Select( x => x.AdditionalMergeValuesJson ).FirstOrDefault(),
+                        MediumEntityTypeId = grouping.Where( a => a.PersonAliasId == grouping.Key ).Select( x => x.MediumEntityTypeId ).FirstOrDefault()
+                    } )
+                    .Where( s => s.PersonAliasId.HasValue )
+                    .ToList();
+
+                if ( primaryAliasRecipients.Any() )
+                {
+                    var newCommunicationRecipients = primaryAliasRecipients
+                        .Select( r => new CommunicationRecipient
+                        {
+                            CommunicationId = newCommunication.Id,
+                            PersonAliasId = r.PersonAliasId.Value,
+                            Status = CommunicationRecipientStatus.Pending,
+                            AdditionalMergeValuesJson = r.AdditionalMergeValuesJson,
+                            MediumEntityTypeId = r.MediumEntityTypeId
+                        } );
+
+                    rockContext.BulkInsert( newCommunicationRecipients );
+                }
+            }
+
+            return newCommunication;
+        }
+
+        /// <summary>
+        /// Gets the "Click" interactions for the given communications and people.
+        /// </summary>
+        /// <param name="communicationIdQuery">The query that returns the communication identifiers.</param>
+        /// <param name="personIdQuery">The query that returns the person identifiers.</param>
+        /// <returns>"Click" interactions where <see cref="Interaction.EntityId"/> is the <see cref="CommunicationRecipient"/> identifier.</returns>
+        public IQueryable<Interaction> GetClickInteractions( IQueryable<int> communicationIdQuery, IQueryable<int> personIdQuery )
+        {
+            var communicationChannelId = InteractionChannelCache.Get( SystemGuid.InteractionChannel.COMMUNICATION.AsGuid(), Context as RockContext )?.Id;
+
+            if ( !communicationChannelId.HasValue )
+            {
+                return Enumerable.Empty<Interaction>().AsQueryable();
+            }
+
+            return new InteractionService( Context as RockContext )
+                .Queryable()
+                .Where( i =>
+                    i.InteractionComponent.InteractionChannelId == communicationChannelId.Value
+                    && i.Operation == "Click"
+                    && communicationIdQuery.Contains( i.InteractionComponent.EntityId.Value )
+                    && personIdQuery.Contains( i.PersonAlias.PersonId )
+                );
+        }
+        
+        /// <summary>
+        /// Gets the "Opened" interactions for the given communications and people.
+        /// </summary>
+        /// <param name="communicationIdQuery">The query that returns the communication identifiers.</param>
+        /// <param name="personIdQuery">The query that returns the person identifiers.</param>
+        /// <returns>"Opened" interactions where <see cref="Interaction.EntityId"/> is the <see cref="CommunicationRecipient"/> identifier.</returns>
+        public IQueryable<Interaction> GetOpenedInteractions( IQueryable<int> communicationIdQuery, IQueryable<int> personIdQuery )
+        {
+            var communicationChannelId = InteractionChannelCache.Get( SystemGuid.InteractionChannel.COMMUNICATION.AsGuid(), Context as RockContext )?.Id;
+
+            if ( !communicationChannelId.HasValue )
+            {
+                return Enumerable.Empty<Interaction>().AsQueryable();
+            }
+
+            return new InteractionService( Context as RockContext )
+                .Queryable()
+                .Where( i =>
+                    i.InteractionComponent.InteractionChannelId == communicationChannelId.Value
+                    && i.Operation == "Opened"
+                    && communicationIdQuery.Contains( i.InteractionComponent.EntityId.Value )
+                    && personIdQuery.Contains( i.PersonAlias.PersonId )
+                );
         }
     }
 }

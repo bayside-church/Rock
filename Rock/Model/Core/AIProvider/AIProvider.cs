@@ -30,6 +30,7 @@ namespace Rock.Model
     [RockDomain( "Core" )]
     [Table( "AIProvider" )]
     [DataContract]
+    [CodeGenerateRest( DisableEntitySecurity = true )]
     [Rock.SystemGuid.EntityTypeGuid( "945A994F-F15E-43AC-B503-A54BDE70F77F" )]
     public partial class AIProvider : Model<AIProvider>, IHasActiveFlag, ICacheable
     {
@@ -63,6 +64,7 @@ namespace Rock.Model
         /// The entity type identifier.
         /// </value>
         [DataMember]
+        [EnableAttributeQualification]
         public int? ProviderComponentEntityTypeId { get; set; }
 
         /// <summary>

@@ -66,10 +66,16 @@ export type LearningProgramBag = {
     completionWorkflowTypeId?: number | null;
 
     /** Gets or sets the configuration mode of the LearningProgram. */
-    configurationMode: ConfigurationMode;
+    configurationMode?: ConfigurationMode | null;
+
+    /** Gets or sets the default LearningGradingSystem for the program. */
+    defaultGradingSystem?: ListItemBag | null;
 
     /** Gets or sets the Description of the LearningProgram. */
     description?: string | null;
+
+    /** Gets or sets a value indicating whether public security should be enforced for this program. */
+    enforcePublicSecurity: boolean;
 
     /** Gets or sets the color of the highlight. */
     highlightColor?: string | null;

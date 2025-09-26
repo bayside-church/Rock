@@ -1,19 +1,18 @@
 ﻿<!-- Copyright by the Spark Development Network; Licensed under the Rock Community License -->
 <template>
-    <RockFormField
-                   :modelValue="internalValue"
+    <RockFormField :modelValue="internalValue"
                    formGroupClasses="rock-number-box"
                    name="numberbox"
+                   :validationTitle="validationTitle"
                    :rules="computedRules">
         <template #default="{ uniqueId, field }">
             <div class="control-wrapper">
                 <slot name="prepend" />
                 <div :class="controlContainerClass">
                     <slot name="inputGroupPrepend" :isInputGroupSupported="true" />
-                    <input
-                           :value="internalValue"
+                    <input :value="internalValue"
                            :id="uniqueId"
-                           type="number"
+                           type="text"
                            class="form-control"
                            :class="inputClasses"
                            v-bind="field"
@@ -73,6 +72,10 @@
             type: String as PropType<string>,
             default: ""
         },
+        validationTitle: {
+            type: String as PropType<string>,
+            default: ""
+        },
         rules: rulesPropType
     });
 
@@ -102,6 +105,8 @@
     const computedRules = computed((): ValidationRule[] => {
         const rules = normalizeRules(props.rules);
 
+        rules.push("number");
+
         if (props.maximumValue != null) {
             rules.push(`lte:${props.maximumValue}`);
         }
@@ -118,7 +123,9 @@
     }
 
     function formatInternalValue(): void {
-        internalValue.value = formatNumber(internalNumberValue.value);
+        if (internalNumberValue.value !== null) {
+            internalValue.value = formatNumber(internalNumberValue.value);
+        }
     }
 
     /**
@@ -127,7 +134,7 @@
      *
      * @param e The object that describes the event.
      */
-     function onInput(e: Event): void {
+    function onInput(e: Event): void {
         if (e.target instanceof HTMLInputElement) {
             internalValue.value = e.target.value;
         }
@@ -144,7 +151,7 @@
      *
      * @param e The object that describes the event.
      */
-     function onChange(e: Event): void {
+    function onChange(e: Event): void {
         if (e.target instanceof HTMLInputElement) {
             internalValue.value = e.target.value;
         }

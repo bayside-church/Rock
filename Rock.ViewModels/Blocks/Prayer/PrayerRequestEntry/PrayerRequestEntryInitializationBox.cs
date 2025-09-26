@@ -150,5 +150,26 @@ namespace Rock.ViewModels.Blocks.Prayer.PrayerRequestEntry
         ///   <c>true</c> if this instance is mobile phone shown; otherwise, <c>false</c>.
         /// </value>
         public bool IsMobilePhoneShown { get; set; }
+
+        /// <summary>
+        /// Gets or sets whether to disable captcha support for the block.
+        /// </summary>
+        public bool DisableCaptchaSupport { get; set; }
+
+        /// <summary>
+        /// Gets or sets the campus statuses to filter out of the campus picker.
+        /// </summary>
+        /// <value>
+        /// The campus status filter.
+        /// </value>
+        public List<Guid> CampusStatusFilter { get; set; }
+
+        /// <summary>
+        /// Gets or sets the campus types to filter out of the campus picker.
+        /// </summary>
+        /// <value>
+        /// The campus type filter.
+        /// </value>
+        public List<Guid> CampusTypeFilter { get; set; }
     }
 }

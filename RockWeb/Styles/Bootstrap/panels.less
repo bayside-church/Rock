@@ -21,7 +21,8 @@
 }
 
 // Optional heading
-.panel-heading {
+.panel-heading,
+.panel-header {
   padding: @panel-heading-padding;
   border-bottom: 1px solid transparent;
   .border-top-radius((@panel-border-radius - 1));
@@ -29,6 +30,28 @@
   > .dropdown .dropdown-toggle {
     color: inherit;
   }
+}
+
+.panel-worksurface > .panel-body {
+    display: flex;
+    flex-direction: column;
+    flex-grow: 1;
+    overflow: hidden;
+}
+
+.panel-worksurface .panel-scrollable-content {
+    flex-grow: 1;
+    overflow: hidden auto;
+}
+
+.panel-footer-content {
+    padding: var(--panel-body-padding);
+    background: var(--color-interface-softer);
+    border-top: 1px solid var(--color-interface-soft);
+}
+
+.panel-sidebar-footer-content {
+    grid-column: ~"1 / span 4";
 }
 
 // Within heading, strip any `h*` tag of its default margins for spacing.
@@ -87,14 +110,16 @@
       }
     }
   }
-  > .panel-heading + .panel-collapse > .list-group {
+  > .panel-heading + .panel-collapse > .list-group,
+  > .panel-header + .panel-collapse > .list-group {
     .list-group-item:first-child {
       .border-top-radius(0);
     }
   }
 }
 // Collapse space between when there's no additional content.
-.panel-heading + .list-group {
+.panel-heading + .list-group,
+.panel-header + .list-group {
   .list-group-item:first-child {
     border-top-width: 0;
   }
@@ -234,7 +259,8 @@
     }
   }
 
-  .panel-heading {
+  .panel-heading,
+  .panel-header {
     border-bottom: 0;
 
     + .panel-collapse > .panel-body,

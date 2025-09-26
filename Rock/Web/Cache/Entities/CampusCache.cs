@@ -34,6 +34,17 @@ namespace Rock.Web.Cache
     [DataContract]
     public class CampusCache : ModelCache<CampusCache, Campus>
     {
+        #region Fields
+
+        /// <summary>
+        /// The identifiers of the <see cref="CampusSchedule"/> objects associated
+        /// with this campus. Unlike the <see cref="CampusScheduleIds"/> property,
+        /// this field holds the identifiers of the link records, not the schedules
+        /// themselves.
+        /// </summary>
+        private List<int> _campusScheduleIds = new List<int>();
+
+        #endregion
 
         #region Properties
 
@@ -195,7 +206,8 @@ namespace Rock.Web.Cache
             get
             {
                 var serviceTimes = new List<ServiceTime>();
-                if ( string.IsNullOrWhiteSpace( RawServiceTimes ) ) return serviceTimes;
+                if ( string.IsNullOrWhiteSpace( RawServiceTimes ) )
+                    return serviceTimes;
 
                 var keyValues = RawServiceTimes.Split( new[] { '|' }, StringSplitOptions.RemoveEmptyEntries );
 
@@ -213,6 +225,24 @@ namespace Rock.Web.Cache
                 return serviceTimes;
             }
         }
+
+        /// <summary>
+        /// Gets a <see cref="Rock.Web.Cache.DefinedValueCache"/> of the campus's status.
+        /// </summary>
+        /// <value>
+        /// A <see cref="Rock.Web.Cache.DefinedValueCache"/> of the campus's status.
+        /// </value>
+        [DataMember]
+        public DefinedValueCache CampusStatusValue => CampusStatusValueId.HasValue ? DefinedValueCache.Get( CampusStatusValueId.Value ) : null;
+
+        /// <summary>
+        /// Gets a <see cref="Rock.Web.Cache.DefinedValueCache"/> of the campus's type.
+        /// </summary>
+        /// <value>
+        /// A <see cref="Rock.Web.Cache.DefinedValueCache"/> of the campus's type.
+        /// </value>
+        [DataMember]
+        public DefinedValueCache CampusTypeValue => CampusTypeValueId.HasValue ? DefinedValueCache.Get( CampusTypeValueId.Value ) : null;
 
         /// <summary>
         /// Gets or sets a collection containing the <see cref="Rock.Model.Schedule"/> ids that are associated with this Campus.
@@ -306,6 +336,11 @@ namespace Rock.Web.Cache
         [DataMember]
         public decimal? TitheMetric { get; set; }
 
+        /// <summary>
+        /// The schedules that are associated with this campus.
+        /// </summary>
+        public List<CampusScheduleCache> CampusSchedules => CampusScheduleCache.GetMany( _campusScheduleIds ).ToList();
+
         #endregion
 
         #region Public Methods
@@ -347,7 +382,8 @@ namespace Rock.Web.Cache
             base.SetFromEntity( entity );
 
             var campus = entity as Campus;
-            if ( campus == null ) return;
+            if ( campus == null )
+                return;
 
             IsSystem = campus.IsSystem;
             Name = campus.Name;
@@ -364,6 +400,7 @@ namespace Rock.Web.Cache
             PhoneNumber = campus.PhoneNumber;
             LeaderPersonAliasId = campus.LeaderPersonAliasId;
             RawServiceTimes = campus.ServiceTimes;
+            _campusScheduleIds = campus.CampusSchedules.Select( s => s.Id ).ToList();
             CampusScheduleIds = campus.CampusSchedules.Select( s => s.ScheduleId ).ToList();
             Order = campus.Order;
             OpenedDate = campus.OpenedDate;
@@ -429,7 +466,6 @@ namespace Rock.Web.Cache
 		[Serializable]
         [DataContract]
         [LavaType( "Day", "Time" )]
-        [DotLiquid.LiquidType( "Day", "Time" )]
         public class ServiceTime
         {
             /// <summary>
@@ -457,7 +493,6 @@ namespace Rock.Web.Cache
         [Serializable]
         [DataContract]
         [LavaType( "Street1", "Street2", "City", "State", "PostalCode", "Country", "Latitude", "Longitude", "ImageUrl" )]
-        [DotLiquid.LiquidType( "Street1", "Street2", "City", "State", "PostalCode", "Country", "Latitude", "Longitude", "ImageUrl" )]
         public class CampusLocation
         {
             /// <summary>

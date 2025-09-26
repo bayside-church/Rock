@@ -21,6 +21,7 @@
 // </copyright>
 
 using System;
+using System.Collections.Generic;
 using System.Linq;
 
 using Rock.Data;
@@ -58,6 +59,24 @@ namespace Rock.Model
                 return false;
             }
             return true;
+        }
+    }
+
+    [HasQueryableAttributes( typeof( PersonalizationSegment.PersonalizationSegmentQueryableAttributeValue ), nameof( PersonalizationSegmentAttributeValues ) )]
+    public partial class PersonalizationSegment
+    {
+        /// <summary>
+        /// Gets the entity attribute values. This should only be used inside
+        /// LINQ statements when building a where clause for the query. This
+        /// property should only be used inside LINQ statements for filtering
+        /// or selecting values. Do <b>not</b> use it for accessing the
+        /// attributes after the entity has been loaded.
+        /// </summary>
+        public virtual ICollection<PersonalizationSegmentQueryableAttributeValue> PersonalizationSegmentAttributeValues { get; set; } 
+
+        /// <inheritdoc/>
+        public class PersonalizationSegmentQueryableAttributeValue : QueryableAttributeValue
+        {
         }
     }
 
@@ -118,7 +137,6 @@ namespace Rock.Model
         {
             target.Id = source.Id;
             target.AdditionalFilterJson = source.AdditionalFilterJson;
-            target.CategoryId = source.CategoryId;
             target.Description = source.Description;
             target.FilterDataViewId = source.FilterDataViewId;
             target.ForeignGuid = source.ForeignGuid;
@@ -126,6 +144,10 @@ namespace Rock.Model
             target.IsActive = source.IsActive;
             target.IsDirty = source.IsDirty;
             target.Name = source.Name;
+            target.PersistedLastRefreshDateTime = source.PersistedLastRefreshDateTime;
+            target.PersistedLastRunDurationMilliseconds = source.PersistedLastRunDurationMilliseconds;
+            target.PersistedScheduleId = source.PersistedScheduleId;
+            target.PersistedScheduleIntervalMinutes = source.PersistedScheduleIntervalMinutes;
             target.SegmentKey = source.SegmentKey;
             target.TimeToUpdateDurationMilliseconds = source.TimeToUpdateDurationMilliseconds;
             target.CreatedDateTime = source.CreatedDateTime;

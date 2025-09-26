@@ -279,7 +279,7 @@ namespace Rock.Blocks
         /// </summary>
         /// <param name="key">The key.</param>
         /// <returns>A list of attribute value strings or an empty list if no attribute values exist.</returns>
-        internal List<string> GetAttributeValues( string key )
+        public List<string> GetAttributeValues( string key )
         {
             return BlockCache.GetAttributeValues( key );
         }
@@ -524,6 +524,8 @@ Obsidian.onReady(() => {{
                 configActions = customActionsBlock.GetCustomActions( canEdit, canAdministrate );
             }
 
+            var configurationValues = await GetBlockInitializationAsync( RockClientType.Web );
+
             var blockPreferences = new ObsidianBlockPreferencesBag
             {
                 EntityTypeKey = EntityTypeCache.Get<Rock.Model.Block>().IdKey,
@@ -538,10 +540,11 @@ Obsidian.onReady(() => {{
                 RootElementId = rootElementId,
                 BlockGuid = BlockCache.Guid,
                 BlockTypeGuid = BlockCache.BlockType.Guid,
-                ConfigurationValues = await GetBlockInitializationAsync( RockClientType.Web ),
+                ConfigurationValues = configurationValues,
                 CustomConfigurationActions = configActions,
                 Preferences = blockPreferences,
-                ReloadMode = reloadModeAttribute?.ReloadMode ?? Enums.Cms.BlockReloadMode.None
+                ReloadMode = reloadModeAttribute?.ReloadMode ?? Enums.Cms.BlockReloadMode.None,
+                Role = BlockCache.Role ?? BlockCache.BlockType?.DefaultRole ?? Enums.Cms.BlockRole.Content,
             };
         }
 
@@ -836,7 +839,7 @@ Obsidian.onReady(() => {{
         /// </summary>
         /// <returns>A response that contains the new security grant token or an empty string.</returns>
         [BlockAction( "RenewSecurityGrantToken" )]
-        [RockInternal( "1.14" )]
+        [RockInternal( "1.14", true )]
         public BlockActionResult RenewSecurityGrantTokenAction()
         {
             return ActionOk( RenewSecurityGrantToken() );
@@ -849,7 +852,7 @@ Obsidian.onReady(() => {{
         /// </summary>
         /// <returns>An action result that contains the block configuration data.</returns>
         [BlockAction]
-        [RockInternal( "1.14" )]
+        [RockInternal( "1.14", true )]
         public async Task<BlockActionResult> RefreshObsidianBlockInitialization()
         {
             var rootElementId = $"obsidian-{BlockCache.Guid}";

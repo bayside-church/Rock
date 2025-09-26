@@ -1,8 +1,8 @@
 <!-- Copyright by the Spark Development Network; Licensed under the Rock Community License -->
 <template>
-    <NotificationBox v-if="blockError" alertType="warning">{{ blockError }}</NotificationBox>
+    <NotificationBox v-if="blockError" alertType="warning" v-html="blockError"></NotificationBox>
 
-    <NotificationBox v-if="errorMessage" alertType="danger">{{ errorMessage }}</NotificationBox>
+    <NotificationBox v-if="errorMessage" alertType="danger" v-html="errorMessage"></NotificationBox>
 
     <DetailBlock v-if="!blockError"
                  v-model:mode="panelMode"
@@ -10,14 +10,14 @@
                  :labels="blockLabels"
                  :entityKey="entityKey"
                  :isAuditHidden="false"
-                 :isBadgesVisible="true"
-                 :isDeleteVisible="isEditable"
+                 :isBadgesVisible="false"
+                 :isDeleteVisible="false"
                  :isEditVisible="isEditable"
-                 :isFollowVisible="true"
-                 :isSecurityHidden="false"
+                 :isFollowVisible="false"
+                 :isSecurityHidden="true"
                  :entityTypeGuid="entityTypeGuid"
+                 :isFullScreenVisible="false"
                  @cancelEdit="onCancelEdit"
-                 @delete="onDelete"
                  @edit="onEdit"
                  @save="onSave">
         <template #view>
@@ -98,14 +98,14 @@
 
         if (learningGradingSystemViewBag.value?.isActive === true) {
             labels.push({
-                iconCssClass: "fa fa-lightbulb",
+                iconCssClass: "ti ti-bulb-filled",
                 title: "Active",
                 type: "success"
             });
         }
         else {
             labels.push({
-                iconCssClass: "far fa-lightbulb",
+                iconCssClass: "ti ti-bulb",
                 title: "Inactive",
                 type: "danger"
             });
@@ -146,29 +146,6 @@
         }
 
         return true;
-    }
-
-    /**
-     * Event handler for the Delete button being clicked. Sends the
-     * delete request to the server and then redirects to the target page.
-     *
-     * @returns false if it should stay on the page; or a string containing a redirect URL.
-     */
-    async function onDelete(): Promise<false | string> {
-        errorMessage.value = "";
-
-        const result = await invokeBlockAction<string>("Delete", {
-            key: learningGradingSystemViewBag.value?.idKey
-        });
-
-        if (result.isSuccess && result.data) {
-            return result.data;
-        }
-        else {
-            errorMessage.value = result.errorMessage ?? "Unknown error while trying to delete learning grading system.";
-
-            return false;
-        }
     }
 
     /**

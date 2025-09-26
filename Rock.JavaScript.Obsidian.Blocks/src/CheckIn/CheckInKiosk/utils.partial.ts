@@ -22,8 +22,11 @@ import { ListItemBag } from "@Obsidian/ViewModels/Utility/listItemBag";
 import { KioskBag } from "@Obsidian/ViewModels/CheckIn/kioskBag";
 import { LegacyClientLabelBag } from "@Obsidian/ViewModels/CheckIn/Labels/legacyClientLabelBag";
 import { inject, provide } from "vue";
+import { showDialog } from "@Obsidian/Utility/dialogs";
 import { zeroPad } from "@Obsidian/Utility/numberUtils";
 import { IRockCheckInNative } from "./types.partial";
+import { ICancellationToken } from "@Obsidian/Utility/cancellation";
+import { ClientLabelBag } from "@Obsidian/ViewModels/CheckIn/Labels/clientLabelBag";
 
 /** The unique key for the kiosk state in Vue. */
 const kioskStateKey = Symbol("KioskState");
@@ -122,15 +125,6 @@ export function isIpadAppWithCamera(kiosk: KioskBag): boolean {
 }
 
 /**
- * Determines if the theme supports HTML5 camera operations.
- *
- * @returns true if the theme supports HTML5 camera operations.
- */
-export function doesThemeSupportCamera(): boolean {
-    return document.body.classList.contains("js-camera-supported");
-}
-
-/**
  * Gets the cameras currently available for use.
  *
  * @returns A list of items that represent the available cameras.
@@ -169,7 +163,6 @@ export function isHtmlCameraAvailable(kiosk: KioskBag | undefined): boolean {
     // -- Kiosk IsCameraEnabled is true
     // -- Kiosk Type has been set (the HTML5 camera feature won't be enabled until they specifically set the KioskType)
     // -- The KioskType is not an IPad
-    // -- The current Theme supports the HTML5 Camera feature
     // -- Not running on the iPad application
 
     return !!kiosk
@@ -177,7 +170,6 @@ export function isHtmlCameraAvailable(kiosk: KioskBag | undefined): boolean {
         && kiosk.type !== null
         && kiosk.type !== undefined
         && kiosk.type !== KioskType.IPad
-        && doesThemeSupportCamera()
         && !isIpadAppWithCamera(kiosk);
 }
 
@@ -271,6 +263,44 @@ export class InvalidCheckInStateError extends Error {
 }
 
 /**
+* Prints the labels through the native bridge if available.
+*
+* @param labels The labels to be printed.
+*
+* @returns An array of error messages that should be displayed.
+*/
+export async function printLabels(labels: ClientLabelBag[]): Promise<string[]> {
+    if (labels.length === 0) {
+        return [];
+    }
+
+    const native = window["RockCheckinNative"] as IRockCheckInNative | undefined;
+
+    if (native?.PrintV2Labels) {
+        try {
+            return await native.PrintV2Labels(JSON.stringify(labels));
+        }
+        catch (error) {
+            if (error instanceof Error) {
+                return [error.message];
+            }
+            else if (typeof error === "string") {
+                return [error];
+            }
+            else if (typeof error === "object" && error && "Error" in error) {
+                return [error["Error"] as string];
+            }
+            else {
+                return ["Unknown error printing label."];
+            }
+        }
+    }
+    else {
+        return ["Device does not support printing."];
+    }
+}
+
+/**
  * Prints the legacy labels by invoking the injected native handler code in
  * the browser from the client.
  *
@@ -325,4 +355,26 @@ export async function printLegacyLabels(legacyLabels: LegacyClientLabelBag[]): P
     }
 
     return [];
+}
+
+/**
+ * Shows an alert message that requires the user to acknowledge.
+ *
+ * @param message The message text to be displayed.
+ * @param cancellationToken Can be used to automatically dismiss the dialog.
+ *
+ * @returns A promise that indicates when the dialog has been dismissed.
+ */
+export async function alert(message: string, cancellationToken?: ICancellationToken): Promise<void> {
+    await showDialog({
+        message,
+        buttons: [
+            {
+                key: "ok",
+                label: "OK",
+                className: "btn btn-primary"
+            }
+        ],
+        cancellationToken
+    });
 }

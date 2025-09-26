@@ -18,8 +18,10 @@
 using Rock.Attribute;
 using Rock.Communication;
 using Rock.Constants;
+using Rock.Crm.RecordSource;
 using Rock.Data;
 using Rock.Model;
+using Rock.Utility;
 using Rock.ViewModels.Blocks;
 using Rock.ViewModels.Blocks.Finance.FinancialPledgeEntry;
 using Rock.ViewModels.Utility;
@@ -42,8 +44,8 @@ namespace Rock.Blocks.Finance
     [DisplayName( "Pledge Entry" )]
     [Category( "Finance" )]
     [Description( "Allows a website visitor to create pledge for the configured accounts, start and end date. This block also creates a new person record if a matching person could not be found." )]
-    [IconCssClass( "fa fa-question" )]
-    // [SupportedSiteTypes( Model.SiteType.Web )]
+    [IconCssClass( "ti ti-question-mark" )]
+    [SupportedSiteTypes( Model.SiteType.Web )]
 
     #region Block Attributes
 
@@ -64,43 +66,52 @@ namespace Rock.Blocks.Finance
     [DefinedValueField( "New Connection Status",
         Key = AttributeKey.NewConnectionStatus,
         DefinedTypeGuid = Rock.SystemGuid.DefinedType.PERSON_CONNECTION_STATUS,
-        Description = "Person connection status to assign to a new user.",
+        Description = "The connection status to use for new individuals (default = 'Participant').",
         IsRequired = true,
         AllowMultiple = false,
         DefaultValue = Rock.SystemGuid.DefinedValue.PERSON_CONNECTION_STATUS_PARTICIPANT,
         Order = 3 )]
 
+    [DefinedValueField( "New Record Source",
+        Key = AttributeKey.NewRecordSource,
+        DefinedTypeGuid = Rock.SystemGuid.DefinedType.RECORD_SOURCE_TYPE,
+        Description = "The record source to use for new individuals (default = 'Pledge'). If a 'RecordSource' page parameter is found, it will be used instead.",
+        IsRequired = true,
+        AllowMultiple = false,
+        DefaultValue = Rock.SystemGuid.DefinedValue.RECORD_SOURCE_TYPE_PLEDGE,
+        Order = 4 )]
+
     [DateRangeField( "Pledge Date Range",
         Key = AttributeKey.PledgeDateRange,
         Description = "Date range of the pledge.",
         IsRequired = false,
-        Order = 4 )]
+        Order = 5 )]
 
     [BooleanField( "Show Pledge Frequency",
         Key = AttributeKey.ShowPledgeFrequency,
         Description = "Show the pledge frequency option to the user.",
         DefaultValue = "false",
-        Order = 5 )]
+        Order = 6 )]
 
     [BooleanField( "Require Pledge Frequency",
         Key = AttributeKey.RequirePledgeFrequency,
         Description = "Require that a user select a specific pledge frequency (when pledge frequency is shown).",
         DefaultValue = "false",
-        Order = 6 )]
+        Order = 7 )]
 
     [TextField( "Save Button Text",
         Key = AttributeKey.SaveButtonText,
         Description = "The Text to shown on the Save button",
         IsRequired = true,
         DefaultValue = "Save",
-        Order = 7 )]
+        Order = 8 )]
 
     [TextField( "Note Message",
         Key = AttributeKey.NoteMessage,
         Description = "Message to show at the bottom of the create pledge block.",
         IsRequired = false,
         DefaultValue = "Note: This commitment is a statement of intent and may be changed as your circumstances change.",
-        Order = 8 )]
+        Order = 9 )]
 
     [CodeEditorField( "Receipt Text",
         Key = AttributeKey.ReceiptText,
@@ -108,7 +119,7 @@ namespace Rock.Blocks.Finance
         EditorMode = CodeEditorMode.Lava,
         EditorTheme = CodeEditorTheme.Rock,
         EditorHeight = 200,
-        Order = 9,
+        Order = 10,
         DefaultValue =
         @"
 <h1>Thank You!</h1>
@@ -125,7 +136,7 @@ namespace Rock.Blocks.Finance
         Description = "Email template to use after submitting a new pledge. Leave blank to not send an email.",
         IsRequired = false,
         DefaultSystemCommunicationGuid = "",
-        Order = 10 )]
+        Order = 11 )]
 
     [GroupTypeField( "Select Group Type",
         Key = AttributeKey.SelectGroupType,
@@ -133,14 +144,32 @@ namespace Rock.Blocks.Finance
         IsRequired = false,
         DefaultValue = "",
         Category = "",
-        Order = 11 )]
+        Order = 12 )]
 
     [TextField( "Pledge Term",
         Key = AttributeKey.PledgeTerm,
         Description = "The Text to display as the pledge term on the pledge amount input label.",
         IsRequired = false,
         DefaultValue = "Pledge",
-        Order = 12 )]
+        Order = 13 )]
+
+    [DefinedValueField(
+        "Phone Types",
+        Key = AttributeKey.PhoneTypes,
+        Description = "The phone numbers to display for editing (for non logged in individuals).",
+        DefinedTypeGuid = Rock.SystemGuid.DefinedType.PERSON_PHONE_TYPE,
+        IsRequired = false,
+        AllowMultiple = true,
+        Order = 14 )]
+
+    [DefinedValueField(
+        "Required Phone Types",
+        Key = AttributeKey.PhoneTypesRequired,
+        Description = "The phone numbers that are required (for non logged in individuals).",
+        DefinedTypeGuid = Rock.SystemGuid.DefinedType.PERSON_PHONE_TYPE,
+        IsRequired = false,
+        AllowMultiple = true,
+        Order = 15 )]
 
     #endregion
 
@@ -165,6 +194,7 @@ namespace Rock.Blocks.Finance
             public const string EnableSmartNames = "EnableSmartNames";
             public const string Account = "Account";
             public const string NewConnectionStatus = "NewConnectionStatus";
+            public const string NewRecordSource = "NewRecordSource";
             public const string PledgeDateRange = "PledgeDateRange";
             public const string ShowPledgeFrequency = "ShowPledgeFrequency";
             public const string RequirePledgeFrequency = "RequirePledgeFrequency";
@@ -174,6 +204,8 @@ namespace Rock.Blocks.Finance
             public const string ConfirmationEmailTemplate = "ConfirmationEmailTemplate";
             public const string SelectGroupType = "SelectGroupType";
             public const string PledgeTerm = "PledgeTerm";
+            public const string PhoneTypes = "PhoneTypes";
+            public const string PhoneTypesRequired = "PhoneTypesRequired";
         }
 
         #endregion Keys
@@ -218,7 +250,7 @@ namespace Rock.Blocks.Finance
                 PledgeTerm = GetAttributeValue( AttributeKey.PledgeTerm )
             };
 
-            if ( groupTypeGuid.HasValue )
+            if ( groupTypeGuid.HasValue && currentPerson != null )
             {
                 var groups = new GroupMemberService( rockContext )
                     .Queryable().AsNoTracking()
@@ -271,7 +303,7 @@ namespace Rock.Blocks.Finance
         /// <param name="rockContext">The rock context.</param>
         /// <param name="errorMessage">On <c>false</c> return, contains the error message.</param>
         /// <returns><c>true</c> if the FinancialPledge is valid, <c>false</c> otherwise.</returns>
-        private bool ValidateFinancialPledge( FinancialPledge financialPledge, RockContext rockContext, out string errorMessage )
+        private bool ValidateFinancialPledge( FinancialPledge financialPledge, out string errorMessage )
         {
             errorMessage = null;
 
@@ -298,19 +330,17 @@ namespace Rock.Blocks.Finance
                 Guid = Guid.Empty
             };
 
-            box.IsEditable = entity.IsAuthorized( Rock.Security.Authorization.EDIT, RequestContext.CurrentPerson );
-
             entity.LoadAttributes( rockContext );
 
             // New entity is being created, prepare for edit mode by default.
-            if ( box.IsEditable )
+            if ( GetCurrentPerson() != null )
             {
                 box.Entity = GetEntityBagForEdit( entity );
                 box.SecurityGrantToken = GetSecurityGrantToken( entity );
             }
             else
             {
-                box.ErrorMessage = EditModeMessage.NotAuthorizedToEdit( FinancialPledge.FriendlyTypeName );
+                box.Entity = GetCommonEntityBag( entity );
             }
         }
 
@@ -326,6 +356,41 @@ namespace Rock.Blocks.Finance
                 return null;
             }
 
+            var currentPerson = GetCurrentPerson();
+            var requiredPhoneTypes = GetAttributeValue( AttributeKey.PhoneTypesRequired )
+                    .Split( ',' )
+                    .Where( guidString => guidString.IsNotNullOrWhiteSpace() )
+                    .Select( Guid.Parse )
+                    .ToList();
+
+            var selectedPhoneTypeGuids = GetAttributeValue( AttributeKey.PhoneTypes )
+                .Split( ',' )
+                .Where( guidString => guidString.IsNotNullOrWhiteSpace() )
+                .Select( Guid.Parse )
+                .ToList();
+
+            var knownNumbers = new Dictionary<Guid, string>();
+            if ( currentPerson != null )
+            {
+                foreach ( var phoneNumber in currentPerson.PhoneNumbers )
+                {
+                    knownNumbers.Add( phoneNumber.NumberTypeValue.Guid, phoneNumber.Number );
+                }
+            }
+
+            var phoneNumberTypeDefinedType = DefinedTypeCache.Get( SystemGuid.DefinedType.PERSON_PHONE_TYPE.AsGuid() );
+
+            var phoneNumberBags = phoneNumberTypeDefinedType.DefinedValues
+                .Where( v => selectedPhoneTypeGuids.Contains( v.Guid ) )
+                .Select( v => new FinancialPledgeEntryPhoneNumberBag
+                {
+                    Guid = v.Guid,
+                    IsRequired = requiredPhoneTypes.Contains( v.Guid ),
+                    Label = v.Value,
+                    PhoneNumber = knownNumbers.GetValueOrDefault( v.Guid, null )
+                } )
+                .ToList();
+
             var entityBag = new FinancialPledgeEntryBag
             {
                 IdKey = entity.IdKey,
@@ -334,7 +399,8 @@ namespace Rock.Blocks.Finance
                 CurrentPerson = RequestContext.CurrentPerson.ToListItemBag(),
                 PersonAlias = entity.PersonAlias.ToListItemBag(),
                 PledgeFrequencyValue = entity.PledgeFrequencyValue.ToListItemBag(),
-                SaveButtonText = GetAttributeValue( AttributeKey.SaveButtonText )
+                SaveButtonText = GetAttributeValue( AttributeKey.SaveButtonText ),
+                PhoneNumbers = phoneNumberBags
             };
 
             var pledgeDateRange = GetAttributeValue( AttributeKey.PledgeDateRange );
@@ -370,7 +436,7 @@ namespace Rock.Blocks.Finance
 
             var bag = GetCommonEntityBag( entity );
 
-            bag.LoadAttributesAndValuesForPublicEdit( entity, RequestContext.CurrentPerson );
+            bag.LoadAttributesAndValuesForPublicEdit( entity, RequestContext.CurrentPerson, enforceSecurity: true );
 
             return bag;
         }
@@ -382,7 +448,7 @@ namespace Rock.Blocks.Finance
         /// <param name="box">The box containing the information to be updated.</param>
         /// <param name="rockContext">The rock context.</param>
         /// <returns><c>true</c> if the box was valid and the entity was updated, <c>false</c> otherwise.</returns>
-        private bool UpdateEntityFromBox( FinancialPledge entity, DetailBlockBox<FinancialPledgeEntryBag, FinancialPledgeEntryOptionsBag> box, RockContext rockContext )
+        private bool UpdateEntityFromBox( FinancialPledge entity, DetailBlockBox<FinancialPledgeEntryBag, FinancialPledgeEntryOptionsBag> box )
         {
             if ( box.ValidProperties == null )
             {
@@ -392,16 +458,16 @@ namespace Rock.Blocks.Finance
             var isNew = entity.Id == 0;
 
             box.IfValidProperty( nameof( box.Entity.PersonAlias ),
-                () => entity.PersonAliasId = box.Entity.PersonAlias.GetEntityId<PersonAlias>( rockContext ) );
+                () => entity.PersonAliasId = box.Entity.PersonAlias.GetEntityId<PersonAlias>( RockContext ) );
 
             box.IfValidProperty( nameof( box.Entity.EndDate ),
                 () => entity.EndDate = box.Entity.EndDate ?? DateTime.MaxValue );
 
             box.IfValidProperty( nameof( box.Entity.Group ),
-                () => entity.GroupId = box.Entity.Group.GetEntityId<Rock.Model.Group>( rockContext ) );
+                () => entity.GroupId = box.Entity.Group.GetEntityId<Rock.Model.Group>( RockContext ) );
 
             box.IfValidProperty( nameof( box.Entity.PledgeFrequencyValue ),
-                () => entity.PledgeFrequencyValueId = box.Entity.PledgeFrequencyValue.GetEntityId<DefinedValue>( rockContext ) );
+                () => entity.PledgeFrequencyValueId = box.Entity.PledgeFrequencyValue.GetEntityId<DefinedValue>( RockContext ) );
 
             box.IfValidProperty( nameof( box.Entity.StartDate ),
                 () => entity.StartDate = box.Entity.StartDate ?? DateTime.MinValue );
@@ -412,15 +478,15 @@ namespace Rock.Blocks.Finance
             if ( !isNew )
             {
                 box.IfValidProperty( nameof( box.Entity.Account ),
-                () => entity.AccountId = box.Entity.Account.GetEntityId<FinancialAccount>( rockContext ) );
+                () => entity.AccountId = box.Entity.Account.GetEntityId<FinancialAccount>( RockContext ) );
             }
 
             box.IfValidProperty( nameof( box.Entity.AttributeValues ),
                 () =>
                 {
-                    entity.LoadAttributes( rockContext );
+                    entity.LoadAttributes( RockContext );
 
-                    entity.SetPublicAttributeValues( box.Entity.AttributeValues, RequestContext.CurrentPerson );
+                    entity.SetPublicAttributeValues( box.Entity.AttributeValues, RequestContext.CurrentPerson, enforceSecurity: true );
                 } );
 
             return true;
@@ -504,7 +570,7 @@ namespace Rock.Blocks.Finance
 
             if ( !entity.IsAuthorized( Rock.Security.Authorization.EDIT, RequestContext.CurrentPerson ) )
             {
-                error = ActionBadRequest( $"Not authorized to edit ${FinancialPledge.FriendlyTypeName}." );
+                error = ActionBadRequest( $"Not authorized to edit {FinancialPledge.FriendlyTypeName}." );
                 return false;
             }
 
@@ -517,59 +583,90 @@ namespace Rock.Blocks.Finance
         /// <param name="rockContext">The rock context.</param>
         /// <param name="entityBag">The entity bag.</param>
         /// <returns></returns>
-        private Person FindPerson( RockContext rockContext, FinancialPledgeEntryBag entityBag )
+        private Person FindPerson( FinancialPledgeEntryBag entityBag )
         {
             Person person;
-            var personService = new PersonService( rockContext );
 
-            if ( !string.IsNullOrWhiteSpace( entityBag.IdKey ) )
+            if ( GetCurrentPerson() != null )
             {
-                person = personService.GetQueryableByKey( entityBag.IdKey ).FirstOrDefault();
+                person = GetCurrentPerson();
             }
             else
             {
-                if ( RequestContext.CurrentPerson != null )
+                var personService = new PersonService( RockContext );
+                var firstName = entityBag.FirstName;
+                if ( GetAttributeValue( AttributeKey.EnableSmartNames ).AsBooleanOrNull() ?? true )
                 {
-                    person = RequestContext.CurrentPerson;
-                }
-                else
-                {
-                    var firstName = entityBag.FirstName;
-                    if ( GetAttributeValue( AttributeKey.EnableSmartNames ).AsBooleanOrNull() ?? true )
+                    // If they tried to specify first name as multiple first names, like "Steve and Judy" or "Bob & Sally", just take the first first name
+                    var parts = firstName.Split( new string[] { " and ", " & " }, StringSplitOptions.RemoveEmptyEntries );
+                    if ( parts.Length > 0 )
                     {
-                        // If they tried to specify first name as multiple first names, like "Steve and Judy" or "Bob & Sally", just take the first first name
-                        var parts = firstName.Split( new string[] { " and ", " & " }, StringSplitOptions.RemoveEmptyEntries );
-                        if ( parts.Length > 0 )
-                        {
-                            firstName = parts[0];
-                        }
+                        firstName = parts[0];
                     }
-
-                    // Same logic as TransactionEntry.ascx.cs
-                    var personQuery = new PersonService.PersonMatchQuery( firstName, entityBag.LastName, entityBag.Email, string.Empty );
-                    person = personService.FindPerson( personQuery, true );
                 }
 
-                if ( person == null )
+                Guid mobilePhoneType = Rock.SystemGuid.DefinedValue.PERSON_PHONE_TYPE_MOBILE.AsGuid();
+                var mobilePhone = entityBag.PhoneNumbers.FirstOrDefault( n => n.Guid.Equals( mobilePhoneType ) );
+
+                // Same logic as TransactionEntry.ascx.cs
+                var personQuery = new PersonService.PersonMatchQuery( firstName, entityBag.LastName, entityBag.Email, mobilePhone?.PhoneNumber );
+                person = personService.FindPerson( personQuery, true );
+            }
+
+            if ( person == null )
+            {
+                var definedValue = DefinedValueCache.Get( GetAttributeValue( AttributeKey.NewConnectionStatus ).AsGuidOrNull() ?? Rock.SystemGuid.DefinedValue.PERSON_CONNECTION_STATUS_PARTICIPANT.AsGuid() );
+                person = new Person
                 {
-                    var definedValue = DefinedValueCache.Get( GetAttributeValue( AttributeKey.NewConnectionStatus ).AsGuidOrNull() ?? Rock.SystemGuid.DefinedValue.PERSON_CONNECTION_STATUS_PARTICIPANT.AsGuid() );
-                    person = new Person
-                    {
-                        FirstName = entityBag.FirstName,
-                        LastName = entityBag.LastName,
-                        Email = entityBag.Email,
-                        EmailPreference = Rock.Model.EmailPreference.EmailAllowed,
-                        ConnectionStatusValueId = definedValue.Id,
-                        IsSystem = false,
-                        RecordTypeValueId = DefinedValueCache.Get( Rock.SystemGuid.DefinedValue.PERSON_RECORD_TYPE_PERSON.AsGuid() ).Id,
-                        RecordStatusValueId = DefinedValueCache.Get( Rock.SystemGuid.DefinedValue.PERSON_RECORD_STATUS_PENDING.AsGuid() ).Id
-                    };
+                    FirstName = entityBag.FirstName,
+                    LastName = entityBag.LastName,
+                    Email = entityBag.Email,
+                    EmailPreference = Rock.Model.EmailPreference.EmailAllowed,
+                    ConnectionStatusValueId = definedValue.Id,
+                    IsSystem = false,
+                    RecordTypeValueId = DefinedValueCache.Get( Rock.SystemGuid.DefinedValue.PERSON_RECORD_TYPE_PERSON.AsGuid() ).Id,
+                    RecordStatusValueId = DefinedValueCache.Get( Rock.SystemGuid.DefinedValue.PERSON_RECORD_STATUS_PENDING.AsGuid() ).Id,
+                    RecordSourceValueId = GetRecordSourceValueId()
+                };
 
-                    PersonService.SaveNewPerson( person, rockContext, null, false );
+                if ( entityBag.PhoneNumbers != null )
+                {
+                    foreach ( var item in entityBag.PhoneNumbers )
+                    {
+                        var cleanNumber = PhoneNumber.CleanNumber( item.PhoneNumber );
+
+                        if ( cleanNumber.IsNullOrWhiteSpace() )
+                        {
+                            continue;
+                        }
+
+                        var phoneNumber = new PhoneNumber
+                        {
+                            NumberTypeValueId = DefinedValueCache.Get( item.Guid ).Id,
+                            Number = cleanNumber,
+                            CountryCode = PhoneNumber.CleanNumber( item.CountryCode )
+                        };
+
+                        person.PhoneNumbers.Add( phoneNumber );
+                    }
                 }
+
+                PersonService.SaveNewPerson( person, RockContext, null, false );
             }
 
             return person;
+        }
+
+        /// <summary>
+        /// Gets the record source to use for new individuals.
+        /// </summary>
+        /// <returns>
+        /// The identifier of the Record Source Type <see cref="DefinedValue"/> to use.
+        /// </returns>
+        private int? GetRecordSourceValueId()
+        {
+            return RecordSourceHelper.GetSessionRecordSourceValueId()
+                ?? DefinedValueCache.Get( GetAttributeValue( AttributeKey.NewRecordSource ).AsGuid() )?.Id;
         }
 
         /// <summary>
@@ -577,9 +674,9 @@ namespace Rock.Blocks.Finance
         /// </summary>
         /// <param name="rockContext">The rock context.</param>
         /// <returns></returns>
-        public FinancialAccount GetFinancialAccount( RockContext rockContext )
+        public FinancialAccount GetFinancialAccount()
         {
-            var financialAccountService = new FinancialAccountService( rockContext );
+            var financialAccountService = new FinancialAccountService( RockContext );
             var financialAccount = financialAccountService.Get( GetAttributeValue( AttributeKey.Account ).AsGuid() );
             return financialAccount;
         }
@@ -624,139 +721,98 @@ namespace Rock.Blocks.Finance
         [BlockAction]
         public BlockActionResult Save( DetailBlockBox<FinancialPledgeEntryBag, FinancialPledgeEntryOptionsBag> box )
         {
-            using ( var rockContext = new RockContext() )
+            var entityService = new FinancialPledgeService( RockContext );
+            var definedValueService = new DefinedValueService( RockContext );
+            var person = FindPerson( box.Entity );
+
+            FinancialPledge entity = new FinancialPledge();
+
+            // Update the entity instance from the information in the bag.
+            if ( !UpdateEntityFromBox( entity, box ) )
             {
-                var entityService = new FinancialPledgeService( rockContext );
-                var definedValueService = new DefinedValueService( rockContext );
+                return ActionBadRequest( "Invalid data." );
+            }
 
-                if ( !TryGetEntityForEditAction( box.Entity.IdKey, rockContext, out var entity, out var actionError ) )
+            entity.PersonAliasId = person.PrimaryAliasId;
+
+            var financialAccount = GetFinancialAccount();
+            if ( financialAccount != null )
+            {
+                entity.AccountId = financialAccount.Id;
+            }
+
+            if ( box.Entity.SaveButtonText == GetAttributeValue( AttributeKey.SaveButtonText ) )
+            {
+                var duplicatePledges = entityService.Queryable()
+                    .Where( a => a.PersonAlias.PersonId == person.Id )
+                    .Where( a => a.AccountId == entity.AccountId )
+                    .Where( a => a.StartDate == entity.StartDate )
+                    .Where( a => a.EndDate == entity.EndDate ).ToList();
+
+                if ( duplicatePledges.Any() )
                 {
-                    return actionError;
-                }
-
-                // Update the entity instance from the information in the bag.
-                if ( !UpdateEntityFromBox( entity, box, rockContext ) )
-                {
-                    return ActionBadRequest( "Invalid data." );
-                }
-
-                var isNew = entity.Id == 0;
-                Person person = null;
-                FinancialAccount financialAccount = null;
-
-                if ( isNew )
-                {
-                    person = FindPerson( rockContext, box.Entity );
-                    entity.PersonAliasId = person.PrimaryAliasId;
-
-                    financialAccount = GetFinancialAccount( rockContext );
-                    entity.AccountId = financialAccount.Id;
-                    entity.Account = financialAccount;
-                }
-
-                // Ensure everything is valid before saving.
-                if ( !ValidateFinancialPledge( entity, rockContext, out var validationMessage ) )
-                {
-                    return ActionBadRequest( validationMessage );
-                }
-
-                if ( box.Entity.SaveButtonText == GetAttributeValue( AttributeKey.SaveButtonText ) && isNew )
-                {
-                    var duplicatePledges = entityService.Queryable()
-                        .Where( a => a.PersonAlias.PersonId == person.Id )
-                        .Where( a => a.AccountId == entity.AccountId )
-                        .Where( a => a.StartDate == entity.StartDate )
-                        .Where( a => a.EndDate == entity.EndDate ).ToList();
-
-                    if ( duplicatePledges.Any() )
+                    box.Entity.DuplicatePledgeWarningText = "The following pledges have already been entered for you:";
+                    box.Entity.DuplicatePledgeWarningText += "<ul>";
+                    foreach ( var pledge in duplicatePledges.OrderBy( a => a.StartDate ).ThenBy( a => a.Account.Name ) )
                     {
-                        box.Entity.DuplicatePledgeWarningText = "The following pledges have already been entered for you:";
-                        box.Entity.DuplicatePledgeWarningText += "<ul>";
-                        foreach ( var pledge in duplicatePledges.OrderBy( a => a.StartDate ).ThenBy( a => a.Account.Name ) )
-                        {
-                            box.Entity.DuplicatePledgeWarningText += string.Format( "<li>{0} {1} {2}</li>", pledge.Account, pledge.PledgeFrequencyValue, pledge.TotalAmount );
-                        }
-
-                        box.Entity.DuplicatePledgeWarningText += "</ul>";
-                        box.Entity.SaveButtonText = "Add Pledge";
-                        box.Entity.IsDuplicatePledge = true;
-                        return ActionOk( box.Entity );
-                    }
-                }
-
-                rockContext.WrapTransaction( () =>
-                {
-                    rockContext.SaveChanges();
-                    entity.SaveAttributeValues( rockContext );
-                } );
-
-                var entityBag = GetEntityBagForEdit( entity );
-
-                if ( isNew )
-                {
-                    // Ensure navigation properties will work now.
-                    entity = entityService.Get( entity.Id );
-                    entity.LoadAttributes( rockContext );
-
-                    // populate PledgeFrequencyValue so that Liquid can access it
-                    entity.PledgeFrequencyValue = definedValueService.Get( entity.PledgeFrequencyValueId ?? 0 );
-
-                    var mergeFields = RequestContext.GetCommonMergeFields( RequestContext.CurrentPerson );
-                    mergeFields.Add( "Person", person );
-                    mergeFields.Add( "FinancialPledge", entity );
-                    mergeFields.Add( "PledgeFrequency", DefinedValueCache.Get( entity.PledgeFrequencyValueId ?? 0 ) );
-                    mergeFields.Add( "Account", financialAccount );
-                    entityBag.ReceiptText = GetAttributeValue( AttributeKey.ReceiptText ).ResolveMergeFields( mergeFields );
-
-                    // Resolve any dynamic url references
-                    string appRoot = RequestContext.ResolveRockUrl( "~/" );
-                    string themeRoot = RequestContext.ResolveRockUrl( "~~/" );
-                    entityBag.ReceiptText = entityBag.ReceiptText.Replace( "~~/", themeRoot ).Replace( "~/", appRoot );
-
-                    // if a ConfirmationEmailTemplate is configured, send an email
-                    var confirmationEmailTemplateGuid = GetAttributeValue( AttributeKey.ConfirmationEmailTemplate ).AsGuidOrNull();
-                    if ( confirmationEmailTemplateGuid.HasValue )
-                    {
-                        var emailMessage = new RockEmailMessage( confirmationEmailTemplateGuid.Value );
-                        emailMessage.AddRecipient( new RockEmailMessageRecipient( person, mergeFields ) );
-                        emailMessage.AppRoot = RequestContext.ResolveRockUrl( "~/" );
-                        emailMessage.ThemeRoot = RequestContext.ResolveRockUrl( "~~/" );
-                        emailMessage.Send();
+                        box.Entity.DuplicatePledgeWarningText += string.Format( "<li>{0} {1} {2}</li>", pledge.Account, pledge.PledgeFrequencyValue, pledge.TotalAmount );
                     }
 
-                    return ActionOk( entityBag );
+                    box.Entity.DuplicatePledgeWarningText += "</ul>";
+                    box.Entity.SaveButtonText = "Add Pledge";
+                    box.Entity.IsDuplicatePledge = true;
+                    return ActionOk( box.Entity );
+                }
+            }
+
+            RockContext.WrapTransaction( () =>
+            {
+                RockContext.SaveChanges();
+                entity.SaveAttributeValues( RockContext );
+            } );
+
+            var entityBag = GetEntityBagForEdit( entity );
+
+            // Ensure everything is valid before saving.
+            if ( ValidateFinancialPledge( entity, out var validationMessage ) )
+            {
+                entityService.Add( entity );
+                RockContext.SaveChanges();
+
+                // populate account so that Liquid can access it
+                entity.Account = financialAccount;
+
+                // populate PledgeFrequencyValue so that Liquid can access it
+                entity.PledgeFrequencyValue = definedValueService.Get( entity.PledgeFrequencyValueId ?? 0 );
+
+                var mergeFields = RequestContext.GetCommonMergeFields( RequestContext.CurrentPerson );
+                mergeFields.Add( "Person", person );
+                mergeFields.Add( "FinancialPledge", entity );
+                mergeFields.Add( "PledgeFrequency", DefinedValueCache.Get( entity.PledgeFrequencyValueId ?? 0 ) );
+                mergeFields.Add( "Account", financialAccount );
+                entityBag.ReceiptText = GetAttributeValue( AttributeKey.ReceiptText ).ResolveMergeFields( mergeFields );
+
+                // Resolve any dynamic url references
+                string appRoot = RequestContext.ResolveRockUrl( "~/" );
+                string themeRoot = RequestContext.ResolveRockUrl( "~~/" );
+                entityBag.ReceiptText = entityBag.ReceiptText.Replace( "~~/", themeRoot ).Replace( "~/", appRoot );
+
+                // if a ConfirmationEmailTemplate is configured, send an email
+                var confirmationEmailTemplateGuid = GetAttributeValue( AttributeKey.ConfirmationEmailTemplate ).AsGuidOrNull();
+                if ( confirmationEmailTemplateGuid.HasValue )
+                {
+                    var emailMessage = new RockEmailMessage( confirmationEmailTemplateGuid.Value );
+                    emailMessage.AddRecipient( new RockEmailMessageRecipient( person, mergeFields ) );
+                    emailMessage.AppRoot = RequestContext.ResolveRockUrl( "~/" );
+                    emailMessage.ThemeRoot = RequestContext.ResolveRockUrl( "~~/" );
+                    emailMessage.Send();
                 }
 
                 return ActionOk( entityBag );
             }
-        }
-
-        /// <summary>
-        /// Deletes the specified entity.
-        /// </summary>
-        /// <param name="key">The identifier of the entity to be deleted.</param>
-        /// <returns>A string that contains the URL to be redirected to on success.</returns>
-        [BlockAction]
-        public BlockActionResult Delete( string key )
-        {
-            using ( var rockContext = new RockContext() )
+            else
             {
-                var entityService = new FinancialPledgeService( rockContext );
-
-                if ( !TryGetEntityForEditAction( key, rockContext, out var entity, out var actionError ) )
-                {
-                    return actionError;
-                }
-
-                if ( !entityService.CanDelete( entity, out var errorMessage ) )
-                {
-                    return ActionBadRequest( errorMessage );
-                }
-
-                entityService.Delete( entity );
-                rockContext.SaveChanges();
-
-                return ActionOk( this.GetParentPageUrl() );
+                return ActionBadRequest( validationMessage );
             }
         }
 
@@ -777,7 +833,7 @@ namespace Rock.Blocks.Finance
                 }
 
                 // Update the entity instance from the information in the bag.
-                if ( !UpdateEntityFromBox( entity, box, rockContext ) )
+                if ( !UpdateEntityFromBox( entity, box ) )
                 {
                     return ActionBadRequest( "Invalid data." );
                 }

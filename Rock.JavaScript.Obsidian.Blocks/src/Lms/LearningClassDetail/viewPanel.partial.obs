@@ -14,7 +14,7 @@
             </div>
         </div>
 
-</fieldset>
+    </fieldset>
 </template>
 
 <script setup lang="ts">
@@ -27,8 +27,8 @@
     import { ConfigurationMode } from "@Obsidian/Enums/Lms/configurationMode";
 
     const props = defineProps({
-    modelValue: {
-    type: Object as PropType<LearningClassBag | null>,
+        modelValue: {
+            type: Object as PropType<LearningClassBag | null>,
             required: false
         },
 
@@ -68,18 +68,25 @@
             return valueBuilder.build();
         }
 
-        valueBuilder.addHtmlValue("", `<h4>Course</h4>${props.modelValue.courseName}` ?? "");
+        const courseName = props.modelValue.courseName ?? "";
+        if (courseName.length > 0) {
+            valueBuilder.addTextValue("Course", courseName);
+        }
 
         if (props.options.programConfigurationMode === ConfigurationMode.AcademicCalendar) {
-            valueBuilder.addHtmlValue("", `<h4>Semester</h4>${props.modelValue.semester?.text ?? ""}`);
+            const semesterText = props.modelValue.semester?.text ?? "";
+
+            if (semesterText.length > 0) {
+                valueBuilder.addTextValue("Semester", semesterText);
+            }
         }
 
         const facilitatorsText = props.modelValue.facilitators?.map(f => {
-            return `<li><a href="/person/${f.idKey}">${f.facilitatorName}</a><span class="ml-1 text-muted">${f.facilitatorRole}</span></li>`;
+            return `<li><a href="/person/${f.facilitatorPersonId}">${f.facilitatorName}</a><span class="ml-1 text-muted">${f.facilitatorRole}</span></li>`;
         }).join("") ?? "";
 
         if (facilitatorsText.length > 0) {
-            valueBuilder.addHtmlValue("", `<h4>Facilitators</h4><ul>${facilitatorsText}</ul>`);
+            valueBuilder.addHtmlValue("Facilitators", `<ul>${facilitatorsText}</ul>`);
         }
         return valueBuilder.build();
     });
@@ -92,17 +99,25 @@
             return valueBuilder.build();
         }
 
-        valueBuilder.addHtmlValue("", `<h4>Course Code</h4>${props.modelValue.courseCode ?? ""}`);
+        const courseCode = props.modelValue.courseCode ?? "";
+        if (courseCode.length > 0) {
+            valueBuilder.addTextValue("Course Code", courseCode);
+        }
 
         const schedule = props.modelValue.schedule?.text ?? "";
-        let fieldText = props.modelValue.location?.text  ?? "";
+        let fieldText = props.modelValue.location?.namedLocation?.text ?? "";
         if (schedule.length > 0) {
             fieldText += (fieldText.length > 0 ? " - " : "") + schedule;
         }
 
-        valueBuilder.addHtmlValue("",  `<h4>Location / Schedule</h4>${fieldText ?? "N/A"}`);
+        if (fieldText.length > 0) {
+            valueBuilder.addTextValue("Location / Schedule", fieldText);
+        }
 
-        valueBuilder.addHtmlValue("", `<h4>Grading System</h4>${props.modelValue.gradingSystem?.text ?? ""}`);
+        const gradeText = props.modelValue.gradingSystem?.text ?? "";
+        if (gradeText.length > 0) {
+            valueBuilder.addTextValue("Grading System", gradeText);
+        }
 
         return valueBuilder.build();
     });

@@ -19,19 +19,19 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Security.Claims;
 using System.Threading.Tasks;
-using System.Web;
 
 using AspNet.Security.OpenIdConnect.Primitives;
 
 using Microsoft.Owin.Security;
 
-using Owin;
 using Owin.Security.OpenIdConnect.Extensions;
 using Owin.Security.OpenIdConnect.Server;
 
 using Rock.Data;
+using Rock.Enums.Security;
 using Rock.Model;
 using Rock.Security;
+using Rock.Utility;
 
 namespace Rock.Oidc.Authorization
 {
@@ -41,6 +41,17 @@ namespace Rock.Oidc.Authorization
     /// <seealso cref="OpenIdConnectServerProvider" />
     public class AuthorizationProvider : OpenIdConnectServerProvider
     {
+        #region Keys
+
+        private class TicketPropertyKey
+        {
+            public const string ClientIpAddress = "ClientIpAddress";
+        }
+
+        #endregion Keys
+
+        #region OpenIdConnectServerProvider Implementation
+
         /// <summary>
         /// Represents an event called for each validated token request
         /// to allow the user code to decide how the request should be handled.
@@ -48,9 +59,19 @@ namespace Rock.Oidc.Authorization
         /// <param name="context">The context instance associated with this event.</param>
         public override Task HandleTokenRequest( HandleTokenRequestContext context )
         {
-            // Only handle grant_type=password requests and let ASOS
-            // process grant_type=refresh_token requests automatically.
-            if ( context.Request.IsPasswordGrantType() )
+            if ( context.Request.IsAuthorizationCodeGrantType() || context.Request.IsRefreshTokenGrantType() )
+            {
+                // Let the Microsoft OIDC server implementation handle these requests automatically.
+                //  1. If this is an `authorization_code` request, this means the individual has already authenticated
+                //     using another Rock login approach, and the server can now decided if it's safe to issue an access
+                //     token.
+                //  2. If this is a `refresh_token` request, this also means the individual has already authenticated
+                //     using another Rock login approach, but the previously-issued access token has expired. They are
+                //     now attempting to exchange a previously-issued refresh token for a new access token; it's up to
+                //     the server to decided if it's safe to issue a new access token.
+                return Task.CompletedTask;
+            }
+            else if ( context.Request.IsPasswordGrantType() )
             {
                 UserLogin user = null;
                 ClaimsIdentity identity = null;
@@ -83,7 +104,7 @@ namespace Rock.Oidc.Authorization
                     context.Reject(
                         error: OpenIdConnectConstants.Errors.InvalidClient,
                         description: "Invalid client configuration." );
-                    return Task.FromResult( 0 );
+                    return Task.CompletedTask;
                 }
 
                 if ( user == null || !loginValid )
@@ -91,7 +112,7 @@ namespace Rock.Oidc.Authorization
                     context.Reject(
                         error: OpenIdConnectConstants.Errors.InvalidGrant,
                         description: "Invalid credentials." );
-                    return Task.FromResult( 0 );
+                    return Task.CompletedTask;
                 }
 
                 // Ensure the user is allowed to sign in.
@@ -100,7 +121,7 @@ namespace Rock.Oidc.Authorization
                     context.Reject(
                         error: OpenIdConnectConstants.Errors.InvalidGrant,
                         description: "The specified user is not allowed to sign in." );
-                    return Task.FromResult( 0 );
+                    return Task.CompletedTask;
                 }
 
                 // Create a new authentication ticket holding the user identity.
@@ -113,8 +134,7 @@ namespace Rock.Oidc.Authorization
                 ticket.SetResources( "resource_server" );
                 context.Validate( ticket );
             }
-
-            if ( context.Request.IsClientCredentialsGrantType() )
+            else if ( context.Request.IsClientCredentialsGrantType() )
             {
                 // We don't need to validate the client id here because it was already validated in the ValidateTokenRequest method.
                 var identity = new ClaimsIdentity( OpenIdConnectServerDefaults.AuthenticationType );
@@ -126,8 +146,15 @@ namespace Rock.Oidc.Authorization
 
                 context.Validate( ticket );
             }
+            else
+            {
+                // Reject unsupported grant types.
+                context.Reject(
+                    error: OpenIdConnectConstants.Errors.UnsupportedGrantType,
+                    description: $"The '{context.Request.GrantType}' grant type is not supported by this authorization server." );
+            }
 
-            return Task.FromResult( 0 );
+            return Task.CompletedTask;
         }
 
         /// <summary>
@@ -181,13 +208,41 @@ namespace Rock.Oidc.Authorization
                 !string.Equals( context.RedirectUri, authClient.RedirectUri, StringComparison.OrdinalIgnoreCase ) )
             {
                 context.Reject(
-                    error: OpenIdConnectConstants.Errors.InvalidClient,
+                    error: OpenIdConnectConstants.Errors.InvalidRequest,
                     description: "The specified 'redirect_uri' is invalid." );
 
                 return;
             }
 
             context.Validate( authClient.RedirectUri );
+        }
+
+        /// <summary>
+        /// Represents an event called when serializing an authorization code.
+        /// </summary>
+        /// <param name="context">The context instance associated with this event.</param>
+        public override Task SerializeAuthorizationCode( SerializeAuthorizationCodeContext context )
+        {
+            /*
+                6/18/2025 - JPH
+
+                The OIDC flows that are used by Rock involve a final, back-channel (server-to-server) code-for-token
+                exchange. With this in mind, we need to take this front-channel opportunity to set the individual's
+                actual IP address as a property on the ticket so we can retrieve and properly log it during that later
+                stage of the flow. Otherwise, we'll end up logging the OIDC client's server IP address, since it will be
+                responsible for making the final, back-channel request to get the token.
+
+                Reason: Ensure the individual's actual IP address is logged within their login history record.
+                https://github.com/SparkDevNetwork/Rock/issues/6340
+             */
+
+            var clientIpAddress = WebRequestHelper.GetClientIpAddress( context?.OwinContext );
+            if ( clientIpAddress.IsNotNullOrWhiteSpace() )
+            {
+                context.Ticket.SetProperty( TicketPropertyKey.ClientIpAddress, clientIpAddress );
+            }
+
+            return base.SerializeAuthorizationCode( context );
         }
 
         /// <summary>
@@ -329,5 +384,87 @@ namespace Rock.Oidc.Authorization
 
             return result;
         }
+
+        #region Save Outcomes to HistoryLogin
+
+        /// <summary>
+        /// Represents an event called before the authorization response is returned to the caller.
+        /// </summary>
+        /// <param name="context">The context instance associated with this event.</param>
+        /// <returns>A <see cref="T:System.Threading.Tasks.Task" /> that can be used to monitor the asynchronous operation.</returns>
+        public override Task ApplyAuthorizationResponse( ApplyAuthorizationResponseContext context )
+        {
+            // Only log failures here; successes will be logged elsewhere.
+            var isFailure = context?.Response?.Error.IsNotNullOrWhiteSpace() == true;
+            if ( isFailure )
+            {
+                new HistoryLogin
+                {
+                    UserName = context.Ticket?.Identity?.GetClaim( OpenIdConnectConstants.Claims.Username ),
+                    AuthClientClientId = context.Request?.ClientId,
+                    WasLoginSuccessful = false,
+                    LoginFailureReason = GetLoginFailureReason( context.Response.Error ),
+                    LoginFailureMessage = context.Response.ErrorDescription
+                        ?.ReplaceWhileExists( "User", "Individual" )
+                        ?.ReplaceWhileExists( "user", "individual" )
+                }.SaveAfterDelay();
+            }
+
+            return base.ApplyAuthorizationResponse( context );
+        }
+
+        /// <summary>
+        /// Represents an event called before the token response is returned to the caller.
+        /// </summary>
+        /// <param name="context">The context instance associated with this event.</param>
+        /// <returns>A <see cref="T:System.Threading.Tasks.Task" /> that can be used to monitor the asynchronous operation.</returns>
+        public override Task ApplyTokenResponse( ApplyTokenResponseContext context )
+        {
+            if ( context != null )
+            {
+                // Retrieve the front-channel IP address that was stored within the ticket.
+                var clientIpAddress = context.Ticket?.GetProperty( TicketPropertyKey.ClientIpAddress );
+
+                // Log all outcomes. It's unlikely that a failure would occur at this stage, but it is possible.
+                new HistoryLogin
+                {
+                    UserName = context.Ticket?.Identity?.GetClaim( OpenIdConnectConstants.Claims.Username ),
+                    ClientIpAddress = clientIpAddress,
+                    AuthClientClientId = context.Request?.ClientId,
+                    WasLoginSuccessful = context.Ticket != null && context.Response?.Error.IsNullOrWhiteSpace() == true,
+                    LoginFailureReason = GetLoginFailureReason( context.Response?.Error ),
+                    LoginFailureMessage = context.Response?.ErrorDescription
+                        ?.ReplaceWhileExists( "User", "Individual" )
+                        ?.ReplaceWhileExists( "user", "individual" )
+                }.SaveAfterDelay();
+            }
+
+            return base.ApplyTokenResponse( context );
+        }
+
+        /// <summary>
+        /// Gets the <see cref="LoginFailureReason"/> for the provided error.
+        /// </summary>
+        /// <param name="error">The error for which to get the failure reason.</param>
+        /// <returns>The failure reason.</returns>
+        private LoginFailureReason? GetLoginFailureReason( string error )
+        {
+            if ( error.IsNullOrWhiteSpace() )
+            {
+                return null;
+            }
+
+            switch ( error )
+            {
+                case OpenIdConnectConstants.Errors.InvalidClient:
+                    return LoginFailureReason.InvalidOidcClientId;
+                default:
+                    return LoginFailureReason.Other;
+            }
+        }
+
+        #endregion Save Outcomes to HistoryLogin
+
+        #endregion OpenIdConnectServerProvider Implementation
     }
 }

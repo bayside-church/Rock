@@ -43,6 +43,12 @@ export type AttendanceSessionRequestBag = {
     guid: Guid;
 
     /**
+     * Gets or sets a value indicating whether this session should enforce
+     * location capacity limits on the locations.
+     */
+    isCapacityThresholdEnforced: boolean;
+
+    /**
      * Gets or sets a value indicating whether this session should create
      * pending attendance records that will later be made permanent all
      * at once.
@@ -60,4 +66,10 @@ export type AttendanceSessionRequestBag = {
 
     /** Gets or sets the term used when searching for families. */
     searchTerm?: string | null;
+
+    /**
+     * The identifier of the check-in source that will be used when creating
+     * the attendance records for this session.
+     */
+    sourceValueId?: string | null;
 };

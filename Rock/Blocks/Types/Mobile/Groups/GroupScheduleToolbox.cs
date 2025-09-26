@@ -37,7 +37,7 @@ namespace Rock.Blocks.Types.Mobile.Groups
     [DisplayName( "Schedule Toolbox" )]
     [Category( "Mobile > Groups" )]
     [Description( "Allows management of group scheduling for a specific person (worker)." )]
-    [IconCssClass( "fa fa-user-check" )]
+    [IconCssClass( "ti ti-user-check" )]
     [SupportedSiteTypes( Model.SiteType.Mobile )]
 
     #region Block Attributes
@@ -45,7 +45,7 @@ namespace Rock.Blocks.Types.Mobile.Groups
     [BlockTemplateField( "Toolbox Template",
         Description = "The template used to render the scheduling data.",
         TemplateBlockValueGuid = SystemGuid.DefinedValue.BLOCK_TEMPLATE_MOBILE_GROUP_SCHEDULE_TOOLBOX,
-        DefaultValue = "CD2629E5-8EB0-4D52-ACAB-8EDF9AF84814",
+        DefaultValue = "F04B6154-1543-4632-89A2-1792F6CED9D6",
         IsRequired = true,
         Key = AttributeKey.ToolboxTemplate,
         Order = 0 )]
@@ -53,10 +53,24 @@ namespace Rock.Blocks.Types.Mobile.Groups
     [BlockTemplateField( "Confirm Decline Template",
         Description = "The template used on the decline reason modal. Must require a decline reason in group type.",
         TemplateBlockValueGuid = SystemGuid.DefinedValue.BLOCK_TEMPLATE_MOBILE_GROUP_SCHEDULE_TOOLBOX_DECLINE_MODAL,
-        DefaultValue = "92D39913-7D69-4B73-8FF9-72AC161BE381",
+        DefaultValue = "DE3E57AC-E12B-4249-BB15-64C7A7780AC8",
         IsRequired = true,
         Key = AttributeKey.ConfirmDeclineTemplate,
         Order = 1 )]
+
+    [SystemCommunicationField( "Scheduling Response Email",
+        Description = @"The system communication used to send emails to the scheduler for each confirmation or decline. If a Group's ""Schedule Coordinator"" is defined, this will also be used when sending emails based on the Group/GroupType's configured notification options (e.g., accept, decline, self-schedule).",
+        DefaultSystemCommunicationGuid = Rock.SystemGuid.SystemCommunication.SCHEDULING_RESPONSE,
+        IsRequired = false,
+        Key = AttributeKey.SchedulingResponseEmail,
+        Order = 2 )]
+
+    [BooleanField( "Scheduler Receive Confirmation Emails",
+        Key = AttributeKey.SchedulerReceiveConfirmationEmails,
+        Description = @"When enabled, the scheduler will receive an email for each confirmation or decline. Note that if a Group's ""Schedule Coordinator"" is defined, that person will automatically receive emails based on the Group/GroupType's configured notification options (e.g., accept, decline, self-schedule), regardless of this setting.",
+        DefaultBooleanValue = false,
+        IsRequired = false,
+        Order = 2 )]
 
     #endregion
 
@@ -78,6 +92,16 @@ namespace Rock.Blocks.Types.Mobile.Groups
             /// The key regarding the "ConfirmDeclineTemplate".
             /// </summary>
             public const string ConfirmDeclineTemplate = "ConfirmDeclineTemplate";
+
+            /// <summary>
+            /// The key regarding the "SchedulingResponseEmail".
+            /// </summary>
+            public const string SchedulingResponseEmail = "SchedulingResponseEmail";
+
+            /// <summary>
+            /// The key regarding the "SchedulerReceiveConfirmationEmails".
+            /// </summary>
+            public const string SchedulerReceiveConfirmationEmails = "SchedulerReceiveConfirmationEmails";
         }
 
         /// <summary>
@@ -121,6 +145,48 @@ namespace Rock.Blocks.Types.Mobile.Groups
         }
 
         #endregion
+
+        /// <summary>
+        /// sends the coordinator confirmation email.
+        /// </summary>
+        /// <param name="attendance"></param>
+        private void SendConfirmationEmail( Attendance attendance )
+        {
+            var schedulingResponseEmailGuid = GetAttributeValue( AttributeKey.SchedulingResponseEmail ).AsGuidOrNull();
+            if ( !schedulingResponseEmailGuid.HasValue )
+            {
+                return;
+            }
+
+            var shouldNotifyScheduler = GetAttributeValue( AttributeKey.SchedulerReceiveConfirmationEmails ).AsBoolean();
+            if ( shouldNotifyScheduler )
+            {
+                var schedulerPerson = attendance.ScheduledByPersonAlias?.Person;
+                SendEmail( attendance, schedulingResponseEmailGuid, schedulerPerson );
+            }
+
+            var coordinatorPerson = attendance.Occurrence?.Group?.ScheduleCoordinatorPersonAlias?.Person;
+            SendEmail( attendance, schedulingResponseEmailGuid, coordinatorPerson );
+        }
+
+        /// <summary>
+        /// Sends the email.
+        /// </summary>
+        /// <param name="attendance"></param>
+        /// <param name="schedulingResponseEmailGuid"></param>
+        /// <param name="reciepient"></param>
+        private void SendEmail( Attendance attendance, Guid? schedulingResponseEmailGuid, Person reciepient )
+        {
+            try
+            {
+                AttendanceService.SendScheduledPersonResponseEmail( attendance, schedulingResponseEmailGuid, reciepient );
+            }
+            catch ( Exception ex )
+            {
+                var message = $"{nameof( GroupScheduleToolbox )}: Unable to send scheduled person response email to {reciepient.FullName} (Attendance ID = {attendance.Id}, Scheduled Person ID = {attendance.PersonAlias?.Person?.Id}, Recipient Person ID = {reciepient.Id}).";
+                ExceptionLogService.LogException( new Exception( message, ex ) );
+            }
+        }
 
         #region Methods
 
@@ -298,16 +364,17 @@ namespace Rock.Blocks.Types.Mobile.Groups
             var attendanceService = new AttendanceService( rockContext );
 
             // Get the corresponding attendance Id from the Guid.
-            var attendanceId = attendanceService.GetId( attendanceGuid );
+            var attendance = attendanceService.Get( attendanceGuid );
 
             // If unable to get, let's return a bad request to mobile.
-            if ( attendanceId == null )
+            if ( attendance == null )
             {
                 return ActionBadRequest( "Unable to fetch the corresponding attendance from the Guid." );
             }
 
             // Mark the attendance as confirmed.
-            attendanceService.ScheduledPersonConfirm( attendanceId.Value );
+            attendanceService.ScheduledPersonConfirm( attendance.Id );
+            SendConfirmationEmail( attendance );
 
             rockContext.SaveChanges();
 
@@ -332,16 +399,16 @@ namespace Rock.Blocks.Types.Mobile.Groups
                 }
 
                 var attendanceService = new AttendanceService( rockContext );
-                var attendanceId = attendanceService.GetId( attendanceGuid );
+                var attendance = attendanceService.Get( attendanceGuid );
 
                 // If the specified attendance Id can't be fetched by Guid, let's return an error.
-                if ( !attendanceId.HasValue )
+                if ( attendance == null )
                 {
                     return ActionBadRequest( "Unable to fetch the corresponding attendance from the Guid." );
                 }
 
                 // If the Group Type requires a decline reason.
-                var requiresDeclineReason = attendanceService.Get( attendanceId.Value ).Occurrence.Group.GroupType.RequiresReasonIfDeclineSchedule;
+                var requiresDeclineReason = attendance.Occurrence.Group.GroupType.RequiresReasonIfDeclineSchedule;
 
                 // If a decline reason is required and not provided.
                 if ( !declineReasonGuid.HasValue && requiresDeclineReason )
@@ -353,9 +420,10 @@ namespace Rock.Blocks.Types.Mobile.Groups
                 int? declineReason = declineReasonGuid.HasValue ? DefinedValueCache.GetId( declineReasonGuid.Value ) : null;
 
                 // Mark the attendance as declined.
-                attendanceService.ScheduledPersonDecline( attendanceId.Value, declineReason );
-
+                attendanceService.ScheduledPersonDecline( attendance.Id, declineReason );
                 rockContext.SaveChanges();
+
+                SendConfirmationEmail( attendance );
 
                 return ActionOk();
             }

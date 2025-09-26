@@ -5,7 +5,7 @@
 
         <div class="panel panel-block">
             <div class="panel-heading">
-                <h1 class="panel-title"><i class="fa fa-files-o"></i> File List</h1>
+                <h1 class="panel-title"><i class="ti ti-files"></i> File List</h1>
             </div>
             <div class="panel-body">
 
@@ -13,7 +13,7 @@
                     <Rock:GridFilter ID="fBinaryFile" runat="server">
                         <Rock:RockTextBox ID="tbName" runat="server" Label="File Name" />
                         <Rock:RockTextBox ID="tbType" runat="server" Label="Mime Type" />
-                        <Rock:RockCheckBox ID="dbIncludeTemporary" runat="server" Checked="false" Label="Include Temporary" Text="Yes"
+                        <Rock:RockCheckBox ID="dbIncludeTemporary" runat="server" Checked="false" Label="Include Temporary"
                             Help="Temporary files are files that were uploaded to the server, but a reference to the file was never saved." />
                     </Rock:GridFilter>
         

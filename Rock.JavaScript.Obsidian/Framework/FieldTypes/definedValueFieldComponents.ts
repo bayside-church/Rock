@@ -85,7 +85,7 @@ export const EditComponent = defineComponent({
             try {
                 const valueOptions = JSON.parse(props.configurationValues[ConfigurationValueKey.Values] ?? "[]") as ValueItem[];
                 addedOptions.value.forEach(addedOption => {
-                    if(valueOptions.find(a=>a.value == addedOption.value) == null){
+                    if (valueOptions.find(a => a.value == addedOption.value) == null) {
                         valueOptions.push(addedOption);
                     }
                 });
@@ -158,7 +158,7 @@ export const EditComponent = defineComponent({
                 return;
             }
 
-            addedOptions.value.push({value: newValue.value ?? "", text: newValue.text ?? "", description: ""});
+            addedOptions.value.push({ value: newValue.value ?? "", text: newValue.text ?? "", description: "" });
             if (isMultiple.value) {
                 if (Array.isArray(internalValues.value)) {
                     internalValues.value.push(newValue.value ?? "");
@@ -177,7 +177,7 @@ export const EditComponent = defineComponent({
             }
 
             const selectableValues = (props.configurationValues[ConfigurationValueKey.SelectableValues]?.split(",") ?? []).filter(s => s !== "");
-            if(selectableValues.length > 0 && newValue.value){
+            if (selectableValues.length > 0 && newValue.value) {
                 selectableValues.push(newValue.value);
 
                 emit("updateConfigurationValue", "selectableValues", selectableValues.join(","));
@@ -220,20 +220,20 @@ export const EditComponent = defineComponent({
             <DropDownList v-if="!isMultiple" :multiple="isMultiple" v-model="internalValue" :items="options">
                 <template #inputGroupAppend v-if="allowAdd">
                     <span class="input-group-btn">
-                        <RockButton @click="showAddForm" :btnType="BtnType.Default" aria-label="Add Item"><i class="fa fa-plus" aria-hidden></i></RockButton>
+                        <RockButton @click="showAddForm" :btnType="BtnType.Default" aria-label="Add Item"><i class="ti ti-plus" aria-hidden></i></RockButton>
                     </span>
                 </template>
             </DropDownList>
             <DropDownList v-else-if="isMultiple && enhanceForLongLists" :multiple="isMultiple" v-model="internalValues" enhanceForLongLists :items="options">
                 <template #inputGroupAppend v-if="allowAdd">
                     <span class="input-group-btn">
-                        <RockButton @click="showAddForm" :btnType="BtnType.Default" aria-label="Add Item"><i class="fa fa-plus" aria-hidden></i></RockButton>
+                        <RockButton @click="showAddForm" :btnType="BtnType.Default" aria-label="Add Item"><i class="ti ti-plus" aria-hidden></i></RockButton>
                     </span>
                 </template>
             </DropDownList>
             <CheckBoxList v-else v-model="internalValues" :items="options" horizontal :repeatColumns="repeatColumns">
                 <template #append v-if="allowAdd">
-                    <RockButton @click="showAddForm" :btnType="BtnType.Default" aria-label="Add Item"><i class="fa fa-plus" aria-hidden></i></RockButton>
+                    <RockButton @click="showAddForm" :btnType="BtnType.Default" aria-label="Add Item"><i class="ti ti-plus" aria-hidden></i></RockButton>
                 </template>
             </CheckBoxList>
         </div>
@@ -433,13 +433,13 @@ export const ConfigurationComponent = defineComponent({
 
     template: `
 <div>
-    <DropDownList v-model="definedTypeValue" label="Defined Type" :items="definedTypeOptions" :showBlankItem="false" />
-    <CheckBox v-model="allowMultipleValues" label="Allow Multiple Values" text="Yes" help="When set, allows multiple defined type values to be selected." />
-    <CheckBox v-model="displayDescriptions" label="Display Descriptions" text="Yes" help="When set, the defined value descriptions will be displayed instead of the values." />
-    <CheckBox v-model="enhanceForLongLists" label="Enhance For Long Lists" text="Yes" />
-    <CheckBox v-model="includeInactive" label="Include Inactive" text="Yes" />
-    <CheckBox v-model="allowAddingNewValues" label="Allow Adding New Values" text="Yes" help="When set the defined type picker can be used to add new defined types." />
-    <NumberBox v-model="repeatColumns" label="Repeat Columns" />
+    <DropDownList v-model="definedTypeValue" label="Defined Type" :items="definedTypeOptions" showBlankItem rules="required" help="The Defined Type to select values from." />
+    <CheckBox v-model="allowMultipleValues" label="Allow Multiple Values" help="When set, allows multiple defined type values to be selected." />
+    <CheckBox v-model="displayDescriptions" label="Display Descriptions" help="When set, the defined value descriptions will be displayed instead of the values." />
+    <CheckBox v-model="enhanceForLongLists" label="Enhance For Long Lists" help="When set, will render a searchable selection of options." />
+    <CheckBox v-model="includeInactive" label="Include Inactive" help="When set, inactive defined values will be included in the list." />
+    <CheckBox v-model="allowAddingNewValues" label="Allow Adding New Values" help="When set the defined type picker can be used to add new defined types." />
+    <NumberBox v-model="repeatColumns" label="Repeat Columns" help="Select how many columns the list should use before going to the next row. If 0 then the options are put next to each other and wrap around. If blank then 4 columns will be displayed. There is no upper limit enforced here however the block this is used in might add contraints due to available space." />
     <CheckBoxList v-if="hasValues" v-model="selectableValues" label="Selectable Values" :items="definedValueOptions" :horizontal="true" :repeatColumns="4" />
 </div>
 `

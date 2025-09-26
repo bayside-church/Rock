@@ -1,16 +1,16 @@
 <!-- Copyright by the Spark Development Network; Licensed under the Rock Community License -->
 <template>
-    <Grid :definition="config.gridDefinition ?? undefined"
+    <Grid
+          v-if="hasLoadedData"
+          :definition="config.gridDefinition ?? undefined"
           :data="gridDataSource"
           keyField="idKey"
-          :isTitleHidden="true"
-          :isSearchVisible="false"
-          :isCountMessageVisible="false"
           :showMergeTemplate="false"
           :showLaunchWorkflow="false"
           :showExport="false"
           :entityTypeGuid="EntityType.LearningSemester"
           :expectedRowCount="config.expectedRowCount ?? undefined"
+          itemTerm="Semester"
           tooltipField="name"
           stickyHeader
           liveUpdates
@@ -30,12 +30,12 @@
         <DateColumn name="endDate"
                     title="End Date"
                     field="endDate"
-                    visiblePriority="xs" />
+                    visiblePriority="sm" />
 
         <DateColumn name="closeDate"
                     title="Close Date"
                     field="closeDate"
-                    visiblePriority="xs" />
+                    visiblePriority="sm" />
 
         <NumberColumn name="classCount"
                       title="Class Count"
@@ -55,15 +55,20 @@
     import { GridDataBag } from "@Obsidian/ViewModels/Core/Grid/gridDataBag";
     import { reactive, ref } from "vue";
     import { NavigationUrlKey } from "./LearningSemesterList/types.partial";
+    import { alert } from "@Obsidian/Utility/dialogs";
 
     const config = useConfigurationValues<ListBlockBox<LearningSemesterListOptionsBag>>();
     const invokeBlockAction = useInvokeBlockAction();
     onConfigurationValuesChanged(useReloadBlock());
 
+    const hasLoadedData = ref(false);
+
     // #region Values
 
     const gridDataSource = ref<Promise<GridDataBag>>();
     let gridData: GridDataBag | undefined;
+
+    const canEditProgram = config.options?.canEditProgram ?? false;
 
     // #endregion
 
@@ -77,6 +82,8 @@
 
         if (result.isSuccess && result.data) {
             gridData = reactive(result.data);
+            hasLoadedData.value = true;
+
             return gridData;
         }
         else {
@@ -89,22 +96,11 @@
     // #region Event Handlers
 
     /**
-     * Called when a row has been selected by the individual.
-     *
-     * @param key The key of the row that was selected.
-     */
-    function onSelectItem(key: string): void {
-        if (config.navigationUrls?.[NavigationUrlKey.DetailPage]) {
-            window.location.href = config.navigationUrls[NavigationUrlKey.DetailPage].replace("((Key))", key);
-        }
-    }
-
-    /**
      * Called when the Add button has been clicked by the indivual.
      */
     function onAddItem(): void {
         if (config.navigationUrls?.[NavigationUrlKey.DetailPage]) {
-            window.location.href = config.navigationUrls[NavigationUrlKey.DetailPage].replace("((Key))", "0");
+            window.location.href = config.navigationUrls[NavigationUrlKey.DetailPage].replace("((Key))", `0?autoEdit=true&returnUrl=${encodeURIComponent(window.location.href)}`);
         }
     }
 
@@ -112,7 +108,7 @@
      * Called when a semester row's delete button has been clicked by the individual. This
      * happens only if they have confirmed the delete action.
      */
-     async function onDeleteClick(key: string): Promise<void> {
+    async function onDeleteClick(key: string): Promise<void> {
         const result = await invokeBlockAction<string>("Delete", {
             key
         });
@@ -127,7 +123,7 @@
             }
         }
         else {
-            alert(result.errorMessage ?? "Unknown error while trying to delete the semester.");
+            await alert(result.errorMessage ?? "Unknown error while trying to delete the semester.");
         }
     }
 
@@ -140,6 +136,21 @@
     function onDeleteRowDisabled(row: Record<string, unknown>): boolean {
         return (row.classCount as number) > 0;
     }
+
+    /**
+     * undefined if the individual doesn't have permission to edit the program;
+     * otherwise a function to be called when a row has been selected by the individual.
+     *
+     * @param key The key of the row that was selected.
+     */
+    const onSelectItem =
+        !canEditProgram ?
+            undefined :
+            function onSelectItem(key: string): void {
+                if (canEditProgram && config.navigationUrls?.[NavigationUrlKey.DetailPage]) {
+                    window.location.href = config.navigationUrls[NavigationUrlKey.DetailPage].replace("((Key))", key) + "?autoEdit=true&returnUrl=" + encodeURIComponent(window.location.href);
+                }
+            };
 
     // #endregion
 

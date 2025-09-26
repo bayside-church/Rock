@@ -27,6 +27,7 @@ using Rock;
 using Rock.Attribute;
 using Rock.CheckIn;
 using Rock.Data;
+using Rock.Enums.Security;
 using Rock.Model;
 using Rock.Security;
 using Rock.Utility;
@@ -751,10 +752,20 @@ namespace RockWeb.Blocks.CheckIn
                 // next-gen check-in labels. If that still comes back with no
                 // labels then assume there just aren't any for this attendance.
                 var attendanceIds = hfSelectedAttendanceIds.Value.SplitDelimitedValues().AsIntegerList();
-                var printer = DeviceCache.Get( CurrentCheckInState.Kiosk.Device.PrinterDeviceId ?? 0 );
+                var kiosk = DeviceCache.Get( CurrentCheckInState.DeviceId );
 
-                if ( printer != null && ZebraPrint.TryReprintNextGenLabels( attendanceIds, printer, out var messages ) )
+                if ( kiosk != null && ZebraPrint.TryReprintNextGenLabels( attendanceIds, kiosk, null, null, null, out var messages, out var clientLabels ) )
                 {
+                    if ( clientLabels.Any() )
+                    {
+                        var script = $@"
+if (window.RockCheckinNative && window.RockCheckinNative.PrintV2Labels) {{
+    window.RockCheckinNative.PrintV2Labels(JSON.stringify({clientLabels.ToJson()}));
+}}
+";
+                        ScriptManager.RegisterClientScriptBlock( pnlReprintResults, pnlReprintResults.GetType(), "addV2LabelScript", script, true );
+                    }
+
                     pnlReprintResults.Visible = true;
                     pnlReprintSelectedPersonLabels.Visible = false;
 
@@ -844,7 +855,7 @@ namespace RockWeb.Blocks.CheckIn
         /// <returns></returns>
         protected string GetCheckboxClass( bool selected )
         {
-            return selected ? "fa fa-check-square" : "fa fa-square-o";
+            return selected ? "ti ti-square-check" : "ti ti-square";
         }
 
         /// <summary>
@@ -1019,40 +1030,90 @@ namespace RockWeb.Blocks.CheckIn
         /// <param name="e">The <see cref="EventArgs"/> instance containing the event data.</param>
         protected void lbLogin_Click( object sender, EventArgs e )
         {
+            var pinAuthProviderName = EntityTypeCache.Get( Rock.SystemGuid.EntityType.AUTHENTICATION_PIN.AsGuid() )
+                    ?.FriendlyName
+                    ?? "PIN Authentication";
+
+            // We'll supplement this object and save either a successful or failed login attempt below.
+            var historyLogin = new HistoryLogin
+            {
+                UserName = "XXXXX", // Obfuscate the PIN
+                SourceSiteId = this.PageCache?.SiteId
+            }
+            .WithContext( pinAuthProviderName );
+
             ManagerLoggedIn = false;
+
             var pinAuth = AuthenticationContainer.GetComponent( typeof( Rock.Security.Authentication.PINAuthentication ).FullName );
+            if ( pinAuth?.IsActive != true )
+            {
+                historyLogin.LoginFailureReason = LoginFailureReason.Other;
+                historyLogin.LoginFailureMessage = $"{pinAuthProviderName} is not active.";
+                historyLogin.SaveAfterDelay();
+
+                maWarning.Show( "Sorry, we couldn't find an account matching that PIN.", Rock.Web.UI.Controls.ModalAlertType.Warning );
+                return;
+            }
+
             var rockContext = new Rock.Data.RockContext();
             var userLoginService = new UserLoginService( rockContext );
             var userLogin = userLoginService.GetByUserName( tbPIN.Text );
+
+            if ( userLogin != null )
+            {
+                historyLogin.UserLoginId = userLogin.Id;
+                historyLogin.PersonAliasId = userLogin.Person?.PrimaryAliasId;
+            }
+
             if ( userLogin != null && userLogin.EntityTypeId.HasValue )
             {
                 // make sure this is a PIN auth user login
                 var userLoginEntityType = EntityTypeCache.Get( userLogin.EntityTypeId.Value );
                 if ( userLoginEntityType != null && userLoginEntityType.Id == pinAuth.EntityType.Id )
                 {
-                    if ( pinAuth != null && pinAuth.IsActive )
+                    // should always return true, but just in case
+                    if ( pinAuth.Authenticate( userLogin, null ) )
                     {
-                        // should always return true, but just in case
-                        if ( pinAuth.Authenticate( userLogin, null ) )
+                        if ( !( userLogin.IsConfirmed ?? true ) )
                         {
-                            if ( !( userLogin.IsConfirmed ?? true ) )
-                            {
-                                maWarning.Show( "Sorry, account needs to be confirmed.", Rock.Web.UI.Controls.ModalAlertType.Warning );
-                            }
-                            else if ( userLogin.IsLockedOut ?? false )
-                            {
-                                maWarning.Show( "Sorry, account is locked-out.", Rock.Web.UI.Controls.ModalAlertType.Warning );
-                            }
-                            else
-                            {
-                                ManagerLoggedIn = true;
-                                ShowManagementDetails();
-                                return;
-                            }
+                            historyLogin.LoginFailureReason = LoginFailureReason.UserNotConfirmed;
+                            maWarning.Show( "Sorry, account needs to be confirmed.", Rock.Web.UI.Controls.ModalAlertType.Warning );
                         }
+                        else if ( userLogin.IsLockedOut ?? false )
+                        {
+                            historyLogin.LoginFailureReason = LoginFailureReason.LockedOut;
+                            maWarning.Show( "Sorry, account is locked-out.", Rock.Web.UI.Controls.ModalAlertType.Warning );
+                        }
+                        else
+                        {
+                            historyLogin.WasLoginSuccessful = true;
+                            historyLogin.SaveAfterDelay();
+
+                            ManagerLoggedIn = true;
+                            ShowManagementDetails();
+
+                            return;
+                        }
+                    }
+                    else
+                    {
+                        historyLogin.LoginFailureReason = LoginFailureReason.Other;
+                        historyLogin.LoginFailureMessage = $"{pinAuthProviderName} failed.";
                     }
                 }
             }
+
+            if ( userLogin == null )
+            {
+                historyLogin.LoginFailureReason = LoginFailureReason.UserNotFound;
+            }
+            else if ( !historyLogin.LoginFailureReason.HasValue )
+            {
+                historyLogin.LoginFailureReason = LoginFailureReason.Other;
+                historyLogin.LoginFailureMessage = $"This username is not associated with {pinAuthProviderName}.";
+            }
+
+            historyLogin.SaveAfterDelay();
 
             maWarning.Show( "Sorry, we couldn't find an account matching that PIN.", Rock.Web.UI.Controls.ModalAlertType.Warning );
         }

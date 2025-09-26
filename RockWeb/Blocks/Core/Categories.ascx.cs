@@ -64,6 +64,7 @@ namespace RockWeb.Blocks.Core
         Order = 3,
         Key = AttributeKey.EnableHierarchy )]
 
+    [Rock.Cms.DefaultBlockRole( Rock.Enums.Cms.BlockRole.Primary )]
     [Rock.SystemGuid.BlockTypeGuid( "620FC4A2-6587-409F-8972-22065919D9AC" )]
     public partial class Categories : RockBlock, ICustomGridColumns
     {
@@ -535,15 +536,15 @@ namespace RockWeb.Blocks.Core
                 {
                     // Set the Entity Type specified in the page query parameters.
                     SetEntityConfiguration( entityTypeId,
-                        PageParameter( PageParameterKeys.EntityQualifierColumn ),
-                        PageParameter( PageParameterKeys.EntityQualifierValue ) );
+                        PageParameter( PageParameterKeys.EntityQualifierColumn ) ?? string.Empty,
+                        PageParameter( PageParameterKeys.EntityQualifierValue ) ?? string.Empty );
                 }
                 else if ( Guid.TryParse( GetAttributeValue( AttributeKey.EntityType ), out entityTypeGuid ) )
                 {
                     // Set the Entity Type specified in the block configuration settings.
                     SetEntityConfiguration( EntityTypeCache.GetId( entityTypeGuid ),
-                        GetAttributeValue( AttributeKey.EntityQualifierColumn ),
-                        GetAttributeValue( AttributeKey.EntityQualifierValue ) );
+                        GetAttributeValue( AttributeKey.EntityQualifierColumn ) ?? string.Empty,
+                        GetAttributeValue( AttributeKey.EntityQualifierValue ) ?? string.Empty );
                 }
                 else
                 {
@@ -568,8 +569,8 @@ namespace RockWeb.Blocks.Core
             if ( entityType == null )
             {
                 _entityTypeId = 0;
-                _entityCol = string.Empty;
-                _entityVal = string.Empty;
+                _entityCol = null;
+                _entityVal = null;
             }
             else
             {
@@ -693,10 +694,13 @@ namespace RockWeb.Blocks.Core
                     }
                 }
 
-                queryable = queryable
-                    .Where( c =>
-                        ( c.EntityTypeQualifierColumn ?? "" ) == ( _entityCol ?? "" ) &&
-                        ( c.EntityTypeQualifierValue ?? "" ) == ( _entityVal ?? "" ) );
+                if ( _entityCol != null && _entityVal != null )
+                {
+                    queryable = queryable
+                        .Where( c =>
+                            ( c.EntityTypeQualifierColumn ?? "" ) == _entityCol &&
+                            ( c.EntityTypeQualifierValue ?? "" ) == _entityVal );
+                }
             }
 
             return queryable;

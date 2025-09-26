@@ -266,6 +266,26 @@ export class RockDateTime {
     }
 
     /**
+     * The raw date with no offset applied to it. Use this method when you only
+     * care about comparing explicit dates without the time zone, as we do within
+     * the grid's date column filter.
+     *
+     * This API is internal to Rock, and is not subject to the same compatibility
+     * standards as public APIs. It may be changed or removed without notice in any
+     * release. You should not use this API directly in any plug-ins. Doing so can
+     * result in application failures when updating to a new Rock release.
+     */
+    public get rawDate(): RockDateTime {
+        const date = RockDateTime.fromParts(this.year, this.month, this.day, 0, 0, 0, 0);
+
+        if (date === null) {
+            throw "Could not convert to date instance.";
+        }
+
+        return date;
+    }
+
+    /**
      * The day of the month represented by this instance.
      */
     public get day(): number {
@@ -397,6 +417,40 @@ export class RockDateTime {
      */
     public addDays(days: number): RockDateTime {
         const dateTime = this.dateTime.plus({ days: days });
+
+        if (!dateTime.isValid) {
+            throw "Operation produced an invalid date.";
+        }
+
+        return new RockDateTime(dateTime);
+    }
+
+    /**
+     * Creates a new RockDateTime instance that represents the first millisecond
+     * of the start of the week for this instance.
+     *
+     * @example
+     * new Date(2014, 2, 6).startOf("week").toISOString(); //=> '2014-03-03T00:00:00.000-05:00', weeks always start on Mondays
+     */
+    public startOfWeek(): RockDateTime {
+        const dateTime = this.dateTime.startOf("week");
+
+        if (!dateTime.isValid) {
+            throw "Operation produced an invalid date.";
+        }
+
+        return new RockDateTime(dateTime);
+    }
+
+    /**
+     * Creates a new RockDateTime instance that represents the first millisecond
+     * of the start of the month for this instance.
+     *
+     * @example
+     * new Date(2014, 2, 6).startOf("month").toISOString(); //=> '2014-03-01T00:00:00.000-05:00'
+     */
+    public startOfMonth(): RockDateTime {
+        const dateTime = this.dateTime.startOf("month");
 
         if (!dateTime.isValid) {
             throw "Operation produced an invalid date.";
@@ -603,14 +657,14 @@ export class RockDateTime {
      * Transforms the date into a human friendly elapsed time string.
      *
      * @example
-     * // Returns "21yrs"
+     * // Returns "25 Years Ago" if the current date is 2025-03-04 and this instance is 2000-03-04.
      * RockDateTime.fromParts(2000, 3, 4).toElapsedString();
      *
      * @returns A string that represents the amount of time that has elapsed.
      */
     public toElapsedString(currentDateTime?: RockDateTime): string {
         const msPerSecond = 1000;
-        const msPerMinute= 1000 * 60;
+        const msPerMinute = 1000 * 60;
         const msPerHour = 1000 * 60 * 60;
         const hoursPerDay = 24;
         const daysPerYear = 365;
@@ -752,7 +806,20 @@ export class RockDateTime {
         return this.dateTime.toMillis() < otherDateTime.dateTime.toMillis();
     }
 
+    public compareTo(otherDateTime: RockDateTime): number {
+        if (this.isEqualTo(otherDateTime)) {
+            return 0;
+        }
+        else if (this.isEarlierThan(otherDateTime)) {
+            return -1;
+        }
+        else {
+            return 1;
+        }
+    }
+
     /**
+     * Obsolete. Use toElapsedString instead.
      * Calculates the elapsed time between this date and the reference date and
      * returns that difference in a human friendly way.
      *
@@ -798,4 +865,8 @@ export class RockDateTime {
     }
 
     // #endregion
+}
+
+export function compareRockDateTimes(a: RockDateTime, b: RockDateTime): number {
+    return a.compareTo(b);
 }

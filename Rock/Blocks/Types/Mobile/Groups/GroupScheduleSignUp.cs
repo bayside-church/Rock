@@ -38,7 +38,7 @@ namespace Rock.Blocks.Types.Mobile.Groups
     [DisplayName( "Schedule Sign Up" )]
     [Category( "Mobile > Groups" )]
     [Description( "A way for individuals to sign up for additional serving times on mobile." )]
-    [IconCssClass( "fa fa-user-plus" )]
+    [IconCssClass( "ti ti-user-plus" )]
     [SupportedSiteTypes( Model.SiteType.Mobile )]
 
     #region Block Attributes
@@ -46,7 +46,7 @@ namespace Rock.Blocks.Types.Mobile.Groups
     [BlockTemplateField( "Schedule Sign Up Landing Template",
         Description = "The XAML passed into the landing page, where the user's groups are listed.",
         TemplateBlockValueGuid = SystemGuid.DefinedValue.BLOCK_TEMPLATE_MOBILE_GROUP_SCHEDULE_SIGNUP_LANDING_PAGE,
-        DefaultValue = "C4BFED3A-C2A1-4A68-A646-44C3B499C75A",
+        DefaultValue = "2204D103-A145-4003-9DA0-1C9461D6BAA1",
         IsRequired = true,
         Key = AttributeKey.LandingTemplate,
         Order = 0 )]
@@ -58,6 +58,20 @@ namespace Rock.Blocks.Types.Mobile.Groups
         Order = 1,
         Key = AttributeKey.FutureWeeksToShow
         )]
+
+    [SystemCommunicationField( "Scheduling Response Email",
+        Description = @"The system communication used to send emails to the scheduler for each confirmation or decline. If a Group's ""Schedule Coordinator"" is defined, this will also be used when sending emails based on the Group/GroupType's configured notification options (e.g., accept, decline, self-schedule).",
+        DefaultSystemCommunicationGuid = Rock.SystemGuid.SystemCommunication.SCHEDULING_RESPONSE,
+        IsRequired = false,
+        Key = AttributeKey.SchedulingResponseEmail,
+        Order = 2 )]
+
+    [BooleanField( "Scheduler Receive Confirmation Emails",
+        Key = AttributeKey.SchedulerReceiveConfirmationEmails,
+        Description = @"When enabled, the scheduler will receive an email for each confirmation or decline. Note that if a Group's ""Schedule Coordinator"" is defined, that person will automatically receive emails based on the Group/GroupType's configured notification options (e.g., accept, decline, self-schedule), regardless of this setting.",
+        DefaultBooleanValue = false,
+        IsRequired = false,
+        Order = 2 )]
 
     #endregion
 
@@ -79,6 +93,16 @@ namespace Rock.Blocks.Types.Mobile.Groups
             /// An integer representing the amount of future weeks to display.
             /// </summary>
             public const string FutureWeeksToShow = "FutureWeeksToShow";
+
+            /// <summary>
+            /// The system communication used to send emails to the scheduler for each confirmation or decline.
+            /// </summary>
+            public const string SchedulingResponseEmail = "SchedulingResponseEmail";
+
+            /// <summary>
+            /// When enabled, the scheduler will receive an email for each confirmation or decline.
+            /// </summary>
+            public const string SchedulerReceiveConfirmationEmails = "SchedulerReceiveConfirmationEmails";
         }
 
         /// <summary>
@@ -464,6 +488,48 @@ namespace Rock.Blocks.Types.Mobile.Groups
             }
         }
 
+        /// <summary>
+        /// sends the coordinator confirmation email.
+        /// </summary>
+        /// <param name="attendance"></param>
+        private void SendConfirmationEmail( Attendance attendance )
+        {
+            var schedulingResponseEmailGuid = GetAttributeValue( AttributeKey.SchedulingResponseEmail ).AsGuidOrNull();
+            if ( !schedulingResponseEmailGuid.HasValue )
+            {
+                return;
+            }
+
+            var shouldNotifyScheduler = GetAttributeValue( AttributeKey.SchedulerReceiveConfirmationEmails ).AsBoolean();
+            if ( shouldNotifyScheduler )
+            {
+                var schedulerPerson = attendance.ScheduledByPersonAlias?.Person;
+                SendEmail( attendance, schedulingResponseEmailGuid, schedulerPerson );
+            }
+
+            var coordinatorPerson = attendance.Occurrence?.Group?.ScheduleCoordinatorPersonAlias?.Person;
+            SendEmail( attendance, schedulingResponseEmailGuid, coordinatorPerson );
+        }
+
+        /// <summary>
+        /// Sends the email.
+        /// </summary>
+        /// <param name="attendance"></param>
+        /// <param name="schedulingResponseEmailGuid"></param>
+        /// <param name="reciepient"></param>
+        private void SendEmail( Attendance attendance, Guid? schedulingResponseEmailGuid, Person reciepient )
+        {
+            try
+            {
+                AttendanceService.SendScheduledPersonResponseEmail( attendance, schedulingResponseEmailGuid, reciepient );
+            }
+            catch ( Exception ex )
+            {
+                var message = $"{nameof( GroupScheduleToolbox )}: Unable to send scheduled person response email to {reciepient.FullName} (Attendance ID = {attendance.Id}, Scheduled Person ID = {attendance.PersonAlias?.Person?.Id}, Recipient Person ID = {reciepient.Id}).";
+                ExceptionLogService.LogException( new Exception( message, ex ) );
+            }
+        }
+
         #endregion Methods
 
         #region Block Actions
@@ -557,6 +623,8 @@ namespace Rock.Blocks.Types.Mobile.Groups
                 attendanceService.ScheduledPersonConfirm( attendance.Id );
                 rockContext.SaveChanges();
 
+                SendConfirmationEmail( attendance );
+
                 return ActionOk();
             }
         }
@@ -591,6 +659,8 @@ namespace Rock.Blocks.Types.Mobile.Groups
 
                 attendanceService.ScheduledPersonClear( attendance.Id );
                 rockContext.SaveChanges();
+
+                SendConfirmationEmail( attendance );
 
                 return ActionOk();
             }

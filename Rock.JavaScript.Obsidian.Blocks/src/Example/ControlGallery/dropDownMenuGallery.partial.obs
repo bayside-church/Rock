@@ -20,11 +20,11 @@
 <script setup lang="ts">
     import DropDownList from "@Obsidian/Controls/dropDownList.obs";
     import DropDownMenu from "@Obsidian/Controls/dropDownMenu.obs";
-    import GalleryAndResult from "./galleryAndResult.partial.obs";
+    import GalleryAndResult from "./common/galleryAndResult.partial.obs";
     import { alert } from "@Obsidian/Utility/dialogs";
     import { MenuAction } from "@Obsidian/Types/Controls/dropDownMenu";
     import { ListItemBag } from "@Obsidian/ViewModels/Utility/listItemBag";
-    import { getSfcControlImportPath } from "./utils.partial";
+    import { getSfcControlImportPath } from "./common/utils.partial";
     import { computed, ref } from "vue";
 
     const align = ref<"left" | "right">("left");
@@ -47,13 +47,13 @@
             handler: async () => await alert("Default action clicked.")
         },
         {
-            iconCssClass: "fa fa-refresh",
+            iconCssClass: "ti ti-refresh",
             title: "Refresh",
             type: "default",
             handler: async () => await alert("Refresh action clicked.")
         },
         {
-            iconCssClass: "fa fa-trash",
+            iconCssClass: "ti ti-trash",
             title: "Delete",
             type: "danger",
             handler: async () => await alert("Delete action clicked.")
@@ -70,7 +70,7 @@
     const exampleCode = computed((): string => {
         return `<DropDownMenu :items="menuItems" align="${align.value}">
     <!-- Optional content -->
-    <i class="fa fa-ellipsis-v"></i>
+    <i class="ti ti-dots-vertical"></i>
 </DropDownMenu>`;
     });
 </script>

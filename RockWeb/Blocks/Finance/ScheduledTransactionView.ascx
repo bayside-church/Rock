@@ -7,12 +7,13 @@
 
             <div class="panel-heading">
                 <h1 class="panel-title">
-                    <i class="fa fa-credit-card"></i>Scheduled Transaction Details
+                    <i class="ti ti-credit-card"></i>Scheduled Transaction Details
                 </h1>
                 <div class="panel-labels">
                     <Rock:HighlightLabel ID="hlStatus" runat="server" />
                 </div>
             </div>
+            <Rock:PanelDrawer ID="pdAuditDetails" runat="server"></Rock:PanelDrawer>
 
             <Rock:ModalAlert ID="mdWarningAlert" runat="server" />
             <div class="panel-body">
@@ -24,7 +25,7 @@
                             </div>
                             <div class="col-xs-6">
                                 <asp:Literal ID="lDetailsRight" runat="server" />
-                                <asp:LinkButton ID="btnRefresh" runat="server" OnClick="btnRefresh_Click"><i class="fa fa-refresh"></i> Refresh Now</asp:LinkButton>
+                                <asp:LinkButton ID="btnRefresh" runat="server" OnClick="btnRefresh_Click"><i class="ti ti-refresh"></i> Refresh Now</asp:LinkButton>
                             </div>
                         </div>
                     </div>

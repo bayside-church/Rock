@@ -40,7 +40,7 @@ namespace Rock.Blocks.Finance
     [DisplayName( "Financial Batch List" )]
     [Category( "Finance" )]
     [Description( "Displays a list of financial batches." )]
-    [IconCssClass( "fa fa-list" )]
+    [IconCssClass( "ti ti-list" )]
     [SupportedSiteTypes( Model.SiteType.Web )]
 
     [LinkedPage( "Detail Page",
@@ -317,7 +317,7 @@ namespace Rock.Blocks.Finance
 
             // Load any attribute column configuration.
             var gridAttributeIds = _gridAttributes.Value.Select( a => a.Id ).ToList();
-            Helper.LoadFilteredAttributes( items.Select( d => d.Batch ), rockContext, a => gridAttributeIds.Contains( a.Id ) );
+            Helper.LoadFilteredAttributes( items.Select( d => d.Batch ).ToList(), rockContext, a => gridAttributeIds.Contains( a.Id ) );
 
             // Load the account summary data into memory.
             var batchIdQry = GetBatchQueryable( rockContext ).Select( b => b.Id );
@@ -328,15 +328,17 @@ namespace Rock.Blocks.Finance
                 .GroupBy( ftd => new
                 {
                     BatchId = ftd.Transaction.BatchId.Value,
-                    ftd.AccountId
+                    ftd.AccountId,
                 } )
                 .Select( grp => new
                 {
                     grp.Key.BatchId,
                     grp.Key.AccountId,
+                    Order = grp.Max( ftd => ftd.Account.Order ),
                     Amount = grp.Sum( ftd => ftd.Amount )
                 } )
                 .ToList()
+                .OrderBy( a => a.Order )
                 .GroupBy( a => a.BatchId )
                 .ToDictionary( grp => grp.Key, grp => grp.ToList() );
 
@@ -414,7 +416,7 @@ namespace Rock.Blocks.Finance
                 .AddTextField( "name", a => a.Batch.Name )
                 .AddTextField( "note", a => a.Batch.Note )
                 .AddField( "accounts", a => a.Accounts )
-                .AddField( "accountSystemCode", a => a.Batch.AccountingSystemCode )
+                .AddField( "accountingSystemCode", a => a.Batch.AccountingSystemCode )
                 .AddField( "controlAmount", a => a.Batch.ControlAmount )
                 .AddField( "controlItemCount", a => a.Batch.ControlItemCount )
                 .AddTextField( "campus", a => a.Batch.CampusId.HasValue ? CampusCache.Get( a.Batch.CampusId.Value )?.Name : null )

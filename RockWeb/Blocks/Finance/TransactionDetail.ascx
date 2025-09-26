@@ -17,7 +17,7 @@
 
             <div class="panel-heading">
                 <h1 class="panel-title">
-                    <i class="fa fa-credit-card"></i>
+                    <i class="ti ti-credit-card"></i>
                     Financial Transaction
                 </h1>
                 <div class="panel-labels">
@@ -88,7 +88,7 @@
                             <Rock:DynamicPlaceholder ID="phAttributeEdits" runat="server" />
                         </div>
                         <div class="col-md-6">
-                            <Rock:RockCheckBox ID="cbIsRefund" runat="server" Label="This is a Refund" Text="Yes" AutoPostBack="true" OnCheckedChanged="cbIsRefund_CheckedChanged" />
+                            <Rock:RockCheckBox ID="cbIsRefund" runat="server" Label="This is a Refund" AutoPostBack="true" OnCheckedChanged="cbIsRefund_CheckedChanged" />
                             <Rock:DefinedValuePicker ID="dvpRefundReasonEdit" runat="server" Label="Refund Reason" Visible="false" />
                             <Rock:RockTextBox ID="tbRefundSummaryEdit" runat="server" Label="Refund Reason Summary" TextMode="MultiLine" Rows="3" Visible="false" />
                             <h4>Images</h4>
@@ -219,8 +219,8 @@
                         <div class="pull-right">
                             <asp:LinkButton ID="lbRefund" runat="server" Text="Refund" data-shortcut-key="r" ToolTip="Alt+r" CssClass="btn btn-default margin-r-sm" CausesValidation="false" OnClick="lbRefundTransaction_Click" />
                             <asp:LinkButton ID="lbAddTransaction" runat="server" Text="Add New Transaction" data-shortcut-key="a" ToolTip="Alt+a" CssClass="btn btn-default margin-r-sm" CausesValidation="false" OnClick="lbAddTransaction_Click" />
-                            <asp:HyperLink ID="lbBack" runat="server" data-shortcut-key="arrowleft" ToolTip="Alt+🡄" CssClass="btn btn-default margin-r-sm" OnClick="lbBack_Click"><i class="fa fa-chevron-left"></i> Back</asp:HyperLink>
-                            <asp:HyperLink ID="lbNext" runat="server" data-shortcut-key="arrowright" ToolTip="Alt+🡆" CssClass="btn btn-default margin-r-sm">Next <i class="fa fa-chevron-right"></i></asp:HyperLink>
+                            <asp:HyperLink ID="lbBack" runat="server" data-shortcut-key="arrowleft" ToolTip="Alt+🡄" CssClass="btn btn-default margin-r-sm" OnClick="lbBack_Click"><i class="ti ti-chevron-left"></i> Back</asp:HyperLink>
+                            <asp:HyperLink ID="lbNext" runat="server" data-shortcut-key="arrowright" ToolTip="Alt+🡆" CssClass="btn btn-default margin-r-sm">Next <i class="ti ti-chevron-right"></i></asp:HyperLink>
                         </div>
                     </div>
 

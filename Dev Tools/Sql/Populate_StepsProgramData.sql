@@ -10,10 +10,10 @@
 declare
     -- Set this flag to indicate if Step Program data should be deleted.
     -- Enabling this option will remove all existing data from the Steps tables.
-    @deleteExistingData bit = 1
+    @deleteExistingData bit = 0
     -- Set this flag to indicate if Step Participant sample data should be deleted.
     -- Enabling this option will remove only those Step Participicants that were added by this script.
-    ,@deleteExistingSteps bit = 1
+    ,@deleteExistingSteps bit = 0
     -- Set this flag to indicate if sample data should be added.
     ,@addSampleData bit = 1
     -- Set this value to the number of people for whom steps will be created.
@@ -28,7 +28,7 @@ declare
 -- Local variables
 declare
     @createdDateTime datetime = (select convert(date, SYSDATETIME()))
-    ,@createdByPersonAliasId int = (select pa.id from PersonAlias pa inner join Person p on pa.PersonId = p.Id where p.FirstName = 'Admin' and p.LastName = 'Admin');
+    ,@createdByPersonAliasId int = (SELECT pa.Id FROM PersonAlias pa JOIN Person p ON p.Id = pa.PersonId WHERE p.Guid = 'AD28DA19-4AF1-408F-9090-2672F8376F27');
 
 set nocount on
 

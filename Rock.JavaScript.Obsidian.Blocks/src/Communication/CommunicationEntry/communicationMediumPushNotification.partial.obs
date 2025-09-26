@@ -26,17 +26,26 @@
                   @submit="onFormSubmitted">
             <div class="row">
                 <div class="col-xs-12">
-                    <RecipientPicker v-model="internalRecipients"
+                    <RecipientPicker v-if="!config.communication || !internalCommunicationListGroupGuid"
+                                     v-model="internalRecipients"
                                      v-model:disabled="internalDisabled"
                                      :isAddHidden="config.mode !== Mode.Full"
                                      :isForBulkCommunication="isBulkCommunication"
                                      label="Recipients"
                                      mediumType="push"
                                      :minimumRecipientCount="minimumRecipientCount" />
+                    <template v-else>
+                        <RockLabel>Recipients</RockLabel>
+                        <StaticFormControl :modelValue="`Communication List: ${config.communication.communicationListName} (${recipients.length} individuals)`">
+                            <template #default="{ value }">
+                                {{ value }} <RockButton btnType="link" btnSize="sm" :disabled="disabled" @click="onConvertListToRecipients">Convert List to Recipients</RockButton>
+                            </template>
+                        </StaticFormControl>
+                    </template>
                 </div>
             </div>
 
-            <div class="row">
+            <div class="d-flex row align-items-center">
                 <div class="col-sm-6">
                     <DropDownList v-model="mobileApplicationGuidAsString"
                                   blankValue="All Applications"
@@ -57,17 +66,10 @@
                 </div>
             </div>
 
-            <div class="row">
+            <div class="row d-flex align-items-center">
                 <div class="col-sm-6">
                     <RockTextBox v-model="title" label="Title" :maxLength="100" />
 
-                    <SmsMessageEditor v-model="message"
-                                      :disabled="disabled"
-                                      :editorHeight="200"
-                                      :isCountDownShown="mediumOptions.characterLimit > 0"
-                                      :countDownMaxChars="mediumOptions.characterLimit"
-                                      :mergeFields="['GlobalAttribute', 'Rock.Model.Person']"
-                                      toolbarLabel="Message" />
                 </div>
 
                 <div class="col-sm-6">
@@ -76,6 +78,17 @@
                                      :horizontal="true"
                                      :items="openActions"
                                      label="Open Action" />
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-sm-6">
+                    <SmsMessageEditor v-model="message"
+                                      :disabled="disabled"
+                                      :editorHeight="200"
+                                      :isCharacterCountShown="true"
+                                      :mergeFields="['GlobalAttribute', 'Rock.Model.Person']"
+                                      toolbarLabel="Message" />
                 </div>
             </div>
 
@@ -136,6 +149,12 @@
     </template>
 </template>
 
+<style>
+.form-group.rock-radio-button-list {
+    margin-bottom: 0;
+}
+</style>
+
 <script setup lang="ts">
     import { computed, nextTick, onMounted, PropType, ref, watch } from "vue";
     import Delay from "./delay.partial.obs";
@@ -150,7 +169,9 @@
     import RadioButtonList from "@Obsidian/Controls/radioButtonList.obs";
     import RockButton from "@Obsidian/Controls/rockButton.obs";
     import RockForm from "@Obsidian/Controls/rockForm.obs";
+    import RockLabel from "@Obsidian/Controls/rockLabel.obs";
     import SmsMessageEditor from "@Obsidian/Controls/smsMessageEditor.obs";
+    import StaticFormControl from "@Obsidian/Controls/staticFormControl.obs";
     import StructuredContentEditor from "@Obsidian/Controls/structuredContentEditor.obs";
     import Switch from "@Obsidian/Controls/switch.obs";
     import RockTextBox from "@Obsidian/Controls/textBox.obs";
@@ -171,6 +192,7 @@
     import { CommunicationEntryRecipientBag } from "@Obsidian/ViewModels/Blocks/Communication/CommunicationEntry/communicationEntryRecipientBag";
     import { CommunicationEntryMediumOptionsBaseBag } from "@Obsidian/ViewModels/Blocks/Communication/CommunicationEntry/communicationEntryMediumOptionsBaseBag";
     import { CommunicationEntryPushMediumOptionsBag } from "@Obsidian/ViewModels/Blocks/Communication/CommunicationEntry/communicationEntryPushMediumOptionsBag";
+    import { CommunicationEntryPushNotificationOptionsBag } from "@Obsidian/ViewModels/Blocks/Communication/CommunicationEntry/communicationEntryPushNotificationOptionsBag";
     import { CommunicationEntryTestResponseBag } from "@Obsidian/ViewModels/Blocks/Communication/CommunicationEntry/communicationEntryTestResponseBag";
     import { CommunicationEntrySendResponseBag } from "@Obsidian/ViewModels/Blocks/Communication/CommunicationEntry/communicationEntrySendResponseBag";
     import { CommunicationEntrySaveRequestBag } from "@Obsidian/ViewModels/Blocks/Communication/CommunicationEntry/communicationEntrySaveRequestBag";
@@ -200,6 +222,11 @@
         scheduleSendIsoString: {
             type: String as PropType<string>,
             required: true
+        },
+
+        communicationListGroupGuid: {
+            type: String as PropType<Guid | null | undefined>,
+            required: true
         }
     });
 
@@ -220,6 +247,8 @@
         (e: "update:isBulkCommunication", value: boolean): void;
         /** Emits an event indicating the scheduleSendIsoString state should be updated. */
         (e: "update:scheduleSendIsoString", value: string): void;
+        /** Emits an event indicating the communication list unique identifier should be updated. */
+        (e: "update:communicationListGroupGuid", value: Guid | null | undefined): void;
     }>();
 
     const config = useConfigurationValues<CommunicationEntryInitializationBox>();
@@ -242,6 +271,7 @@
     const internalDisabled = useVModelPassthrough(props, "disabled", emit);
     const internalIsBulkCommunication = useVModelPassthrough(props, "isBulkCommunication", emit);
     const internalScheduleSendIsoString = useVModelPassthrough(props, "scheduleSendIsoString", emit);
+    const internalCommunicationListGroupGuid = useVModelPassthrough(props, "communicationListGroupGuid", emit);
     const minimumRecipientCount = ref<number>(0);
     const mediumOptions = ref<CommunicationEntryPushMediumOptionsBag | null>(isPushMediumOptions(config.mediumOptions) ? config.mediumOptions : null);
     const isLoadingMediumOptions = ref<boolean>(true);
@@ -253,7 +283,7 @@
     const communicationGuid = ref<Guid>(template.value?.communicationGuid ?? emptyGuid);
     const message = ref<string>(template.value?.pushMessage ?? "");
     const disabledMessage = ref<string | null | undefined>();
-    const openAction = ref<string>(getOpenAction(template.value?.pushOpenAction));
+    const openAction = ref<string>(getOpenAction(template.value?.pushOpenAction, template.value?.pushData));
     const title = ref<string>(template.value?.pushTitle ?? "");
     const mobileApplicationGuidAsString = ref<string>(template.value?.pushData?.mobileApplicationGuid ?? "");
     const url = ref<string>(template.value?.pushData?.linkToPageUrl ?? "");
@@ -376,11 +406,16 @@
         }
     }
 
-    function getOpenAction(pushOpenAction: PushOpenActionType | null | undefined): OpenAction {
+    function getOpenAction(pushOpenAction: PushOpenActionType | null | undefined, pushData?: CommunicationEntryPushNotificationOptionsBag | null | undefined): OpenAction {
         if (pushOpenAction ?? null !== null) {
             switch (pushOpenAction) {
                 case PushOpenActionType.LinkToMobilePage:
-                    return OpenAction.SpecificPage;
+                    if (pushData?.mobilePage) {
+                        return OpenAction.SpecificPage;
+                    }
+                    else {
+                        return OpenAction.OpenHomepage;
+                    }
                 case PushOpenActionType.LinkToUrl:
                     return OpenAction.LinkToUrl;
                 case PushOpenActionType.ShowDetails:
@@ -488,6 +523,7 @@
             const bag: CommunicationEntrySaveRequestBag = {
                 isBulkCommunication: props.isBulkCommunication,
                 communicationGuid: communicationGuid.value,
+                communicationListGroupGuid: internalCommunicationListGroupGuid.value,
                 mediumEntityTypeGuid: EntityType.CommunicationMediumPushNotification,
                 status: CommunicationStatus.Transient,
                 futureSendDateTime: props.scheduleSendIsoString,
@@ -496,6 +532,7 @@
                 pushOpenMessageJson: pushOpenMessageJson.value,
                 pushTitle: title.value,
                 recipients: props.recipients,
+                excludeDuplicateRecipientAddress: false
             };
 
             const result = await invokeBlockAction<CommunicationEntrySaveResponseBag>("Save", { bag });
@@ -523,6 +560,7 @@
             const bag: CommunicationEntrySendRequestBag = {
                 isBulkCommunication: props.isBulkCommunication,
                 communicationGuid: communicationGuid.value,
+                communicationListGroupGuid: internalCommunicationListGroupGuid.value,
                 mediumEntityTypeGuid: EntityType.CommunicationMediumPushNotification,
                 status: CommunicationStatus.Transient,
                 futureSendDateTime: props.scheduleSendIsoString,
@@ -531,6 +569,7 @@
                 pushOpenMessageJson: pushOpenMessageJson.value,
                 pushTitle: title.value,
                 recipients: props.recipients,
+                excludeDuplicateRecipientAddress: false
             };
 
             const result = await invokeBlockAction<CommunicationEntrySendResponseBag>("Send", { bag });
@@ -560,6 +599,7 @@
             const bag: CommunicationEntryTestRequestBag = {
                 isBulkCommunication: props.isBulkCommunication,
                 communicationGuid: communicationGuid.value,
+                communicationListGroupGuid: internalCommunicationListGroupGuid.value,
                 mediumEntityTypeGuid: EntityType.CommunicationMediumPushNotification,
                 status: CommunicationStatus.Transient,
                 futureSendDateTime: props.scheduleSendIsoString,
@@ -568,6 +608,7 @@
                 pushOpenMessageJson: pushOpenMessageJson.value,
                 pushTitle: title.value,
                 recipients: props.recipients,
+                excludeDuplicateRecipientAddress: false
             };
 
             const result = await invokeBlockAction<CommunicationEntryTestResponseBag>("Test", { bag });
@@ -616,6 +657,15 @@
     //#endregion
 
     //#region Event Handlers
+
+    /**
+     * Converts the communication list to a regular list of recipients.
+     */
+    function onConvertListToRecipients(): void {
+        // We already have the communication list recipients in memory.
+        // Just remove the unique identifier link and trigger a UI update.
+        internalCommunicationListGroupGuid.value = null;
+    }
 
     /**
      * Event handler for the form validation being changed.
@@ -699,7 +749,7 @@
         title.value = template.pushTitle ?? "";
         message.value = template.pushMessage ?? "";
         if ((template.pushOpenAction ?? null) !== null) {
-            openAction.value = getOpenAction(template.pushOpenAction);
+            openAction.value = getOpenAction(template.pushOpenAction, template.pushData);
         }
 
         mobileApplicationGuidAsString.value = "";
@@ -748,6 +798,11 @@
             }
 
             mediumOptions.value = response.data;
+
+            // Set the open action if it is currently set to No Action.
+            if (openAction.value === OpenAction.NoAction) {
+                openAction.value = getOpenAction(null);
+            }
         }
         finally {
             isLoadingMediumOptions.value = false;

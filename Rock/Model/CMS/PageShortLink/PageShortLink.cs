@@ -30,6 +30,7 @@ namespace Rock.Model
     [RockDomain( "CMS" )]
     [Table( "PageShortLink" )]
     [DataContract]
+    [CodeGenerateRest( DisableEntitySecurity = true )]
     [Rock.SystemGuid.EntityTypeGuid( "83D8C6DF-1D53-438B-93B2-75A2038BBEE6" )]
     public partial class PageShortLink : Model<PageShortLink>, IHasAdditionalSettings
     {
@@ -67,7 +68,6 @@ namespace Rock.Model
         public string Url { get; set; }
 
         /// <inheritdoc/>
-        [RockInternal( "1.16.6" )]
         [DataMember]
         public string AdditionalSettingsJson { get; set; }
 
@@ -90,6 +90,12 @@ namespace Rock.Model
         /// </summary>
         [DataMember]
         public int? CategoryId { get; set; }
+
+        /// <summary>
+        /// Gets or sets a value indicating whether the short link is pinned.
+        /// </summary>
+        [DataMember]
+        public bool IsPinned { get; set; }
 
         #endregion Entity Properties
 
@@ -123,7 +129,8 @@ namespace Rock.Model
         {
             get
             {
-                string domain = new SiteService( new RockContext() ).GetDefaultDomainUri( this.SiteId ).ToString();
+                string domain = this.Site?.DefaultDomainUri?.ToString()
+                    ?? new SiteService( new RockContext() ).GetDefaultDomainUri( this.SiteId ).ToString();
                 return domain.EnsureTrailingForwardslash() + this.Token;
             }
         }

@@ -40,8 +40,8 @@ namespace Rock.Blocks.Core
     [DisplayName( "Scheduled Job Detail" )]
     [Category( "Core" )]
     [Description( "Displays the details of a particular service job." )]
-    [IconCssClass( "fa fa-question" )]
-    // [SupportedSiteTypes( Model.SiteType.Web )]
+    [IconCssClass( "ti ti-question-mark" )]
+    [SupportedSiteTypes( Model.SiteType.Web )]
 
     #region Block Attributes
 
@@ -95,7 +95,7 @@ namespace Rock.Blocks.Core
         {
             var options = new ServiceJobDetailOptionsBag
             {
-                JobTypeOptions = ServiceJobService.GetJobTypes(),
+                JobTypeOptions = ServiceJobService.GetJobTypeOptions(),
                 NotificationStatusOptions = GetNotificationStatusOptions()
             };
 
@@ -229,7 +229,7 @@ namespace Rock.Blocks.Core
             }
 
             var bag = GetCommonEntityBag( entity );
-            bag.LoadAttributesAndValuesForPublicView( entity, RequestContext.CurrentPerson );
+            bag.LoadAttributesAndValuesForPublicView( entity, RequestContext.CurrentPerson, enforceSecurity: false );
 
             return bag;
         }
@@ -248,7 +248,7 @@ namespace Rock.Blocks.Core
 
             var bag = GetCommonEntityBag( entity );
 
-            bag.LoadAttributesAndValuesForPublicEdit( entity, RequestContext.CurrentPerson );
+            bag.LoadAttributesAndValuesForPublicEdit( entity, RequestContext.CurrentPerson, enforceSecurity: false );
 
             return bag;
         }
@@ -306,7 +306,7 @@ namespace Rock.Blocks.Core
                 {
                     entity.LoadAttributes( rockContext );
 
-                    entity.SetPublicAttributeValues( box.Entity.AttributeValues, RequestContext.CurrentPerson );
+                    entity.SetPublicAttributeValues( box.Entity.AttributeValues, RequestContext.CurrentPerson, enforceSecurity: false );
                 } );
 
             return true;

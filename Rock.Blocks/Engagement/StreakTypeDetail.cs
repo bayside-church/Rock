@@ -42,7 +42,7 @@ namespace Rock.Blocks.Engagement
     [DisplayName( "Streak Type Detail" )]
     [Category( "Engagement" )]
     [Description( "Displays the details of a particular streak type." )]
-    [IconCssClass( "fa fa-question" )]
+    [IconCssClass( "ti ti-question-mark" )]
     [SupportedSiteTypes( Model.SiteType.Web )]
 
     #region Block Attributes
@@ -307,7 +307,7 @@ namespace Rock.Blocks.Engagement
             }
             bag.StructureTypeDisplay = structureTypeString;
 
-            bag.LoadAttributesAndValuesForPublicView( entity, RequestContext.CurrentPerson );
+            bag.LoadAttributesAndValuesForPublicView( entity, RequestContext.CurrentPerson, enforceSecurity: true );
 
             return bag;
         }
@@ -325,7 +325,7 @@ namespace Rock.Blocks.Engagement
             }
 
             var bag = GetCommonEntityBag( entity, rockContext );
-            bag.LoadAttributesAndValuesForPublicEdit( entity, RequestContext.CurrentPerson );
+            bag.LoadAttributesAndValuesForPublicEdit( entity, RequestContext.CurrentPerson, enforceSecurity: true );
 
             return bag;
         }
@@ -438,7 +438,7 @@ namespace Rock.Blocks.Engagement
                 {
                     entity.LoadAttributes( rockContext );
 
-                    entity.SetPublicAttributeValues( box.Entity.AttributeValues, RequestContext.CurrentPerson );
+                    entity.SetPublicAttributeValues( box.Entity.AttributeValues, RequestContext.CurrentPerson, enforceSecurity: true );
                 } );
 
             return true;

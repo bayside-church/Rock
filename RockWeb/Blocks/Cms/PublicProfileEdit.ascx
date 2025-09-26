@@ -6,7 +6,7 @@
         <div class="panel panel-block">
             <div class="panel-heading">
                 <h1 class="panel-title">
-                    <i class="fa fa-user"></i>
+                    <i class="ti ti-user"></i>
                     My Account
                 </h1>
             </div>
@@ -28,7 +28,7 @@
                     <div class="row">
 
                         <div class="col-md-3">
-                            <Rock:ImageEditor ID="imgPhoto" runat="server" Label="Photo" ButtonText="<i class='fa fa-camera'></i>" BinaryFileTypeGuid="03BD8476-8A9F-4078-B628-5B538F967AFC" />
+                            <Rock:ImageEditor ID="imgPhoto" runat="server" Label="Photo" ButtonText="<i class='ti ti-camera'></i>" BinaryFileTypeGuid="03BD8476-8A9F-4078-B628-5B538F967AFC" />
                         </div>
 
                         <div class="col-md-9">
@@ -50,15 +50,15 @@
                             </asp:Panel>
                             <div class="row form-row">
                                 <div class="col-md-6">
-                                    <Rock:DataTextBox ID="tbFirstName" runat="server" SourceTypeName="Rock.Model.Person, Rock" PropertyName="FirstName" Required="true" />
+                                    <Rock:DataTextBox ID="tbFirstName" runat="server" SourceTypeName="Rock.Model.Person, Rock" PropertyName="FirstName" Required="true" NoSpecialCharacters="true" NoEmojisOrSpecialFonts="true" />
                                 </div>
                                 <div class="col-md-6">
-                                    <Rock:DataTextBox ID="tbLastName" runat="server" SourceTypeName="Rock.Model.Person, Rock" PropertyName="LastName" Required="true" />
+                                    <Rock:DataTextBox ID="tbLastName" runat="server" SourceTypeName="Rock.Model.Person, Rock" PropertyName="LastName" Required="true" NoSpecialCharacters="true" NoEmojisOrSpecialFonts="true" />
                                 </div>
                             </div>
                             <div class="row form-row">
                                 <div class="col-md-6">
-                                    <Rock:DataTextBox ID="tbNickName" runat="server" SourceTypeName="Rock.Model.Person, Rock" PropertyName="NickName" />
+                                    <Rock:DataTextBox ID="tbNickName" runat="server" SourceTypeName="Rock.Model.Person, Rock" PropertyName="NickName" NoSpecialCharacters="true" NoEmojisOrSpecialFonts="true" />
                                 </div>
                                 <div class="col-md-6">
                                     <Rock:DefinedValuePicker ID="dvpSuffix" CssClass="input-width-md" runat="server" Label="Suffix" />
@@ -66,7 +66,7 @@
                             </div>
                             <div class="row form-row">
                                 <div class="col-md-6">
-                                    <Rock:BirthdayPicker ID="bpBirthDay" runat="server" Label="Birthday" />
+                                    <Rock:BirthdayPicker ID="bpBirthDay" runat="server" Label="Birth Date" />
                                 </div>
                                 <div class="col-md-6">
                                     <%-- This YearPicker is needed for the GradePicker to work --%>
@@ -121,7 +121,7 @@
                                             <div class="controls">
                                                 <asp:HiddenField ID="hfPhoneType" runat="server" Value='<%# Eval("NumberTypeValueId")  %>' />
                                                 <Rock:PhoneNumberBox ID="pnbPhone" runat="server" CountryCode='<%# Eval("CountryCode")  %>' Number='<%# Eval("NumberFormatted")  %>' />
-                                                <Rock:RockCheckBox ID="cbSms" runat="server" Text="I would like to receive important text messages" Checked='<%# (bool)Eval("IsMessagingEnabled") %>' ContainerCssClass="mb-0" CssClass="js-sms-number" Visible='<%# (int?)Eval("NumberTypeValueId") == Rock.Web.Cache.DefinedValueCache.GetId( new Guid(Rock.SystemGuid.DefinedValue.PERSON_PHONE_TYPE_MOBILE ) ) %>' />
+                                                <Rock:RockCheckBox ID="cbSms" runat="server" Checked='<%# (bool)Eval("IsMessagingEnabled") %>' ContainerCssClass="mb-0" CssClass="js-sms-number" Visible='<%# (int?)Eval("NumberTypeValueId") == Rock.Web.Cache.DefinedValueCache.GetId( new Guid(Rock.SystemGuid.DefinedValue.PERSON_PHONE_TYPE_MOBILE ) ) %>' />
                                             </div>
                                         </div>
                                     </ItemTemplate>
@@ -129,7 +129,7 @@
                             </asp:Panel>
 
                             <div class="form-section">
-                                <Rock:DataTextBox ID="tbEmail" PrependText="<i class='fa fa-envelope'></i>" FormGroupCssClass="email-box" runat="server" SourceTypeName="Rock.Model.Person, Rock" PropertyName="Email" Label="Email Address" />
+                                <Rock:DataTextBox ID="tbEmail" PrependText="<i class='ti ti-mail'></i>" FormGroupCssClass="email-box" runat="server" SourceTypeName="Rock.Model.Person, Rock" PropertyName="Email" Label="Email Address" />
 
                                 <Rock:RockRadioButtonList ID="rblEmailPreference" runat="server" RepeatDirection="Horizontal" Label="Email Preference">
                                     <asp:ListItem Text="All Emails" Value="EmailAllowed" />
@@ -150,7 +150,7 @@
                                     <span class="control-label pull-left">
                                         <asp:Literal ID="lAddressTitle" runat="server" /></span>
                                     <asp:Literal ID="lPreviousAddress" runat="server" />
-                                    <asp:LinkButton ID="lbMoved" CssClass="btn btn-default btn-xs pull-right" runat="server" OnClick="lbMoved_Click"><i class="fa fa-truck"></i> Moved</asp:LinkButton>
+                                    <asp:LinkButton ID="lbMoved" CssClass="btn btn-default btn-xs pull-right" runat="server" OnClick="lbMoved_Click"><i class="ti ti-truck"></i> Moved</asp:LinkButton>
                                 </div>
                                 <asp:HiddenField ID="hfStreet1" runat="server" />
                                 <asp:HiddenField ID="hfStreet2" runat="server" />

@@ -54,7 +54,7 @@
 </template>
 
 <script setup lang="ts">
-    import { computed, onMounted, provide, readonly, ref, watch } from "vue";
+    import { computed, onMounted, onUnmounted, provide, readonly, ref, watch } from "vue";
     import RegistrationEntryIntro from "./RegistrationEntry/intro.partial.obs";
     import RegistrationEntryPayment from "./RegistrationEntry/payment.partial.obs";
     import RegistrationEntryRegistrants from "./RegistrationEntry/registrants.partial.obs";
@@ -93,6 +93,7 @@
     };
 
     const invokeBlockAction = useInvokeBlockAction();
+    const reloadBlock = useReloadBlock();
     const config = useConfigurationValues<RegistrationEntryInitializationBox>();
     const notFound = !!config.registrationInstanceNotFoundMessage || !config.registrationAttributesStart;
     const notFoundMessage = config.registrationInstanceNotFoundMessage || "The selected registration could not be found or is no longer active.";
@@ -493,8 +494,9 @@
             registrationEntryState.value.currentStep = Step.RegistrationEndForm;
         }
         else {
+            const lastRegistrantIndex = (registrationEntryState.value.registrants?.length ?? 0) - 1;
             const lastFormIndex = (registrationEntryState.value.viewModel.registrantForms?.length ?? 0) - 1;
-
+            registrationEntryState.value.currentRegistrantIndex = lastRegistrantIndex;
             registrationEntryState.value.currentRegistrantFormIndex = lastFormIndex;
             registrationEntryState.value.currentStep = Step.PerRegistrantForms;
         }
@@ -529,6 +531,13 @@
         registrationEntryState.value.navBack = false;
         scrollToTopAfterNextRender();
     }
+
+    const handlePageShow = (e: PageTransitionEvent): void => {
+        const isBackForward = e.persisted || (window.performance?.getEntriesByType("navigation")[0] as PerformanceNavigationTiming)?.type === "back_forward";
+        if (isBackForward) {
+            reloadBlock();
+        }
+    };
 
     // #endregion
 
@@ -603,6 +612,11 @@
         if (config.loginRequiredToRegister && !currentPerson.value) {
             store.redirectToLogin();
         }
+        window.addEventListener("pageshow", handlePageShow);
+    });
+
+    onUnmounted(() => {
+        window.removeEventListener("pageshow", handlePageShow);
     });
 
     onConfigurationValuesChanged(useReloadBlock());

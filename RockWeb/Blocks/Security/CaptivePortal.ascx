@@ -8,18 +8,18 @@
         <asp:Panel ID="pnlDetails" CssClass="panel panel-block" runat="server">
 
             <div class="panel-heading">
-                <h1 class="panel-title"><i class="fa fa-wifi"></i> Wifi Welcome</h1>
+                <h1 class="panel-title"><i class="ti ti-wifi"></i> Wifi Welcome</h1>
             </div>
 
             <div class="panel-body">
 
                 <div class="row">
                     <div class="col-sm-6">
-                        <Rock:RockTextBox ID="tbFirstName" runat="server" Required="false" Label="First Name" ValidationGroup="CaptivePortal" />
+                        <Rock:RockTextBox ID="tbFirstName" runat="server" Required="false" Label="First Name" ValidationGroup="CaptivePortal" NoSpecialCharacters="true" NoEmojisOrSpecialFonts="true" />
                     </div>
 
                     <div class="col-sm-6">
-                        <Rock:RockTextBox ID="tbLastName" runat="server" Required="false" Label="Last Name" ValidationGroup="CaptivePortal" />
+                        <Rock:RockTextBox ID="tbLastName" runat="server" Required="false" Label="Last Name" ValidationGroup="CaptivePortal" NoSpecialCharacters="true" NoEmojisOrSpecialFonts="true" />
                     </div>
                 </div>
 

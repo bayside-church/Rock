@@ -38,7 +38,7 @@ namespace Rock.Web.UI.Controls
         {
             ItemRestUrlExtraParams = "?getCategorizedItems=true&showUnnamedEntityItems=false&showCategoriesThatHaveNoChildren=false";
             ItemRestUrlExtraParams += "&entityTypeId=" + EntityTypeCache.Get( Rock.SystemGuid.EntityType.REGISTRATION_TEMPLATE.AsGuid() ).Id;
-            this.IconCssClass = "fa fa-calendar";
+            this.IconCssClass = "ti ti-calendar";
             base.OnInit( e );
         }
 
@@ -94,7 +94,7 @@ namespace Rock.Web.UI.Controls
 
                         while ( parentCategory != null )
                         {
-                            parentCategoryIds += parentCategory.Id.ToString() + ",";
+                            parentCategoryIds = parentCategory.Id + "," + parentCategoryIds;
                             parentCategory = parentCategory.ParentCategory;
                         }
                     }

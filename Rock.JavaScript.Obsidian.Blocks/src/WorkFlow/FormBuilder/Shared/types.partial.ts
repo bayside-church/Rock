@@ -332,6 +332,11 @@ export type FormGeneral = {
      */
     template?: Guid | null;
 
+    /**
+     * The unique slug for the workflow type.
+     */
+    slug?: string | null;
+
     /** The category that this form belongs to for organization purposes. */
     category?: ListItemBag | null;
 
@@ -360,7 +365,7 @@ export type FormCompletionAction = {
     type?: FormCompletionActionType;
 
     /**
-     * contains the HTML message content that should be displayed to the
+     * Contains the text message content that should be displayed to the
      * individual after the form has been submitted.
      */
     message?: string | null;
@@ -446,6 +451,12 @@ export type FormPersonEntry = {
     recordStatus?: Guid | null;
 
     /**
+     * The DefinedValue unique identifier that specifies the value used
+     * for Person.RecordSourceValue when a new Person is created.
+     */
+    recordSource?: Guid | null;
+
+    /**
      * The DefinedValue unique identifier that specifies the value used for
      * Person.ConnectionStatusValue when a new Person is created.
      */
@@ -456,6 +467,12 @@ export type FormPersonEntry = {
      * The campus picker will always be required if it is visible.
      */
     showCampus?: boolean;
+
+    /**
+     * Indicates if the campus picker on the person entry form should include Inactive Campuses.
+     * Defaulting to true as it was the existing behavior before this option was introduced.
+     */
+    includeInactiveCampus?: boolean;
 
     /**
      * The DefinedValue unique identifier for the campus type used to filter

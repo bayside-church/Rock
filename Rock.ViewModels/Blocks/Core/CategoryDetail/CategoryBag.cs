@@ -27,6 +27,16 @@ namespace Rock.ViewModels.Blocks.Core.CategoryDetail
     public class CategoryBag : EntityBagBase
     {
         /// <summary>
+        /// Gets or sets the CategoryId of the currently selected Category.
+        /// </summary>
+        public int CategoryId { get; set; }
+
+        /// <summary>
+        /// If <c>true</c> all AttributeValue records for the Category will be deleted.
+        /// </summary>
+        public bool DeleteAttributeValues { get; set; }
+
+        /// <summary>
         /// Gets or sets the description.
         /// </summary>
         public string Description { get; set; }
@@ -80,5 +90,6 @@ namespace Rock.ViewModels.Blocks.Core.CategoryDetail
         /// Gets or sets if the delete option should be shown on the remote device.
         /// </summary>
         public bool IsDeletable { get; set; }
+
     }
 }

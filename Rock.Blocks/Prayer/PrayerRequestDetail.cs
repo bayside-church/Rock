@@ -18,11 +18,13 @@
 using Rock.Attribute;
 using Rock.Constants;
 using Rock.Data;
+using Rock.Enums.AI;
 using Rock.Model;
 using Rock.Security;
 using Rock.ViewModels.Blocks;
 using Rock.ViewModels.Blocks.Prayer.PrayerRequestDetail;
 using Rock.Web.Cache;
+
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -38,8 +40,8 @@ namespace Rock.Blocks.Prayer
     [DisplayName( "Prayer Request Detail" )]
     [Category( "Prayer" )]
     [Description( "Displays the details of a particular prayer request." )]
-    [IconCssClass( "fa fa-question" )]
-    // [SupportedSiteTypes( Model.SiteType.Web )]
+    [IconCssClass( "ti ti-question-mark" )]
+    [SupportedSiteTypes( Model.SiteType.Web )]
 
     #region Block Attributes
 
@@ -91,6 +93,21 @@ namespace Rock.Blocks.Prayer
         Category = "",
         Order = 6 )]
 
+    [BooleanField(
+        "Enable AI Disclaimer",
+        Description = "If enabled and the PrayerRequest Text was sent to an AI automation the configured AI Disclaimer will be shown.",
+        DefaultBooleanValue = true,
+        Key = AttributeKey.EnableAIDisclaimer,
+        Order = 7 )]
+
+    [TextField(
+        "AI Disclaimer",
+        Description = "The message to display indicating the Prayer Request text may have been modified by an AI automation.",
+        IsRequired = false,
+        DefaultValue = "This request may have been modified by an AI for formatting and privacy. Please be aware that errors may be present.",
+        Key = AttributeKey.AIDisclaimer,
+        Order = 8 )]
+
     #endregion
 
     [Rock.SystemGuid.EntityTypeGuid( "d1e21128-c831-4535-b8df-0ec928dcbba4" )]
@@ -102,6 +119,7 @@ namespace Rock.Blocks.Prayer
         private static class PageParameterKey
         {
             public const string PrayerRequestId = "PrayerRequestId";
+            public const string PersonId = "PersonId";
         }
 
         private static class NavigationUrlKey
@@ -122,6 +140,8 @@ namespace Rock.Blocks.Prayer
             public const string SetCurrentPersonToRequester = "SetCurrentPersonToRequester";
             public const string DefaultCategory = "DefaultCategory";
             public const string ExpireDays = "ExpireDays";
+            public const string EnableAIDisclaimer = "EnableAIDisclaimer";
+            public const string AIDisclaimer = "AIDisclaimer";
         }
 
         #endregion
@@ -157,7 +177,9 @@ namespace Rock.Blocks.Prayer
             var options = new PrayerRequestDetailOptionsBag
             {
                 IsLastNameRequired = GetAttributeValue( AttributeKey.RequireLastName ).AsBooleanOrNull() ?? true,
-                IsCampusRequired = GetAttributeValue( AttributeKey.RequireCampus ).AsBooleanOrNull() ?? false
+                IsCampusRequired = GetAttributeValue( AttributeKey.RequireCampus ).AsBooleanOrNull() ?? false,
+                IsAIDisclaimerEnabled = GetAttributeValue( AttributeKey.EnableAIDisclaimer ).AsBooleanOrNull() ?? true,
+                AIDisclaimer = GetAttributeValue( AttributeKey.AIDisclaimer )
             };
             return options;
         }
@@ -224,13 +246,43 @@ namespace Rock.Blocks.Prayer
                     box.Entity.AllowComments = GetAttributeValue( AttributeKey.DefaultAllowCommentsChecked ).AsBooleanOrNull() ?? true;
                     box.Entity.IsPublic = GetAttributeValue( AttributeKey.DefaultToPublic ).AsBoolean();
 
-                    // if default the requester to the current person based on the block attribute
-                    var CurrentPerson = this.GetCurrentPerson();
-                    if ( CurrentPerson != null && GetAttributeValue( AttributeKey.SetCurrentPersonToRequester ).AsBoolean() )
+                    /*
+                        7/15/2025 - MSE
+
+                        We now set `IsUrgent` to false by default to prevent it from being null when saving a Prayer Request.
+                        This ensures consistent sorting in blocks and Lava when urgency is used as a sort field.
+
+                        We chose not to create a migration to update existing null values to false.
+
+                        Reason: Null `IsUrgent` values caused Prayer Requests to sort incorrectly.
+                        https://github.com/SparkDevNetwork/Rock/issues/6373
+                    */
+                    box.Entity.IsUrgent = false;
+
+                    // Check for PersonId page 
+                    var personId = RequestContext.PageParameterAsId( PageParameterKey.PersonId );
+                    if ( personId > 0 )
                     {
-                        box.Entity.RequestedByPersonAlias = CurrentPerson.PrimaryAlias.ToListItemBag();
-                        box.Entity.FirstName = CurrentPerson.NickName;
-                        box.Entity.LastName = CurrentPerson.LastName;
+                        var person = new PersonService( rockContext ).Get( personId );
+                        if ( person != null )
+                        {
+                            box.Entity.RequestedByPersonAlias = person.PrimaryAlias.ToListItemBag();
+                            box.Entity.FirstName = person.NickName;
+                            box.Entity.LastName = person.LastName;
+                            box.Entity.Email = person.Email;
+                        }
+                    }
+                    else
+                    {
+                        // if no PersonId is specified, then set the current person as the requester if the block setting is enabled
+                        var CurrentPerson = this.GetCurrentPerson();
+                        if ( CurrentPerson != null && GetAttributeValue( AttributeKey.SetCurrentPersonToRequester ).AsBoolean() )
+                        {
+                            box.Entity.RequestedByPersonAlias = CurrentPerson.PrimaryAlias.ToListItemBag();
+                            box.Entity.FirstName = CurrentPerson.NickName;
+                            box.Entity.LastName = CurrentPerson.LastName;
+                            box.Entity.Email = CurrentPerson.Email;
+                        }
                     }
 
                     box.SecurityGrantToken = GetSecurityGrantToken( entity );
@@ -254,6 +306,17 @@ namespace Rock.Blocks.Prayer
                 return null;
             }
 
+            var flags = Enum.GetValues( typeof( ModerationFlags ) );
+            var moderationFlags = new List<string>();
+
+            foreach ( ModerationFlags flag in flags )
+            {
+                if ( entity.ModerationFlags.HasFlag( flag ) && flag != ModerationFlags.None )
+                {
+                    moderationFlags.Add( flag.ToString().SplitCase() );
+                }
+            }
+
             return new PrayerRequestBag
             {
                 IdKey = entity.IdKey,
@@ -274,7 +337,10 @@ namespace Rock.Blocks.Prayer
                 PrayerCount = entity.PrayerCount,
                 RequestedByPersonAlias = entity.RequestedByPersonAlias.ToListItemBag(),
                 Text = entity.Text,
-                FullName = entity.FullName
+                FullName = entity.FullName,
+                ModerationFlags = moderationFlags,
+                OriginalRequest = entity.OriginalRequest,
+                Sentiment = entity.SentimentEmotionValueId.HasValue ? DefinedValueCache.GetName( entity.SentimentEmotionValueId ) : string.Empty
             };
         }
 
@@ -293,7 +359,7 @@ namespace Rock.Blocks.Prayer
             var bag = GetCommonEntityBag( entity );
             bag.Text = entity.Text.ScrubHtmlAndConvertCrLfToBr();
             bag.Answer = entity.Answer.ScrubHtmlAndConvertCrLfToBr();
-            bag.LoadAttributesAndValuesForPublicView( entity, RequestContext.CurrentPerson );
+            bag.LoadAttributesAndValuesForPublicView( entity, RequestContext.CurrentPerson, enforceSecurity: false );
 
             return bag;
         }
@@ -312,7 +378,7 @@ namespace Rock.Blocks.Prayer
 
             var bag = GetCommonEntityBag( entity );
 
-            bag.LoadAttributesAndValuesForPublicEdit( entity, RequestContext.CurrentPerson );
+            bag.LoadAttributesAndValuesForPublicEdit( entity, RequestContext.CurrentPerson, enforceSecurity: false );
 
             // If there is no email for the prayer request detail entity, set it to the requester's 
             if ( string.IsNullOrWhiteSpace( entity.Email ) && entity.RequestedByPersonAlias != null )
@@ -403,7 +469,7 @@ namespace Rock.Blocks.Prayer
                 {
                     entity.LoadAttributes( rockContext );
 
-                    entity.SetPublicAttributeValues( box.Entity.AttributeValues, RequestContext.CurrentPerson );
+                    entity.SetPublicAttributeValues( box.Entity.AttributeValues, RequestContext.CurrentPerson, enforceSecurity: false );
                 } );
 
             return true;
@@ -426,9 +492,17 @@ namespace Rock.Blocks.Prayer
         /// <returns>A dictionary of key names and URL values.</returns>
         private Dictionary<string, string> GetBoxNavigationUrls()
         {
+            var qryParams = new Dictionary<string, string>();
+            var personId = PageParameter( PageParameterKey.PersonId );
+
+            if ( !string.IsNullOrWhiteSpace( personId ) )
+            {
+                qryParams.Add( PageParameterKey.PersonId, personId );
+            }
+
             return new Dictionary<string, string>
             {
-                [NavigationUrlKey.ParentPage] = this.GetParentPageUrl()
+                [NavigationUrlKey.ParentPage] = this.GetParentPageUrl( qryParams )
             };
         }
 
@@ -576,10 +650,18 @@ namespace Rock.Blocks.Prayer
                     return actionError;
                 }
 
+                var wasApproved = entity.IsApproved ?? false;
+
                 // Update the entity instance from the information in the bag.
                 if ( !UpdateEntityFromBox( entity, box, rockContext ) )
                 {
                     return ActionBadRequest( "Invalid data." );
+                }
+
+                if (entity.IsApproved == true && !wasApproved)
+                {
+                    entity.ApprovedOnDateTime = RockDateTime.Now;
+                    entity.ApprovedByPersonAliasId = RequestContext.CurrentPerson?.PrimaryAliasId;
                 }
 
                 // Ensure everything is valid before saving.
@@ -596,12 +678,20 @@ namespace Rock.Blocks.Prayer
                     entity.SaveAttributeValues( rockContext );
                 } );
 
-                if ( isNew )
+                var qryParams = new Dictionary<string, string>();
+                var personId = PageParameter( PageParameterKey.PersonId );
+
+                if ( !string.IsNullOrWhiteSpace( personId ) )
                 {
-                    return ActionContent( System.Net.HttpStatusCode.Created, this.GetParentPageUrl() );
+                    qryParams.Add( PageParameterKey.PersonId, personId );
                 }
 
-                return ActionContent( System.Net.HttpStatusCode.OK, this.GetParentPageUrl() );
+                if ( isNew )
+                {
+                    return ActionContent( System.Net.HttpStatusCode.Created, this.GetParentPageUrl( qryParams ) );
+                }
+
+                return ActionContent( System.Net.HttpStatusCode.OK, this.GetParentPageUrl( qryParams ) );
             }
         }
 
@@ -631,7 +721,15 @@ namespace Rock.Blocks.Prayer
                 entityService.Delete( entity );
                 rockContext.SaveChanges();
 
-                return ActionOk( this.GetParentPageUrl() );
+                var qryParams = new Dictionary<string, string>();
+                var personId = PageParameter( PageParameterKey.PersonId );
+
+                if ( !string.IsNullOrWhiteSpace( personId ) )
+                {
+                    qryParams.Add( PageParameterKey.PersonId, personId );
+                }
+
+                return ActionOk( this.GetParentPageUrl( qryParams ) );
             }
         }
 

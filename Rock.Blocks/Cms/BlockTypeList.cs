@@ -42,8 +42,8 @@ namespace Rock.Blocks.Cms
     [DisplayName( "Block Type List" )]
     [Category( "CMS" )]
     [Description( "Displays a list of block types." )]
-    [IconCssClass( "fa fa-list" )]
-    // [SupportedSiteTypes( Model.SiteType.Web )]
+    [IconCssClass( "ti ti-list" )]
+    [SupportedSiteTypes( Model.SiteType.Web )]
 
     [LinkedPage( "Detail Page",
         Description = "The page that will show the block type details.",
@@ -71,8 +71,6 @@ namespace Rock.Blocks.Cms
 
             public const string FilterPath = "filter-path";
 
-            public const string FilterCategory = "filter-category";
-
             public const string FilterSystemTypes = "filter-system-types";
 
             public const string FilterObsidianBlocks = "filter-obsidian-blocks";
@@ -87,9 +85,6 @@ namespace Rock.Blocks.Cms
 
         protected string FilterPath => GetBlockPersonPreferences()
             .GetValue( PreferenceKey.FilterPath );
-
-        protected string FilterCategory => GetBlockPersonPreferences()
-            .GetValue( PreferenceKey.FilterCategory );
 
         protected string FilterSystemTypes => GetBlockPersonPreferences()
             .GetValue( PreferenceKey.FilterSystemTypes );
@@ -153,7 +148,7 @@ namespace Rock.Blocks.Cms
         protected override IQueryable<BlockTypeListBag> GetListQueryable( RockContext rockContext )
         {
             var blockTypeService = new BlockTypeService( rockContext );
-            var query = blockTypeService.Queryable().AsNoTracking();
+            var query = blockTypeService.Queryable().AsNoTracking().Include( bt => bt.EntityType );
 
 
             // Filters
@@ -164,10 +159,6 @@ namespace Rock.Blocks.Cms
             if ( !string.IsNullOrEmpty( FilterPath ) )
             {
                 query = query.Where( bt => bt.Path.Contains( FilterPath ) );
-            }
-            if ( !string.IsNullOrEmpty( FilterCategory ) )
-            {
-                query = query.Where( bt => bt.Category.Contains( FilterCategory ) );
             }
             if ( !string.IsNullOrEmpty( FilterSystemTypes ) )
             {
@@ -200,6 +191,7 @@ namespace Rock.Blocks.Cms
                 bt.Description,
                 Path = bt.Path ?? "",
                 bt.EntityTypeId,
+                EntityTypeName = bt.EntityType != null ? bt.EntityType.Name : "",
                 BlocksCount = bt.Blocks.Count(),
                 bt.IsSystem
             } ).ToList();
@@ -215,8 +207,14 @@ namespace Rock.Blocks.Cms
                 EntityTypeId = bt.EntityTypeId,
                 BlocksCount = bt.BlocksCount,
                 IsSystem = bt.IsSystem,
-                Status = GetBlockTypeStatus( bt.Path, bt.EntityTypeId, rockContext )
+                Status = GetBlockTypeStatus( bt.Path, bt.EntityTypeName )
             } ).AsQueryable();
+        }
+
+        /// <inheritdoc/>
+        protected override IQueryable<BlockTypeListBag> GetOrderedListQueryable( IQueryable<BlockTypeListBag> queryable, RockContext rockContext )
+        {
+            return queryable.OrderBy( a => a.Name ).ThenBy( a => a.Category );
         }
 
         /// <inheritdoc/>
@@ -244,13 +242,11 @@ namespace Rock.Blocks.Cms
         /// The virtual path to the block's ascx file. This is the path that was used to register the
         /// block with Rock.
         /// </param>
-        /// <param name="entityTypeId">
-        /// The entity type identifier of the block. This is the entity type that was used to register
-        /// the block with Rock.
+        /// <param name="entityTypeName">
+        /// The name of the given entity type.
         /// </param>
-        /// <param name="rockContext">The rock context.</param>
         /// <returns>A string that indicates the status of the block type or the name of the entity type itself.</returns>
-        private string GetBlockTypeStatus( string virtualPath, int? entityTypeId, RockContext rockContext )
+        private string GetBlockTypeStatus( string virtualPath, string entityTypeName )
         {
             if ( !string.IsNullOrEmpty( virtualPath ) && virtualPath.StartsWith( "~/" ) )
             {
@@ -264,14 +260,9 @@ namespace Rock.Blocks.Cms
                 }
             }
 
-            if ( entityTypeId.HasValue && rockContext != null )
+            if ( entityTypeName.IsNotNullOrWhiteSpace() )
             {
-                var entityTypeService = new EntityTypeService( rockContext );
-                var entityType = entityTypeService.Get( entityTypeId.Value );
-                if ( entityType != null )
-                {
-                    return entityType.Name;
-                }
+                return entityTypeName;
             }
 
             return "Missing";

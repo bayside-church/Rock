@@ -14,6 +14,7 @@
 // limitations under the License.
 // </copyright>
 
+using Rock.CheckIn.v2;
 using Rock.Data;
 
 namespace Rock.Model
@@ -22,11 +23,32 @@ namespace Rock.Model
     {
         internal class SaveHook : EntitySaveHook<Schedule>
         {
+            /// <inheritdoc/>
             protected override void PreSave()
             {
                 this.Entity.EnsureEffectiveStartEndDates();
 
+                // If this is a Nameless Schedule, then set the Description to a friendly text representation of the schedule.
+                if ( this.Entity.Name.IsNullOrWhiteSpace() )
+                {
+                    this.Entity.Description = this.Entity.ToFriendlyScheduleText( true );
+                }
+
                 base.PreSave();
+            }
+
+            /// <inheritdoc/>
+            protected override void PostSave()
+            {
+                if ( PreSaveState == EntityContextState.Modified || PreSaveState == EntityContextState.Deleted )
+                {
+                    if ( Entity.Name.IsNotNullOrWhiteSpace() )
+                    {
+                        CheckInDirector.SendRefreshKioskConfiguration();
+                    }
+                }
+
+                base.PostSave();
             }
         }
     }

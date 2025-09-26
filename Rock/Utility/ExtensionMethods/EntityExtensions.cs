@@ -19,6 +19,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Web.UI.WebControls;
 
+using Microsoft.Extensions.DependencyInjection;
+
+using Rock.Configuration;
+using Rock.Core;
 using Rock.Data;
 using Rock.ViewModels.Utility;
 using Rock.Web.Cache;
@@ -247,7 +251,10 @@ namespace Rock
                 return new List<ListItemBag>();
             }
 
-            return entities.Select( e => e.ToListItemBag() ).ToList();
+            return entities
+                .Where( e => e != null )
+                .Select( e => e.ToListItemBag() )
+                .ToList();
         }
 
         /// <summary>
@@ -256,14 +263,39 @@ namespace Rock
         /// <param name="entities">The entities to be represented by the bags.</param>
         /// <param name="toText">A function that can set the Text property of the ListItemBag for the entity.</param>
         /// <returns>A collection of <see cref="ListItemBag"/> that represents the entities.</returns>
-        public static List<ListItemBag> ToListItemBagList( this IEnumerable<IEntity> entities, Func<IEntity, string> toText )
+        [Obsolete( "Use the method that takes a generic enumerable set." )]
+        [RockObsolete( "17.0" )]
+        public static List<ListItemBag> ToListItemBagList( IEnumerable<IEntity> entities, Func<IEntity, string> toText )
         {
             if ( entities == null )
             {
                 return new List<ListItemBag>();
             }
 
-            return entities.Select( e => e.ToListItemBag( toText( e ) ) ).ToList();
+            return entities
+                .Where( e => e != null )
+                .Select( e => e.ToListItemBag( toText( e ) ) )
+                .ToList();
+        }
+
+        /// <summary>
+        /// Converts a collection of entities to ListItemBags.
+        /// </summary>
+        /// <param name="entities">The entities to be represented by the bags.</param>
+        /// <param name="toText">A function that can set the Text property of the ListItemBag for the entity.</param>
+        /// <returns>A collection of <see cref="ListItemBag"/> that represents the entities.</returns>
+        public static List<ListItemBag> ToListItemBagList<T>( this IEnumerable<T> entities, Func<T, string> toText )
+            where T : IEntity
+        {
+            if ( entities == null )
+            {
+                return new List<ListItemBag>();
+            }
+
+            return entities
+                .Where( e => e != null )
+                .Select( e => e.ToListItemBag( toText( e ) ) )
+                .ToList();
         }
 
         /// <summary>
@@ -299,7 +331,10 @@ namespace Rock
                 return new List<ListItemBag>();
             }
 
-            return entities.Select( e => e.ToListItemBag() ).ToList();
+            return entities
+                .Where( e => e != null )
+                .Select( e => e.ToListItemBag() )
+                .ToList();
         }
 
 
@@ -486,5 +521,174 @@ namespace Rock
         }
 
         #endregion EntityType Extensions
+
+        #region EntityMetadata Extensions
+
+        /// <summary>
+        /// Retrieves the metadata value associated with <paramref name="key"/>
+        /// for the entity.
+        /// </summary>
+        /// <param name="entity">The entity for which to retrieve the metadata value.</param>
+        /// <param name="key">The key identifying the metadata value to retrieve.</param>
+        /// <param name="rockContext">The database context to use for the operation.</param>
+        /// <returns>The metadata value associated with the specified key, or <c>null</c> if not found.</returns>
+        public static string GetMetadataValue( this IEntity entity, string key, RockContext rockContext )
+        {
+            return RockApp.Current.GetRequiredService<MetadataHelper>().GetEntityValue( entity.TypeId, entity.Id, key, rockContext );
+        }
+
+        /// <summary>
+        /// Retrieves the metadata value associated with <paramref name="key"/>
+        /// for the entity.
+        /// </summary>
+        /// <param name="entity">The entity for which to retrieve the metadata value.</param>
+        /// <param name="key">The key identifying the metadata value to retrieve.</param>
+        /// <param name="rockContext">The database context to use for the operation.</param>
+        /// <returns>The metadata value associated with the specified key, or <c>null</c> if not found.</returns>
+        public static string GetMetadataValue( this IEntityCache entity, string key, RockContext rockContext )
+        {
+            return RockApp.Current.GetRequiredService<MetadataHelper>().GetEntityValue( entity.CachedEntityTypeId, entity.Id, key, rockContext );
+        }
+
+        /// <summary>
+        /// Retrieves the metadata value associated with <paramref name="key"/>
+        /// for the entity. The raw value will be deserialized into an instance
+        /// of <typeparamref name="T"/>.
+        /// </summary>
+        /// <param name="entity">The entity for which to retrieve the metadata value.</param>
+        /// <param name="key">The key identifying the metadata value to retrieve.</param>
+        /// <param name="rockContext">The database context to use for the operation.</param>
+        /// <typeparam name="T">The type to deserialize the JSON value into.</typeparam>
+        /// <returns>The metadata value associated with the specified key, or <c>null</c> if not found or if it could not be deserialized.</returns>
+        public static T GetMetadataValue<T>( this IEntity entity, string key, RockContext rockContext )
+            where T : class
+        {
+            var json = GetMetadataValue( entity, key, rockContext );
+
+            return json.FromJsonOrNull<T>();
+        }
+
+        /// <summary>
+        /// Retrieves the metadata value associated with <paramref name="key"/>
+        /// for the entity. The raw value will be deserialized into an instance
+        /// of <typeparamref name="T"/>.
+        /// </summary>
+        /// <param name="entity">The entity for which to retrieve the metadata value.</param>
+        /// <param name="key">The key identifying the metadata value to retrieve.</param>
+        /// <param name="rockContext">The database context to use for the operation.</param>
+        /// <typeparam name="T">The type to deserialize the JSON value into.</typeparam>
+        /// <returns>The metadata value associated with the specified key, or <c>null</c> if not found or if it could not be deserialized.</returns>
+        public static T GetMetadataValue<T>( this IEntityCache entity, string key, RockContext rockContext )
+            where T : class
+        {
+            var json = GetMetadataValue( entity, key, rockContext );
+
+            return json.FromJsonOrNull<T>();
+        }
+
+        /// <summary>
+        /// Updates the metadata value associated with <paramref name="key"/>
+        /// for the entity.
+        /// </summary>
+        /// <param name="entity">The entity for which the metadata value will apply.</param>
+        /// <param name="key">The key identifying the metadata value to set.</param>
+        /// <param name="value">The new value to set. If null, empty or whitespace then any existing value will be deleted.</param>
+        /// <param name="rockContext">The database context to use for the operation.</param>
+        public static void SaveMetadataValue( this IEntity entity, string key, string value, RockContext rockContext )
+        {
+            RockApp.Current.GetRequiredService<MetadataHelper>().SaveEntityValue( entity.TypeId, entity.Id, key, value, rockContext );
+        }
+
+        /// <summary>
+        /// Updates the metadata value associated with <paramref name="key"/>
+        /// for the entity. The <paramref name="value"/> will be serialized
+        /// to JSON before being saved.
+        /// </summary>
+        /// <param name="entity">The entity for which the metadata value will apply.</param>
+        /// <param name="key">The key identifying the metadata value to set.</param>
+        /// <param name="value">The new value to set. If null then any existing value will be deleted.</param>
+        /// <param name="rockContext">The database context to use for the operation.</param>
+        public static void SaveMetadataValue<T>( this IEntity entity, string key, T value, RockContext rockContext )
+            where T : class
+        {
+            var json = value?.ToJson();
+
+            RockApp.Current.GetRequiredService<MetadataHelper>().SaveEntityValue( entity.TypeId, entity.Id, key, json, rockContext );
+        }
+
+        /// <summary>
+        /// Deletes the metadata value associated with <paramref name="rockContext"/>
+        /// for the entity.
+        /// </summary>
+        /// <param name="entity">The entity for which to delete the metadata value.</param>
+        /// <param name="key">The key identifying the metadata value to delete.</param>
+        /// <param name="rockContext">The database context to use for the operation.</param>
+        public static void DeleteMetadataValue( this IEntity entity, string key, RockContext rockContext )
+        {
+            RockApp.Current.GetRequiredService<MetadataHelper>().DeleteEntityValue( entity.TypeId, entity.Id, key, rockContext );
+        }
+
+        #endregion
+
+        #region Linkage Summary Extensions
+
+        /// <summary>
+        /// Creates a linkage summary for the entity. This will create a chain
+        /// of <see cref="LinkageSummary"/> objects starting with the entity
+        /// and moving up through any parents that are considered to be useful
+        /// context for the summary.
+        /// </summary>
+        /// <param name="entity">The entity to be summarized.</param>
+        /// <param name="rockContext">The database context to use when reading additional data from the database.</param>
+        /// <returns>The <see cref="LinkageSummary"/> that represents this entity.</returns>
+        public static LinkageSummary SummarizeLinkage( this IEntity entity, RockContext rockContext )
+        {
+            LinkageSummary rootSummary = null;
+            LinkageSummary lastSummary = null;
+            object obj = entity;
+
+            // Use a loop to avoid possible stack overflow with recursion. We
+            // also limit the number of iterations to avoid infinite loops or
+            // excessively deep summaries.
+            for ( int i = 0; i < 50 && obj != null; i++ )
+            {
+                var summary = new LinkageSummary
+                {
+                    EntityTypeId = entity.TypeId,
+                    EntityId = entity.Id
+                };
+
+                // If this is the first summary object, set the root variable that
+                // will be returned at the end.
+                if ( rootSummary == null )
+                {
+                    rootSummary = summary;
+                }
+
+                // If there was a previous summary object, set its Parent property
+                // to the new summary.
+                if ( lastSummary != null )
+                {
+                    lastSummary.Parent = summary;
+                }
+
+                lastSummary = summary;
+
+                if ( obj is IHasLinkageSummary objLinkage )
+                {
+                    summary.Value = objLinkage.SummaryValue( rockContext );
+                    obj = objLinkage.SummaryParent( rockContext );
+                }
+                else
+                {
+                    summary.Value = obj.ToString();
+                    break;
+                }
+            }
+
+            return rootSummary;
+        }
+
+        #endregion
     }
 }

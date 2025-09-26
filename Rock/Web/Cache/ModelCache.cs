@@ -39,7 +39,7 @@ namespace Rock.Web.Cache
     /// <seealso cref="Rock.Lava.ILavaDataDictionary" />
     [Serializable]
     [DataContract]
-    public abstract class ModelCache<T, TT> : EntityCache<T, TT>, ISecured, IHasAttributes, ILavaDataDictionary, Rock.Lava.ILiquidizable where T : IEntityCache, new()
+    public abstract class ModelCache<T, TT> : EntityCache<T, TT>, ISecured, IHasAttributes, ILavaDataDictionary where T : IEntityCache, new()
         where TT : Model<TT>, new()
     {
         /// <summary>
@@ -536,6 +536,8 @@ namespace Rock.Web.Cache
         /// To the liquid.
         /// </summary>
         /// <returns></returns>
+        [Obsolete( "DotLiquid is no longer supported." )]
+        [RockObsolete( "18.0" )]
         public object ToLiquid()
         {
             return this;
@@ -561,6 +563,8 @@ namespace Rock.Web.Cache
         /// </remarks>
         /// <param name="key">The key.</param>
         /// <returns></returns>
+        [Obsolete( "Use ContainsKey(string) instead." )]
+        [RockObsolete( "18.0" )]
         public virtual bool ContainsKey( object key )
         {
             return ContainsKey( key.ToStringSafe() );

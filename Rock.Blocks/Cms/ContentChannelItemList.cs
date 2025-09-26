@@ -44,7 +44,7 @@ namespace Rock.Blocks.Cms
     [DisplayName( "Content Item List" )]
     [Category( "CMS" )]
     [Description( "Displays a list of content channel items." )]
-    [IconCssClass( "fa fa-list" )]
+    [IconCssClass( "ti ti-list" )]
     // [SupportedSiteTypes( Model.SiteType.Web )]
 
     [ContextAware]
@@ -97,6 +97,7 @@ namespace Rock.Blocks.Cms
         IsRequired = false,
         Key = AttributeKey.ContentChannel )]
 
+    [Rock.Cms.DefaultBlockRole( Rock.Enums.Cms.BlockRole.Secondary )]
     [Rock.SystemGuid.EntityTypeGuid( "5597badd-bb0e-4bcd-be1f-5acf230cf428" )]
     [Rock.SystemGuid.BlockTypeGuid( "93dc73c4-545d-40b9-bfea-1cec04c07eb1" )]
     [CustomizedGrid]
@@ -238,7 +239,7 @@ namespace Rock.Blocks.Cms
 
             return new Dictionary<string, string>
             {
-                [NavigationUrlKey.DetailPage] = this.GetLinkedPageUrl( AttributeKey.DetailPage, "ContentItemId", "((Key))" ),
+                [NavigationUrlKey.DetailPage] = this.GetLinkedPageUrl( AttributeKey.DetailPage, new Dictionary<string, string> { ["ContentItemId"] = "((Key))", ["autoEdit"] = "true", ["returnUrl"] = this.GetCurrentPageUrl() } ),
                 [NavigationUrlKey.NewItemPage] = this.GetLinkedPageUrl( AttributeKey.DetailPage, new Dictionary<string, string>
                 {
                     ["ContentItemId"] = "((Key))",
@@ -311,6 +312,13 @@ namespace Rock.Blocks.Cms
 
             return GetAttributeValue( AttributeKey.FilterItemsForCurrentUser ).AsBoolean()
                 || ( contextEntity != null && contextEntity is Rock.Model.Person );
+        }
+
+        /// <inheritdoc/>
+        protected override List<ContentChannelItem> GetListItems( IQueryable<ContentChannelItem> queryable, RockContext rockContext )
+        {
+            var items = queryable.ToList();
+            return items.Where( cci => cci.IsAuthorized( Authorization.VIEW, GetCurrentPerson() ) ).ToList();
         }
 
         /// <inheritdoc/>

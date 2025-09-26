@@ -22,7 +22,7 @@
                     :btnType="adaptiveFontSize.length > 0 ? 'primary' : 'default'"
                     btnSize="sm"
                     @click="onAdaptiveFontSizeClick">
-            <i class="fa fa-text-width"></i>
+            <i class="ti ti-ruler-measure"></i>
         </RockButton>
 
         <slot name="iconButtons" />
@@ -51,7 +51,7 @@
         <div>
             <KeyValueList v-model="editableAdaptiveFontSize"
                           label="Font Sizes"
-                          help="If the string length is equal to or greater than the value of the key then the associated value will be used as the font size. The highest matching key will be used."
+                          help="Adjusts the font size based on text length. The longer the text, the smaller the font size should be to fit neatly. Font sizes are set according to predefined lengths: the size will match the largest specified length that is equal to or less than the current text length."
                           keyPlaceholder="Length"
                           valuePlaceholder="Font size" />
         </div>
@@ -107,15 +107,15 @@
     const alignmentItems: ListItemBag[] = [
         {
             value: `${HorizontalTextAlignment.Left}`,
-            text: "fa fa-align-left"
+            text: "ti ti-align-left"
         },
         {
             value: `${HorizontalTextAlignment.Center}`,
-            text: "fa fa-align-center"
+            text: "ti ti-align-center"
         },
         {
             value: `${HorizontalTextAlignment.Right}`,
-            text: "fa fa-align-right"
+            text: "ti ti-align-right"
         }
     ];
 

@@ -41,8 +41,8 @@ namespace Rock.Blocks.Cms
     [DisplayName( "Content Channel Type Detail" )]
     [Category( "CMS" )]
     [Description( "Displays the details for a content channel type." )]
-    [IconCssClass( "fa fa-question" )]
-    // [SupportedSiteTypes( Model.SiteType.Web )]
+    [IconCssClass( "ti ti-question-mark" )]
+    [SupportedSiteTypes( Model.SiteType.Web )]
 
     #region Block Attributes
 
@@ -195,8 +195,8 @@ namespace Rock.Blocks.Cms
                 ShowInChannelList = entity.ShowInChannelList
             };
 
-            bag.ItemAttributes = GetAttributes( rockContext, entity.Id, new ContentChannelItem().TypeId ).ConvertAll( a => PublicAttributeHelper.GetPublicEditableAttributeViewModel( a ) );
-            bag.ChannelAttributes = GetAttributes( rockContext, entity.Id, new ContentChannel().TypeId ).ConvertAll( a => PublicAttributeHelper.GetPublicEditableAttributeViewModel( a ) );
+            bag.ItemAttributes = GetAttributes( rockContext, entity.Id, new ContentChannelItem().TypeId ).ConvertAll( a => PublicAttributeHelper.GetPublicEditableAttribute( a ) );
+            bag.ChannelAttributes = GetAttributes( rockContext, entity.Id, new ContentChannel().TypeId ).ConvertAll( a => PublicAttributeHelper.GetPublicEditableAttribute( a ) );
 
             return bag;
         }
@@ -462,35 +462,6 @@ namespace Rock.Blocks.Cms
                     entityTypeId = EntityTypeCache.Get( typeof( ContentChannelItem ) ).Id;
                     SaveAttributes( entity.Id, entityTypeId, box.Entity.ItemAttributes, rockContext );
                 } );
-
-                return ActionOk( this.GetParentPageUrl() );
-            }
-        }
-
-        /// <summary>
-        /// Deletes the specified entity.
-        /// </summary>
-        /// <param name="key">The identifier of the entity to be deleted.</param>
-        /// <returns>A string that contains the URL to be redirected to on success.</returns>
-        [BlockAction]
-        public BlockActionResult Delete( string key )
-        {
-            using ( var rockContext = new RockContext() )
-            {
-                var entityService = new ContentChannelTypeService( rockContext );
-
-                if ( !TryGetEntityForEditAction( key, rockContext, out var entity, out var actionError ) )
-                {
-                    return actionError;
-                }
-
-                if ( !entityService.CanDelete( entity, out var errorMessage ) )
-                {
-                    return ActionBadRequest( errorMessage );
-                }
-
-                entityService.Delete( entity );
-                rockContext.SaveChanges();
 
                 return ActionOk( this.GetParentPageUrl() );
             }

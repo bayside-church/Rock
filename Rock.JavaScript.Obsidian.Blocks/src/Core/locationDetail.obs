@@ -1,8 +1,8 @@
 <!-- Copyright by the Spark Development Network; Licensed under the Rock Community License -->
 <template>
-    <NotificationBox v-if="blockError" alertType="warning" v-text="blockError" />
+    <NotificationBox v-if="blockError" alertType="warning" v-html="blockError" />
 
-    <NotificationBox v-if="errorMessage" alertType="danger" v-text="errorMessage" />
+    <NotificationBox v-if="errorMessage" alertType="danger" v-html="errorMessage" />
 
     <DetailBlock v-if="!blockError"
                  v-model:mode="panelMode"
@@ -115,14 +115,14 @@
 
         if (locationViewBag.value?.isActive === true) {
             labels.push({
-                iconCssClass: "fa fa-lightbulb",
+                iconCssClass: "ti ti-bulb-filled",
                 title: "Active",
                 type: "success"
             });
         }
         else {
             labels.push({
-                iconCssClass: "far fa-lightbulb",
+                iconCssClass: "ti ti-bulb",
                 title: "Inactive",
                 type: "danger"
             });
@@ -286,7 +286,7 @@
 
     if (config.options?.hasPersonId) {
         panelMode.value = DetailPanelMode.Add;
-        locationEditBag.value = { bag: locationViewBag.value } ?? {} as LocationBag;
+        locationEditBag.value = { bag: locationViewBag.value } ?? { bag: {} as LocationBag };
     }
 
     // Handle any initial error conditions or the need to go into edit mode.

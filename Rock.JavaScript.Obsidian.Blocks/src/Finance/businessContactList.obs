@@ -3,7 +3,8 @@
     <Grid :definition="config.gridDefinition ?? undefined"
           :data="gridDataSource"
           keyField="idKey"
-          itemTerm="Business Contacts"
+          itemTerm="Contacts"
+          title="Business Contacts"
           :entityTypeGuid="EntityType.Person"
           stickyHeader
           liveUpdates
@@ -28,6 +29,7 @@
 </template>
 
 <script setup lang="ts">
+    import { reactive, ref, watch } from "vue";
     import { useConfigurationValues, useInvokeBlockAction } from "@Obsidian/Utility/block";
     import { EntityType } from "@Obsidian/SystemGuids/entityType";
     import Grid, { TextColumn, textValueFilter, DeleteColumn } from "@Obsidian/Controls/grid";
@@ -39,7 +41,6 @@
     import { BusinessContactBag } from "@Obsidian/ViewModels/Blocks/Finance/BusinessContactList/businessContactBag";
     import { GridDataBag } from "@Obsidian/ViewModels/Core/Grid/gridDataBag";
     import { NavigationUrlKey } from "./BusinessContactList/types.partial";
-    import { reactive, ref, watch } from "vue";
     import { ListItemBag } from "@Obsidian/ViewModels/Utility/listItemBag";
 
     const config = useConfigurationValues<ListBlockBox<BusinessContactListOptionsBag>>();
@@ -51,6 +52,10 @@
     let gridData: GridDataBag | undefined;
     const isModalOpen = ref(false);
     const contact = ref<ListItemBag | undefined>();
+
+    // #endregion
+
+    // #region Computed Values
 
     // #endregion
 
@@ -113,6 +118,7 @@
      * Called when the Add button has been clicked by the individual.
      */
     function onAddItem(): void {
+        contact.value = undefined;
         isModalOpen.value = true;
     }
 

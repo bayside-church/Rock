@@ -40,6 +40,13 @@ namespace Rock.Model
                 var rockContext = ( RockContext ) this.RockContext;
                 var attributeCache = AttributeCache.Get( Entity.AttributeId );
 
+                // Null values should never be saved to the database. Instead
+                // empty strings are used.
+                if ( Entity.Value == null )
+                {
+                    Entity.Value = string.Empty;
+                }
+
                 if ( attributeCache != null )
                 {
                     // Check to see if this attribute value if for a File, Image, or BackgroundCheck field type.
@@ -136,21 +143,10 @@ namespace Rock.Model
                     }
                 }
 
-                rockContext.Database.ExecuteSqlCommand( @"
-UPDATE [AttributeValue] SET ValueAsDateTime = 
-    CASE WHEN 
-	    LEN(value) < 50 and 
-	    ISNULL(value,'') != '' and 
-	    ISNUMERIC([value]) = 0 THEN
-		    CASE WHEN [value] LIKE '____-__-__T%__:__:%' THEN 
-			    ISNULL( TRY_CAST( TRY_CAST( LEFT([value],19) AS datetimeoffset ) as datetime) , TRY_CAST( value as datetime ))
-		    ELSE
-			    TRY_CAST( [value] as datetime )
-		    END
-    END
-WHERE [Id] = @entityId 
-",
-new System.Data.SqlClient.SqlParameter( "@entityId", Entity.Id ) );
+                // Previously we were doing this here:
+                //     UPDATE [AttributeValue] SET ValueAsDateTime = ...
+                // We no longer need to do this via SQL because it is handled in the PreSave call
+                // to the Entity.UpdateValueAsProperties(...) method since Nov 2022 (via 26bbe60).
 
                 base.PostSave();
             }
@@ -166,12 +162,18 @@ new System.Data.SqlClient.SqlParameter( "@entityId", Entity.Id ) );
 
                 if ( State == EntityContextState.Added || State == EntityContextState.Modified )
                 {
-                    newBinaryFileGuid = Entity.Value.AsGuidOrNull();
+                    // The value is either a Guid or a comma separated string with the first part being the
+                    // BackgroundCheckFieldType's provider component EntityTypeId and the second part
+                    // is the binary file guid.
+                    var parts = ( Entity.Value ?? "" ).Split( ',' );
+                    newBinaryFileGuid = Entity.Value.AsGuidOrNull() ?? ( parts.Length > 1 ? parts[1].AsGuidOrNull() : null );
                 }
 
                 if ( State == EntityContextState.Modified || State == EntityContextState.Deleted )
                 {
-                    oldBinaryFileGuid = Entry.OriginalValues[ nameof( Entity.Value )]?.ToString().AsGuidOrNull();
+                    var originalValue = Entry.OriginalValues[nameof( Entity.Value )]?.ToString() ?? "";
+                    var parts = originalValue.Split( ',' );
+                    oldBinaryFileGuid = originalValue.AsGuidOrNull() ?? ( parts.Length > 1 ? parts[1].AsGuidOrNull() : null );
                 }
 
                 if ( oldBinaryFileGuid.HasValue )

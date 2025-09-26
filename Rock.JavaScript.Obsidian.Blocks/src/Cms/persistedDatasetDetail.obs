@@ -1,8 +1,8 @@
 <!-- Copyright by the Spark Development Network; Licensed under the Rock Community License -->
 <template>
-    <NotificationBox v-if="blockError" alertType="warning" v-text="blockError" />
+    <NotificationBox v-if="blockError" alertType="warning" v-html="blockError" />
 
-    <NotificationBox v-if="errorMessage" alertType="danger" v-text="errorMessage" />
+    <NotificationBox v-if="errorMessage" alertType="danger" v-html="errorMessage" />
 
     <DetailBlock v-if="!blockError"
                  v-model:mode="panelMode"
@@ -11,7 +11,8 @@
                  :entityKey="entityKey"
                  :entityTypeGuid="EntityType.PersistedDataset"
                  entityTypeName="PersistedDataset"
-                 :isAuditHidden="true"
+                 :isFullScreenVisible="false"
+                 :isAuditHidden="false"
                  :isBadgesVisible="true"
                  :isDeleteVisible="isEditable"
                  :isEditVisible="isEditable"
@@ -61,9 +62,6 @@
     const persistedDatasetEditBag = ref<PersistedDatasetBag>({} as PersistedDatasetBag);
 
     const panelMode = ref<DetailPanelMode>(DetailPanelMode.View);
-
-    const lastRefreshDate = new Date(persistedDatasetViewBag.value?.lastRefreshDateTime ?? "Never");
-    const formattedDate = lastRefreshDate ? new Date(lastRefreshDate).toLocaleDateString("en-US") : "Never";
 
     // The properties that are being edited in the UI. This is used to
     // inform the server which incoming values have valid data in them.
@@ -133,34 +131,40 @@
 
         if (persistedDatasetViewBag.value?.isActive === true) {
             labels.push({
-                iconCssClass: "fa fa-lightbulb",
+                iconCssClass: "ti ti-bulb-filled",
                 title: "Active",
                 type: "success",
             });
 
-            const lastRefreshLabel = persistedDatasetViewBag.value.lastRefreshDateTime
-                ? RockDateTime.parseISO(persistedDatasetViewBag.value.lastRefreshDateTime)?.toString()
-                : "Never";
-
-            labels.push({
-                iconCssClass: "fa fa-refresh",
-                title: `Not Run Since: ${lastRefreshLabel}`,
-                type: "warning",
-            });
+            // Add the Last Refresh Date Time Label
+            if (persistedDatasetViewBag.value.lastRefreshDateTime) {
+                labels.push({
+                    iconCssClass: "ti ti-refresh",
+                    title: `Last Run : ${RockDateTime.parseISO(persistedDatasetViewBag.value.lastRefreshDateTime)?.toString()}`,
+                    type: "success",
+                });
+            }
+            else {
+                labels.push({
+                    iconCssClass: "ti ti-refresh",
+                    title: "Never Run",
+                    type: "warning",
+                });
+            }
 
             const timeToRunLabel = persistedDatasetViewBag.value.timeToBuildMS
-                ? `${persistedDatasetViewBag.value.timeToBuildMS.toFixed(4)}ms`
+                ? `${persistedDatasetViewBag.value.timeToBuildMS.toFixed(0)}ms`
                 : "Never";
 
             labels.push({
-                iconCssClass: "fa fa-clock",
+                iconCssClass: "ti ti-clock",
                 title: `Time To Run: ${timeToRunLabel}`,
                 type: timeToBuildLabelType.value,
             });
         }
         else {
             labels.push({
-                iconCssClass: "far fa-lightbulb",
+                iconCssClass: "ti ti-bulb",
                 title: "Inactive",
                 type: "danger"
             });

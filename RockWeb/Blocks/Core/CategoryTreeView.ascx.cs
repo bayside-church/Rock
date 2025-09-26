@@ -18,15 +18,14 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
-using System.Text;
 
 using Rock;
 using Rock.Attribute;
 using Rock.Data;
 using Rock.Model;
 using Rock.Security;
-using Rock.Web.UI;
 using Rock.Web.Cache;
+using Rock.Web.UI;
 
 namespace RockWeb.Blocks.Core
 {
@@ -60,15 +59,15 @@ namespace RockWeb.Blocks.Core
         Key = AttributeKey.ShowUnnamedEntityItems )]
 
     [TextField( "Page Parameter Key",
-        Description = "The page parameter to use for determining the currently selected category integer identifier.",
+        Description = "The page parameter to use for determining the currently selected entity whose category is selected. If not present, the currently selected category node is used.",
         Key = AttributeKey.PageParameterKey )]
 
     [TextField( "Default Icon CSS Class",
         Description = "The icon CSS class to use when the treeview displays items that do not have an IconCSSClass property",
         IsRequired = false,
-        DefaultValue = "fa fa-list-ol",
+        DefaultValue = "ti ti-list-numbers",
         Key = AttributeKey.DefaultIconCSSClass )]
-    
+
     [CategoryField( "Root Category",
         Description = "Select the root category to use as a starting point for the tree view.",
         AllowMultiple = false,
@@ -88,6 +87,12 @@ namespace RockWeb.Blocks.Core
         IsRequired = false,
         Key = AttributeKey.SearchResultsPage )]
 
+    [BooleanField( "Show Only Categories",
+        Description = "Set to true to show only the categories (rather than the categorized entities) for the configured entity type.",
+        DefaultBooleanValue = false,
+        Key = AttributeKey.ShowOnlyCategories )]
+
+    [Rock.Cms.DefaultBlockRole( Rock.Enums.Cms.BlockRole.Navigation )]
     [Rock.SystemGuid.BlockTypeGuid( "ADE003C7-649B-466A-872B-B8AC952E7841" )]
     public partial class CategoryTreeView : RockBlockCustomSettings
     {
@@ -104,6 +109,7 @@ namespace RockWeb.Blocks.Core
             public const string RootCategory = "RootCategory";
             public const string ExcludeCategories = "ExcludeCategories";
             public const string SearchResultsPage = "SearchResultsPage";
+            public const string ShowOnlyCategories = "ShowOnlyCategories";
         }
 
         public const string CategoryNodePrefix = "C";
@@ -180,6 +186,13 @@ namespace RockWeb.Blocks.Core
         {
             mdCategoryTreeConfig.Visible = false;
 
+            if ( GetAttributeValue( AttributeKey.ShowOnlyCategories ).AsBoolean() )
+            {
+                // If the block is configured to only show categories
+                // then hide the button for adding new entities.
+                lbAddItem.Visible = false;
+            }
+
             bool canEditBlock = IsUserAuthorized( Authorization.EDIT );
 
             // hide all the actions if user doesn't have EDIT to the block
@@ -236,8 +249,18 @@ namespace RockWeb.Blocks.Core
                     string entityTypeQualiferColumn = GetAttributeValue( AttributeKey.EntityTypeQualifierProperty );
                     string entityTypeQualifierValue = GetAttributeValue( AttributeKey.EntityTypeQualifierValue );
                     bool showUnnamedEntityItems = GetAttributeValue( AttributeKey.ShowUnnamedEntityItems ).AsBooleanOrNull() ?? true;
+                    bool showOnlyCategories = GetAttributeValue( AttributeKey.ShowOnlyCategories ).AsBoolean();
 
-                    string parms = string.Format( "?getCategorizedItems=true&showUnnamedEntityItems={0}", showUnnamedEntityItems.ToTrueFalse().ToLower() );
+                    // If we should only show categories then don't get the entities
+                    // (categorized items) and force load all categories eagerly.
+                    var getCategorizedItems = !showOnlyCategories;
+                    var lazyLoad = !showOnlyCategories;
+
+                    string parms = string.Format(
+                        "?getCategorizedItems={0}&showUnnamedEntityItems={1}&lazyLoad={2}",
+                        getCategorizedItems.ToTrueFalse().ToLower(),
+                        showUnnamedEntityItems.ToTrueFalse().ToLower(),
+                        lazyLoad.ToTrueFalse().ToLower() );
                     parms += string.Format( "&entityTypeId={0}", cachedEntityType.Id );
                     parms += string.Format( "&includeInactiveItems={0}", ( !tglHideInactiveItems.Checked ).ToTrueFalse() );
 
@@ -295,6 +318,11 @@ namespace RockWeb.Blocks.Core
                     string selectedNodeId = null;
 
                     int? itemId = PageParameter( PageParameterName ).AsIntegerOrNull();
+                    if ( itemId == null )
+                    {
+                        itemId = Rock.Utility.IdHasher.Instance.GetId( PageParameter( PageParameterName ) );
+                    }
+
                     string selectedEntityType;
                     if ( itemId.HasValue )
                     {
@@ -321,7 +349,7 @@ namespace RockWeb.Blocks.Core
                         hfSelectedItemId.Value = selectedNodeId;
                         List<string> parentIdList = new List<string>();
 
-                        if ( selectedEntityType.Equals( "category" ) )
+                        if ( selectedEntityType.Equals( "category" ) || showOnlyCategories )
                         {
                             selectedCategory = CategoryCache.Get( itemId.GetValueOrDefault() );
                             if ( selectedCategory != null && !canEditBlock && selectedCategory.IsAuthorized( Authorization.EDIT, CurrentPerson ) )
@@ -375,8 +403,8 @@ namespace RockWeb.Blocks.Core
                                     break;
                                 }
                             }
-
                         }
+
                         // also get any additional expanded nodes that were sent in the Post
                         string postedExpandedIds = this.Request.Params["ExpandedIds"];
                         if ( !string.IsNullOrWhiteSpace( postedExpandedIds ) )
@@ -547,7 +575,7 @@ namespace RockWeb.Blocks.Core
                     excludedCategoryGuids.Add( excludedCategory.Guid );
                 }
             }
-
+            
             this.SetAttributeValue( AttributeKey.ExcludeCategories, excludedCategoryGuids.AsDelimited( "," ) );
 
             this.SaveAttributeValues();

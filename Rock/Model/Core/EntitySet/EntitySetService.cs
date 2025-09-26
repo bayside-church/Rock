@@ -196,7 +196,6 @@ namespace Rock.Model
         /// </summary>
         /// <param name="entitySetGuid">The entity set unique identifier.</param>
         /// <returns></returns>
-        [RockInternal( "1.15.2" )]
         public IQueryable<T> GetEntityQuery<T>( Guid entitySetGuid ) where T : Rock.Data.Entity<T>, new()
         {
             var rockContext = this.Context as RockContext;
@@ -281,6 +280,47 @@ namespace Rock.Model
             launchWorkflowsTransaction.Enqueue();
         }
 
+        #region Entity Set Placement Methods
+
+        /// <summary>
+        /// Gets the placement groups for a specific entitySet
+        /// </summary>
+        /// <param name="entitySet">The entity set for placement.</param>
+        /// <returns></returns>
+        public IQueryable<Group> GetEntitySetPlacementPlacementGroups( EntitySet entitySet )
+        {
+            return this.RelatedEntities.GetRelatedToSourceEntity<Group>( entitySet.Id, RelatedEntityPurposeKey.EntitySetPlacement );
+        }
+
+        /// <summary>
+        /// Adds the entity set placement group. Returns false if the group is already a placement group for this entity set placement
+        /// </summary>
+        /// <param name="entitySet">The entity set placement.</param>
+        /// <param name="group">The group.</param>
+        /// <returns></returns>
+        public bool AddEntitySetPlacementGroup( EntitySet entitySet, Group group )
+        {
+            if ( !this.RelatedEntities.RelatedToSourceEntityAlreadyExists( entitySet.Id, group, RelatedEntityPurposeKey.EntitySetPlacement ) )
+            {
+                this.RelatedEntities.AddRelatedToSourceEntity( entitySet.Id, group, RelatedEntityPurposeKey.EntitySetPlacement );
+                return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Deletes (detaches) the destination group for the given entity set ID.
+        /// </summary>
+        /// <param name="entitySet">The entity set.</param>
+        /// <param name="group">The group.</param>
+        public void DetachDestinationGroupFromEntitySet( EntitySet entitySet, Group group )
+        {
+            this.RelatedEntities.DeleteTargetEntityFromSourceEntity( entitySet.Id, group, RelatedEntityPurposeKey.EntitySetPlacement );
+        }
+
+        #endregion
+
         /// <summary>
         /// Creates an entity set from a list of entity item IDs and an entity type ID.
         /// </summary>
@@ -289,7 +329,6 @@ namespace Rock.Model
         /// <param name="timeToExpire">The amount of time (in minutes) before the entity set is expired.</param>
         /// <param name="rockContext">The optional rock context to use for the operation.</param>
         /// <returns>The ID of the newly created entity set, or null if it was unable to create.</returns>
-        [RockInternal("1.15")]
         internal static int? CreateEntitySetFromItems( List<int> entityItemIds, int entityTypeId, int timeToExpire = 15, RockContext rockContext = null )
         {
             rockContext = rockContext ?? new RockContext();
@@ -304,7 +343,6 @@ namespace Rock.Model
         /// <param name="timeToExpire">The amount of times in minutes until the entity set expires. 0 to disable.</param>
         /// <param name="rockContext">The optional rock context to use for the operation.</param>
         /// <returns>The GUID of the newly created entity set, or null if the entity service for the entity type was not found.</returns>
-        [RockInternal( "1.15" )]
         internal static Guid? CreateEntitySetFromItems( List<Guid> entityItemGuids, Guid entityTypeGuid, int timeToExpire = 15, RockContext rockContext = null )
         {
             rockContext = rockContext ?? new RockContext();

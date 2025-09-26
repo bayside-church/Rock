@@ -58,9 +58,22 @@ namespace Rock.Security
         public SecuritySettingsService()
         {
             _validationResults = new List<ValidationResult>();
-            var securitySettings = SystemSettings.GetValue( Rock.SystemKey.SystemSetting.ROCK_SECURITY_SETTINGS ).FromJsonOrNull<SecuritySettings>();
+
+            var securitySettingsJson = SystemSettings.GetValue( Rock.SystemKey.SystemSetting.ROCK_SECURITY_SETTINGS );
+            var cacheKey = $"Rock.Core.SecuritySettings:{securitySettingsJson.XxHash()}";
+            var shouldAddToCache = false;
+
+            var securitySettings = RockCache.Get( cacheKey ) as SecuritySettings;
             if ( securitySettings == null )
             {
+                securitySettings = securitySettingsJson.FromJsonOrNull<SecuritySettings>();
+                shouldAddToCache = true;
+            }
+
+            if ( securitySettings == null )
+            {
+                shouldAddToCache = true;
+
                 securitySettings = GetDefaultSecuritySettings();
                 this.SecuritySettings = securitySettings;
 
@@ -74,7 +87,7 @@ namespace Rock.Security
                     {
                         // A security settings record already exists if this exception was thrown,
                         // so get the latest security settings and move on.
-                        securitySettings = SystemSettings.GetValue( Rock.SystemKey.SystemSetting.ROCK_SECURITY_SETTINGS ).FromJsonOrThrow<SecuritySettings>();
+                        securitySettings = securitySettingsJson.FromJsonOrThrow<SecuritySettings>();
                         RefreshSecurityGroups( securitySettings );
                     }
                     else
@@ -86,6 +99,11 @@ namespace Rock.Security
             else
             {
                 RefreshSecurityGroups( securitySettings );
+            }
+
+            if ( shouldAddToCache )
+            {
+                RockCache.AddOrUpdate( cacheKey, null, securitySettings, RockDateTime.Now.AddSeconds( 300 ) );
             }
 
             this.SecuritySettings = securitySettings;
@@ -188,18 +206,28 @@ namespace Rock.Security
             var valContext = new ValidationContext( this.SecuritySettings, serviceProvider: null, items: null );
             var isValid = Validator.TryValidateObject( this.SecuritySettings, valContext, _validationResults, true );
 
-            if ( SecuritySettings?.AccountProtectionProfilesForDuplicateDetectionToIgnore == null )
+            if ( this.SecuritySettings?.AccountProtectionProfilesForDuplicateDetectionToIgnore == null )
             {
-                ValidationResults.Add( new ValidationResult( "The account protection profile list is null." ) );
+                this.ValidationResults.Add( new ValidationResult( "The account protection profile list is null." ) );
                 isValid = false;
             }
 
             // Validate Groups are security groups.
-            var securityGroupsToValidate = SecuritySettings?.AccountProtectionProfileSecurityGroup?.Values.ToList();
+            var securityGroupsToValidate = this.SecuritySettings?.AccountProtectionProfileSecurityGroup?.Values.ToList();
             if ( securityGroupsToValidate == null )
             {
                 // The only way invalidGroups would be null is if the SecuritySettings or property is null.
-                ValidationResults.Add( new ValidationResult( "The account protection profile security group list is null." ) );
+                this.ValidationResults.Add( new ValidationResult( "The account protection profile security group list is null." ) );
+                isValid = false;
+            }
+
+            // Ensure the rejection date and time are not set in the future, 
+            // as this will block all logins until the date is in the past.
+            var rejectAuthenticationCookiesIssuedBefore = this.SecuritySettings?.RejectAuthenticationCookiesIssuedBefore;
+            if ( rejectAuthenticationCookiesIssuedBefore.HasValue
+                 && rejectAuthenticationCookiesIssuedBefore.Value > RockDateTime.Now )
+            {
+                this.ValidationResults.Add( new ValidationResult( "The reject authentication cookies issued before date and time cannot be in the future." ) );
                 isValid = false;
             }
 

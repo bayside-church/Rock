@@ -15,16 +15,22 @@
 // </copyright>
 //
 
+import { ListItemBag } from "@Obsidian/ViewModels/Utility/listItemBag";
+import { SlidingDateRange } from "@Obsidian/Utility/slidingDateRange";
+
 export const enum NavigationUrlKey {
     DetailPage = "DetailPage"
 }
 
-export type GridSettingsOptions = {
-    token?: string | null;
-    site?: string | null;
-};
 
 export const enum PreferenceKey {
-    FilterToken = "filter-token",
-    FilterSite = "filter-site"
+    FilterCreatedBy = "filter-created-by",
+    FilterPerson = "filter-person",
+    FilterCreatedDateRange = "filter-created-date-range"
 }
+
+export type GridSettingsOptions = {
+    createdBy?: ListItemBag | undefined;
+    filterPerson?: ListItemBag | undefined;
+    createdDateRange?: SlidingDateRange | null;
+};

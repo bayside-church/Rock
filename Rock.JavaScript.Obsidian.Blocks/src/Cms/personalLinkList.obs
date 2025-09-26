@@ -5,13 +5,11 @@
           :data="gridDataSource"
           keyField="idKey"
           itemTerm="Link"
+          :title="gridTitle"
           :entityTypeGuid="EntityType.PersonalLink"
           stickyHeader
           liveUpdates
-          gridSettings
-          :gridSettingsActive="hasSettingsFilters"
-          :onAddItem="config.isAddEnabled ? onAddItem : undefined"
-          @gridSettingsClick="onClickGridSetting">
+          :onAddItem="config.isAddEnabled ? onAddItem : undefined">
 
         <SectionHeader title="Filters" />
 
@@ -33,13 +31,8 @@
         <DeleteColumn :rowDisabled="isDeleteRowDisabled" @click="onDeleteClick" />
     </Grid>
 
-    <ModalAlert v-model="isAlertVisible" :type="ModalAlertType.Information">{{ alertMessage }}</ModalAlert>
-
-    <GridSettingsModal v-model="gridSettings"
-                       v-model:visible="isGridSettingsVisible" />
-
     <Modal v-model="isPersonalLinkModalVisible"
-           :title="title"
+           :title="saveLinkTitle"
            saveText="Save"
            @save="startSavePersonalLink">
 
@@ -52,7 +45,7 @@
 </template>
 
 <script setup lang="ts">
-    import { useConfigurationValues, useInvokeBlockAction, usePersonPreferences } from "@Obsidian/Utility/block";
+    import { useConfigurationValues, useInvokeBlockAction } from "@Obsidian/Utility/block";
     import { EntityType } from "@Obsidian/SystemGuids/entityType";
     import Grid, { TextColumn, textValueFilter, DeleteColumn, EditColumn, ReorderColumn } from "@Obsidian/Controls/grid";
     import { alert } from "@Obsidian/Utility/dialogs";
@@ -60,21 +53,15 @@
     import { PersonalLinkListOptionsBag } from "@Obsidian/ViewModels/Blocks/Cms/PersonalLinkList/personalLinkListOptionsBag";
     import { SavePersonalLinkRequestBag } from "@Obsidian/ViewModels/Blocks/Cms/PersonalLinkList/savePersonalLinkRequestBag";
     import { GridDataBag } from "@Obsidian/ViewModels/Core/Grid/gridDataBag";
-    import { GridSettingsOptions, PreferenceKey } from "./PersonalLinkList/types.partial";
-    import { reactive, ref, computed, watch } from "vue";
-    import GridSettingsModal from "./PersonalLinkList/gridSettingsModal.partial.obs";
+    import { reactive, ref, computed } from "vue";
     import Modal from "@Obsidian/Controls/modal.obs";
     import TextBox from "@Obsidian/Controls/textBox.obs";
     import RockForm from "@Obsidian/Controls/rockForm.obs";
     import UrlLinkBox from "@Obsidian/Controls/urlLinkBox.obs";
-    import ModalAlert from "@Obsidian/Controls/modalAlert.obs";
-    import { ModalAlertType } from "@Obsidian/Enums/Controls/modalAlertType";
-    import { asBoolean } from "@Obsidian/Utility/booleanUtils";
     import SectionHeader from "@Obsidian/Controls/sectionHeader.obs";
 
     const config = useConfigurationValues<ListBlockBox<PersonalLinkListOptionsBag>>();
     const invokeBlockAction = useInvokeBlockAction();
-    const preferences = usePersonPreferences().blockPreferences;
 
     // #region Values
 
@@ -83,54 +70,21 @@
     const isBlockVisible = ref(config.options?.isBlockVisible ?? false);
     const gridDataSource = ref<Promise<GridDataBag>>();
 
-    const alertMessage = ref("");
-    const isAlertVisible = ref(false);
-
     const personalLinkIdKey = ref("");
     const personalLinkName = ref("");
     const personalLinkUrl = ref("");
-    const title = ref("Add Personal Link");
+    const saveLinkTitle = ref("Add Personal Link");
     const isPersonalLinkModalVisible = ref(false);
     const submitPersonalLink = ref(false);
 
-    const isGridSettingsVisible = ref(false);
-    const gridSettings = ref<GridSettingsOptions>({
-        name: preferences.getValue(PreferenceKey.FilterName),
-    });
     let gridData: GridDataBag | undefined;
-
-    // #endregion
-
-    // #region Watchers
-
-    /**
-    * Watch for changes to the grid settings and update the preferences as needed.
-    */
-    watch(gridSettings, async () => {
-        // Handle the potential null or undefined values for each setting
-        const nameValue = gridSettings.value.name ?? "";
-
-        // Set the preferences with the appropriate values
-        preferences.setValue(PreferenceKey.FilterName, nameValue);
-
-        // Save the preferences
-        await preferences.save();
-
-        // Reload the grid data
-        gridDataSource.value = loadGridData();
-    });
 
     // #endregion
 
     // #region Computed
 
-    const itemTerm = computed((): string => {
-        return isPersonalLinkSectionShared ? `Links for ${personalLinkSectionName.value}` : `Personal Links for ${personalLinkSectionName.value}`;
-    });
-
-    /** `true` if the grid settings is performing any filtering. */
-    const hasSettingsFilters = computed((): boolean => {
-        return !!gridSettings.value.name;
+    const gridTitle = computed((): string => {
+        return isPersonalLinkSectionShared.value ? `Links for ${personalLinkSectionName.value}` : `Personal Links for ${personalLinkSectionName.value}`;
     });
 
     // #endregion
@@ -157,14 +111,6 @@
     // #region Event Handlers
 
     /**
-    * Called when the grid setting icon is clicked, displays the block filters.
-    *
-    */
-    function onClickGridSetting(): void {
-        isGridSettingsVisible.value = true;
-    }
-
-    /**
      * Called when a row's delete button has been clicked by the individual. This
      * happens only if they have confirmed the delete action.
      */
@@ -183,6 +129,8 @@
                     if (index !== -1) {
                         gridData.rows?.splice(index, 1);
                     }
+
+                    flushPersonalLinksData();
                 }
                 else {
                     await alert(result.errorMessage ?? "Unknown error while trying to delete personal link.");
@@ -231,6 +179,10 @@
             beforeKey: beforeItem?.["idKey"] ?? null
         });
 
+        if (result.isSuccess) {
+            flushPersonalLinksData();
+        }
+
         return result.isSuccess;
     }
 
@@ -261,6 +213,10 @@
         }
 
         isPersonalLinkModalVisible.value = false;
+        submitPersonalLink.value = false;
+
+        flushPersonalLinksData();
+
         // Reload the grid data
         gridDataSource.value = loadGridData();
     }
@@ -281,22 +237,22 @@
         return !canEdit;
     }
 
-    /**
-    * Displays an alert with the provided message.
-    */
-    function showAlert(message: string): void {
-        alertMessage.value = message;
-        isAlertVisible.value = true;
-    }
-
     function showPersonalLinkModal(personalLink: SavePersonalLinkRequestBag): void {
         personalLinkIdKey.value = personalLink.idKey ?? "";
         personalLinkName.value = personalLink.name ?? "";
         personalLinkUrl.value = personalLink.url ?? "";
-        title.value = personalLink.idKey ? "Edit Personal Link" : "Add Personal Link";
+        saveLinkTitle.value = personalLink.idKey ? "Edit Personal Link" : "Add Personal Link";
         isPersonalLinkModalVisible.value = true;
     }
 
+    /*
+    * This is a quick fix for issue #6242. The Webforms logic uses session storage to keep track of the personal links data which does not work with ASP.NET Core.
+    * This fix clears the cached personalLinksData when an update is made so that the personal links are reloaded on the next page reload.
+    * Once PersonalLinks.ascx.cs is converted to Obsidian, this can be refactored (likely use the JavaScript Bus to communicate to the Block that personal links have been updated and page reload is not required).
+    */
+    function flushPersonalLinksData(): void {
+        localStorage.removeItem("personalLinksData");
+    }
 
     // #endregion
 

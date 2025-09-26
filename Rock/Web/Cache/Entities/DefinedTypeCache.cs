@@ -19,8 +19,11 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.Serialization;
 
+using Rock.Attribute;
 using Rock.Data;
 using Rock.Model;
+using Rock.Net.Geolocation;
+using Rock.ViewModels.Utility;
 
 namespace Rock.Web.Cache
 {
@@ -265,6 +268,87 @@ namespace Rock.Web.Cache
         public override string ToString()
         {
             return Name;
+        }
+
+        /// <summary>
+        /// Creates a <see cref="DefinedType"/> instance and sets its properties from this cached object's properties.
+        /// </summary>
+        /// <param name="includeInactiveValues"><c>true</c> to include inactive DefinedValues for the DefinedType; otherwise <c>false</c>.</param>
+        /// <returns>An <see cref="DefinedType"/> instance representing this cached object.</returns>
+        public DefinedType ToEntity( bool includeInactiveValues = false )
+        {
+            var definedValues = DefinedValues.Where( v => includeInactiveValues || v.IsActive )
+                .Select( v => new DefinedValue
+                {
+                    Id = v.Id,
+                    Guid = v.Guid,
+                    IsSystem = v.IsSystem,
+                    IsActive = v.IsActive,
+                    Value = v.Value,
+                    Description = v.Description,
+                    CategoryId = v.CategoryId
+                } ).ToList();
+
+            return new DefinedType
+            {
+                IsSystem = IsSystem,
+                FieldTypeId = FieldTypeId,
+                Order = Order,
+                CategoryId = CategoryId,
+                Name = Name,
+                Description = Description,
+                IsActive = IsActive,
+                CategorizedValuesEnabled = CategorizedValuesEnabled,
+                DefinedValues = definedValues
+            };
+        }
+
+        /// <summary>
+        /// Gets a <see cref="ListItemBag"/> list of the the LOCATION_COUNTRIES defined values with friendly text, sorted alphabetically.
+        /// </summary>
+        /// <param name="shouldExcludeOrganizationCountry">
+        /// If <see langword="true"/>, the Rock organization's country will be excluded from the list.
+        /// </param>
+        /// <returns>A <see cref="ListItemBag"/> list of the the LOCATION_COUNTRIES defined values with friendly text.</returns>
+        /// <remarks>
+        /// This is an internal API that supports the Rock infrastructure and not
+        /// subject to the same compatibility standards as public APIs. It may be
+        /// changed or removed without notice in any release. You should only use
+        /// it directly in your code with extreme caution and knowing that doing so
+        /// can result in application failures when updating to a new Rock release.
+        /// </remarks>
+        [RockInternal( "18.0" )]
+        public static List<ListItemBag> GetLocationCountryListItemBagList( bool shouldExcludeOrganizationCountry = false )
+        {
+            var countriesDefinedType = Get( Rock.SystemGuid.DefinedType.LOCATION_COUNTRIES );
+            if ( countriesDefinedType == null )
+            {
+                return new List<ListItemBag>();
+            }
+
+            var organizationCountryCode = string.Empty;
+
+            if ( shouldExcludeOrganizationCountry )
+            {
+                var organizationCountry = GlobalAttributesCache.Get().OrganizationCountry;
+                if ( organizationCountry?.Length == 2 )
+                {
+                    organizationCountryCode = organizationCountry.ToUpper();
+                }
+            }
+
+            return countriesDefinedType.DefinedValues
+                .Where( dv =>
+                    organizationCountryCode.IsNullOrWhiteSpace()
+                    || dv.Value.ToUpper() != organizationCountryCode
+                )
+                .Select( dv => new ListItemBag
+                {
+                    Value = dv.Guid.ToString(),
+                    Text = $"{dv.Value}{( dv.Description.IsNotNullOrWhiteSpace() ? $" - {dv.Description}" : string.Empty )}"
+                } )
+                .OrderBy( c => c.Text )
+                .ToList();
         }
 
         #endregion

@@ -123,6 +123,13 @@ namespace Rock.SystemKey
         public const string PDF_EXTERNAL_RENDER_ENDPOINT = "core_PDFExternalRenderEndpoint";
 
         /// <summary>
+        /// The hostname to use for connections to the Rock RealTime system.
+        /// If not set then the hostname connected to by the client for other
+        /// web requests will be used.
+        /// </summary>
+        public const string REALTIME_HOSTNAME = "core_RealTimeHostname";
+
+        /// <summary>
         /// The number of days that a visitor cookie persists. Default is 365.
         /// </summary>
         public const string VISITOR_COOKIE_PERSISTENCE_DAYS = "core_VisitorCookiePersistenceDays";
@@ -330,7 +337,10 @@ namespace Rock.SystemKey
         public const string OBSERVABILITY_ENDPOINT = "core_ObservabilityEndpoint";
 
         /// <summary>
-        /// Determines if observability is enabled.
+        /// Determines if observability is enabled. This will contain either an
+        /// integer value that reflects the <see cref="Enums.Observability.FeatureFlags"/>
+        /// selection or a "True"/"False" value that should be taken to mean
+        /// "all" or "none".
         /// </summary>
         public const string OBSERVABILITY_ENABLED = "core_ObservabilityEnabled";
 
@@ -362,6 +372,11 @@ namespace Rock.SystemKey
         /// traces.
         /// </summary>
         public const string OBSERVABILITY_MAX_ATTRIBUTE_LENGTH = "core_ObservabilityMaxAttributeLength";
+
+        /// <summary>
+        /// Determines if observability is enabled.
+        /// </summary>
+        public const string OBSERVABILITY_TRACE_LEVEL = "core_ObservabilityTraceLevel";
 
         /// <summary>
         /// The label text for the SMS Opt-In checkbox
@@ -397,5 +412,43 @@ namespace Rock.SystemKey
         /// Whether the giving month should use Sunday date for the analytics calendar dimension.
         /// </summary>
         public const string ANALYTICS_CALENDAR_DIMENSION_GIVING_MONTH_USE_SUNDAY_DATE = "core_AnalyticsCalendarDimensionGivingMonthUseSundayDate";
+
+        /// <summary>
+        /// The Lava template containing the Prayer Request AI Completions template.
+        /// </summary>
+        /// <remarks>
+        /// Available fields are ParentCategoryId, SelectedCategoryId, PrayerRequest (the Entity).
+        /// </remarks>
+        public const string PRAYER_REQUEST_AI_COMPLETIONS = "core_PrayerRequestAICompletions";
+
+        /// <summary>
+        /// Whether the Organization's state should be selected by default.
+        /// </summary>
+        public const string ENABLE_DEFAULT_ADDRESS_STATE_SELECTION = "core_EnableDefaultAddressStateSelection";
+
+        /// <summary>
+        /// The chat configuration.
+        /// </summary>
+        public const string CHAT_CONFIGURATION = "core_ChatConfiguration";
+
+        /// <summary>
+        /// Job settings for <see cref="Rock.Jobs.ChatSync"/>
+        /// </summary>
+        public const string CHAT_SYNC_JOB_SETTINGS = "core_ChatSyncJobSettings";
+
+        /// <summary>
+        /// App-scoped Stream chat permission grants.
+        /// </summary>
+        public const string CHAT_STREAM_GRANTS_APP_SCOPED = "core_ChatStreamGrantsAppScoped";
+
+        /// <summary>
+        /// Channel Type-scoped Stream chat permission grants.
+        /// </summary>
+        public const string CHAT_STREAM_GRANTS_CHANNEL_TYPE_SCOPED = "core_ChatStreamGrantsChannelTypeScoped";
+
+        /// <summary>
+        /// The countries that are globally restricted from accessing Rock.
+        /// </summary>
+        public const string COUNTRIES_RESTRICTED_FROM_ACCESSING = "core_CountriesRestrictedFromAccessing";
     }
 }

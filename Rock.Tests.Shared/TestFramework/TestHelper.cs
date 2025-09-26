@@ -25,6 +25,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Moq;
 
 using Rock.Configuration;
+using Rock.Web.Cache;
 
 namespace Rock.Tests.Shared
 {
@@ -234,6 +235,7 @@ namespace Rock.Tests.Shared
             hostingMock.Setup( a => a.VirtualRootPath ).Returns( "/" );
             hostingMock.Setup( a => a.WebRootPath )
                 .Returns( GetRockWebPath() ?? Directory.GetCurrentDirectory() );
+            hostingMock.Setup( a => a.NodeName ).Returns( "TestNode" );
 
             sc.AddSingleton<IConnectionStringProvider>( new TestConnectionStringProvider( connectionString ) );
             sc.AddSingleton<IInitializationSettings, TestInitializationSettings>();
@@ -343,6 +345,7 @@ namespace Rock.Tests.Shared
             {
                 if ( ReferenceEquals( RockApp.Current, App ) )
                 {
+                    RockCache.ClearAllCachedItems( false );
                     RockApp.Current = _previousApp;
                 }
                 else

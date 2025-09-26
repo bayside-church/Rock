@@ -1,70 +1,59 @@
 <!-- Copyright by the Spark Development Network; Licensed under the Rock Community License -->
 <template>
-    <NotificationBox v-if="blockError" alertType="warning">{{ blockError }}</NotificationBox>
+    <NotificationBox v-if="blockError" alertType="warning" v-html="blockError"></NotificationBox>
 
-    <NotificationBox v-if="errorMessage" alertType="danger">{{ errorMessage }}</NotificationBox>
+    <NotificationBox v-if="errorMessage" alertType="danger" v-html="errorMessage"></NotificationBox>
 
-    <Panel if="!blockError" :title="panelName">
+    <DetailBlock v-if="!blockError"
+                 v-model:mode="panelMode"
+                 :name="panelName"
+                 :labels="blockLabels"
+                 :entityKey="entityKey"
+                 :isAuditHidden="false"
+                 :isBadgesVisible="false"
+                 :isDeleteVisible="false"
+                 :isEditVisible="isEditable"
+                 :isFollowVisible="false"
+                 :isSecurityHidden="true"
+                 :isFullScreenVisible="false"
+                 :headerSecondaryActions="secondaryActions"
+                 @cancelEdit="onCancelEdit"
+                 @edit="onEdit"
+                 @save="onSave">
 
-        <template #headerActions>
-            <span v-if="businessDetailViewBag?.recordStatus?.value" :class="statusClass">{{ status }}</span>
-            <span v-if="showActions" class="action panel-action-context clickable" style="position: relative;" ref="headerSecondaryActionMenu">
-                <button type="button" class="btn btn-default" data-toggle="dropdown" @click="onActionContextDropdownClick">
-                    Actions <i class="fa fa-caret-down"></i>
-                </button>
-                <ul class="dropdown-menu dropdown-menu-right" v-html="customActions">
-
-                </ul>
-            </span>
-        </template>
-
-        <template v-if="panelMode === DetailPanelMode.View">
+        <template #view>
             <ViewPanel :modelValue="businessDetailViewBag" :options="options" />
         </template>
 
-        <template v-else>
+        <template #edit>
             <EditPanel v-model="businessDetailEditBag" :options="options" @propertyChanged="baseBlock.onPropertyChanged" />
         </template>
 
-        <template #footerActions>
-            <RockButton v-if="panelMode === DetailPanelMode.View"
-                        :btnSize="BtnSize.Default"
-                        :btnType="BtnType.Primary"
-                        @click="onEdit">Edit</RockButton>
-            <RockButton v-if="panelMode === DetailPanelMode.Edit || panelMode === DetailPanelMode.Add"
-                        :btnSize="BtnSize.Default"
-                        :btnType="BtnType.Primary"
-                        :isLoading="isSaving"
-                        @click="onSave">
-                Save
-            </RockButton>
-            <RockButton v-if="panelMode === DetailPanelMode.Edit"
-                        btnType="link"
-                        @click="onCancelEdit"
-                        autoDisable>Cancel</RockButton>
-        </template>
+    </DetailBlock>
 
-    </Panel>
 </template>
+<style>
+.divider {
+    border-top: 1px solid #eee;
+    width: 100%;
+}
+</style>
 
 <script setup lang="ts">
     import { computed, ref } from "vue";
     import NotificationBox from "@Obsidian/Controls/notificationBox.obs";
+    import DetailBlock from "@Obsidian/Templates/detailBlock";
     import { DetailPanelMode } from "@Obsidian/Enums/Controls/detailPanelMode";
-    import RockButton from "@Obsidian/Controls/rockButton.obs";
-    import { BtnType } from "@Obsidian/Enums/Controls/btnType";
-    import { BtnSize } from "@Obsidian/Enums/Controls/btnSize";
     import EditPanel from "./BusinessDetail/editPanel.partial.obs";
     import ViewPanel from "./BusinessDetail/viewPanel.partial.obs";
-    import Panel from "@Obsidian/Controls/panel.obs";
-    import { useConfigurationValues, useInvokeBlockAction, useEntityDetailBlock } from "@Obsidian/Utility/block";
+    import { useConfigurationValues, useInvokeBlockAction, useEntityDetailBlock, onConfigurationValuesChanged, useReloadBlock } from "@Obsidian/Utility/block";
     import { NavigationUrlKey } from "./BusinessDetail/types.partial";
     import { DetailBlockBox } from "@Obsidian/ViewModels/Blocks/detailBlockBox";
     import { BusinessDetailBag } from "@Obsidian/ViewModels/Blocks/Finance/BusinessDetail/businessDetailBag";
     import { BusinessDetailOptionsBag } from "@Obsidian/ViewModels/Blocks/Finance/BusinessDetail/businessDetailOptionsBag";
-    import { makeUrlRedirectSafe } from "@Obsidian/Utility/url";
     import { DefinedValue } from "@Obsidian/SystemGuids/definedValue";
     import { ValidPropertiesBox } from "@Obsidian/ViewModels/Utility/validPropertiesBox";
+    import { PanelAction } from "@Obsidian/Types/Controls/panelAction";
 
     const config = useConfigurationValues<DetailBlockBox<BusinessDetailBag, BusinessDetailOptionsBag>>();
     const invokeBlockAction = useInvokeBlockAction();
@@ -73,16 +62,67 @@
 
     const blockError = ref("");
     const errorMessage = ref("");
-    const isSaving = ref(false);
 
+    const isSaving = ref(false);
     const businessDetailViewBag = ref(config.entity);
     const businessDetailEditBag = ref<ValidPropertiesBox<BusinessDetailBag>>({
         bag: {} as BusinessDetailBag
     });
-    const headerSecondaryActionMenu = ref<HTMLElement | null>(null);
 
     const panelMode = ref<DetailPanelMode>(DetailPanelMode.View);
     const customActions = businessDetailViewBag.value?.customActions;
+
+    const secondaryActions = computed((): PanelAction[] | undefined => {
+        const actions: PanelAction[] = [];
+
+        if (!customActions) {
+            return actions;
+        }
+
+        actions.push({
+            title: "",
+            type: "default",
+            disabled: true,
+            iconCssClass: "ti ti-separator divider"
+        });
+
+        // Parse once (string is static).
+        const list = parseCustomActions(customActions);
+        list.forEach(({ href, text }) => {
+            const { classes, withtext } = parseIconAndText(text);
+
+            if (href) {
+                actions.push({
+                    title: withtext,
+                    type: "link",
+                    iconCssClass: classes,
+                    handler: () => {
+                        window.location = (href) as (string & Location);
+                    }
+                });
+            }
+            else if (!withtext) {
+                actions.push({
+                    title: "",
+                    type: "default",
+                    disabled: true,
+                    iconCssClass: "ti ti-separator divider"
+                });
+            }
+            else {
+                actions.push({
+                    title: text,
+                    type: "default",
+                    handler: () => {
+                        window.location = (href) as (string & Location);
+                    }
+                });
+
+            }
+        });
+
+        return actions;
+    });
 
     const baseBlock = useEntityDetailBlock({
         blockConfig: config,
@@ -105,41 +145,131 @@
         }
     });
 
-    const statusClass = computed((): string => {
+    /**
+     * Additional labels to display in the block panel.
+     */
+    const blockLabels = computed((): PanelAction[] | undefined => {
+        const labels: PanelAction[] = [];
+
+        if (panelMode.value !== DetailPanelMode.View) {
+            return undefined;
+        }
+
         if (businessDetailViewBag.value?.recordStatus?.value?.toUpperCase() == DefinedValue.PersonRecordStatusPending) {
-            return "label label-warning";
+            labels.push({
+                iconCssClass: "ti ti-bulb-filled",
+                title: "Pending",
+                type: "warning"
+            });
         }
         else if (businessDetailViewBag.value?.recordStatus?.value?.toUpperCase() == DefinedValue.PersonRecordStatusInactive) {
-            return "label label-danger";
+            labels.push({
+                iconCssClass: "ti ti-bulb-filled",
+                title: "Inactive",
+                type: "danger"
+            });
         }
         else {
-            return "label label-success";
+            labels.push({
+                iconCssClass: "ti ti-bulb-filled",
+                title: "Active",
+                type: "success"
+            });
         }
+
+        return labels;
     });
 
-    const status = computed((): string => {
-        if (businessDetailViewBag.value?.recordStatus?.value?.toUpperCase() == DefinedValue.PersonRecordStatusPending) {
-            return "Pending";
-        }
-        else if (businessDetailViewBag.value?.recordStatus?.value?.toUpperCase() == DefinedValue.PersonRecordStatusInactive) {
-            return "Inactive";
-        }
-        else {
-            return "Active";
-        }
+    const isEditable = computed((): boolean => {
+        return config.isEditable === true;
     });
 
     const options = computed((): BusinessDetailOptionsBag => {
-        return config.options ?? {};
+        return config.options ?? {} as BusinessDetailOptionsBag;
     });
 
-    const showActions = computed((): boolean => {
-        return customActions !== null && panelMode.value === DetailPanelMode.View;
+    /**
+    * The identifier key value for this entity.
+    */
+    const entityKey = computed((): string => {
+        return businessDetailViewBag.value?.idKey ?? "";
     });
 
     // #endregion
 
-    // #region Functions
+    // #region Custom Functions
+    interface IActionEntry {
+        href: string;
+        text: string;
+    }
+
+    /**
+    * parseCustomActions: DOM-parse anchors from an HTML snippet and return a
+    * text-sorted list.
+    * Why: DOM parsing is robust vs regex and safely normalizes whitespace/entities.
+    */
+    function parseCustomActions(customActions: string | null | undefined): IActionEntry[] {
+        if (!customActions || !customActions.trim()) {
+            return [];
+        }
+        if (typeof document === "undefined") {
+            throw new Error("parseCustomActions requires a browser DOM (document is undefined).");
+        }
+
+        const tpl = document.createElement("template");
+        tpl.innerHTML = customActions;
+
+        const items: IActionEntry[] = [];
+        const lis = Array.from(tpl.content.querySelectorAll<HTMLLIElement>("li"));
+
+        for (const li of lis) {
+            const isSeparator = li.getAttribute("role") === "separator" || li.classList.contains("divider");
+            if (isSeparator) {
+                items.push({ href: "", text: li.outerHTML.trim() });
+                continue;
+            }
+
+            const a = li.querySelector<HTMLAnchorElement>("a[href]");
+            if (a) {
+                const href = (a.getAttribute("href") ?? "").trim();
+                const text = a.innerHTML.trim(); // preserves <i> etc.
+                if (text) items.push({ href, text });
+                continue;
+            }
+
+            // Fallback: keep whole <li> markup as text when no <a> exists
+            const fallback = li.outerHTML.trim();
+            if (fallback) items.push({ href: "", text: fallback });
+        }
+
+        return items;
+    }
+
+    interface IIconParts {
+        classes: string;
+        withtext: string;
+    }
+
+    function parseIconAndText(input: string | null | undefined): IIconParts {
+        if (!input || !input.trim()) {
+            return { classes: "", withtext: "" };
+        }
+
+        if (typeof document === "undefined") {
+            throw new Error("parseIconAndText requires a browser DOM (document is undefined).");
+        }
+
+        const tpl = document.createElement("template");
+        tpl.innerHTML = input;
+
+        const icon = tpl.content.querySelector("i");
+        const classes = (icon?.getAttribute("class") ?? "").trim();
+
+        if (icon) icon.remove(); // leave only content after </i>
+
+        const withtext = (tpl.content.textContent ?? "").replace(/\s+/g, " ").trim();
+        return { classes, withtext };
+    }
 
     // #endregion
 
@@ -151,15 +281,16 @@
      *
      * @returns true if the panel should leave edit mode; false if it should stay in edit mode; or a string containing a redirect URL.
      */
-    async function onCancelEdit(): Promise<void> {
+    async function onCancelEdit(): Promise<boolean | string> {
         if (!businessDetailEditBag.value?.bag?.idKey) {
             if (config.navigationUrls?.[NavigationUrlKey.ParentPage]) {
-                window.location.href = makeUrlRedirectSafe(config.navigationUrls[NavigationUrlKey.ParentPage]);
+                return config.navigationUrls[NavigationUrlKey.ParentPage];
             }
+
+            return false;
         }
-        else {
-            panelMode.value = DetailPanelMode.View;
-        }
+
+        return true;
     }
 
     /**
@@ -168,7 +299,7 @@
      *
      * @returns true if the panel should enter edit mode; otherwise false.
      */
-    async function onEdit(): Promise<void> {
+    async function onEdit(): Promise<boolean> {
         const result = await invokeBlockAction<ValidPropertiesBox<BusinessDetailBag>>("Edit", {
             key: businessDetailViewBag.value?.idKey
         });
@@ -179,7 +310,10 @@
                 validProperties: result.data.validProperties ?? Object.keys(result.data.bag)
             };
 
-            panelMode.value = DetailPanelMode.Edit;
+            return true;
+        }
+        else {
+            return false;
         }
     }
 
@@ -187,7 +321,7 @@
      * Event handler for the panel's Save event. Send the data to the server
      * to be saved and then leave edit mode or redirect to target page.
      */
-    async function onSave(): Promise<void> {
+    async function onSave(): Promise<boolean | string> {
         errorMessage.value = "";
         isSaving.value = true;
 
@@ -200,28 +334,18 @@
         if (result.isSuccess && result.data) {
             if (result.statusCode === 200 && typeof result.data === "object") {
                 businessDetailViewBag.value = result.data.bag;
-                panelMode.value = DetailPanelMode.View;
+
+                return true;
             }
             else if (result.statusCode === 201 && typeof result.data === "string") {
-                window.location.href = makeUrlRedirectSafe(result.data);
+                return result.data;
             }
         }
-        else {
-            errorMessage.value = result.errorMessage ?? "Unknown error while trying to save Business.";
-        }
+
+        errorMessage.value = result.errorMessage ?? "Unknown error while trying to save Business.";
+
+        return false;
     }
-
-    /**
-     * Event Handler for the Custom actions dropdown click. Toggles between opening and closing the dropdown list.
-     */
-    function onActionContextDropdownClick(): void {
-        if (headerSecondaryActionMenu.value) {
-            headerSecondaryActionMenu.value.classList.toggle("open");
-        }
-    }
-
-
-    // #endregion
 
     // Handle any initial error conditions or the need to go into edit mode.
     if (config.errorMessage) {
@@ -234,4 +358,7 @@
         businessDetailEditBag.value = { bag: config.entity };
         panelMode.value = DetailPanelMode.Add;
     }
+
+    onConfigurationValuesChanged(useReloadBlock());
+
 </script>

@@ -22,6 +22,7 @@ using System.Web.UI;
 using System.Web.UI.WebControls;
 
 using Rock.Data;
+using Rock.Enums.CheckIn;
 using Rock.Model;
 
 namespace Rock.Web.UI.Controls
@@ -38,6 +39,8 @@ namespace Rock.Web.UI.Controls
 
         private RockDropDownList _ddlGroupTypeInheritFrom;
         private RockDropDownList _ddlAttendanceRule;
+        private RockRadioButtonList _rblMatchingLogic;
+        private RockCheckBox _cbPreventConcurrentCheckIn;
         private RockDropDownList _ddlPrintTo;
 
         private PlaceHolder _phGroupTypeAttributes;
@@ -276,8 +279,10 @@ namespace Rock.Web.UI.Controls
             EnsureChildControls();
 
             groupType.Name = _tbGroupTypeName.Text;
-            groupType.InheritedGroupTypeId = _ddlGroupTypeInheritFrom.SelectedValueAsId();
+            groupType.InheritedGroupTypeId = GetInheritedGroupTypeId( groupType );
             groupType.AttendanceRule = _ddlAttendanceRule.SelectedValueAsEnum<AttendanceRule>();
+            groupType.AlreadyEnrolledMatchingLogic = _rblMatchingLogic.SelectedValueAsEnum<AlreadyEnrolledMatchingLogic>();
+            groupType.IsConcurrentCheckInPrevented = _cbPreventConcurrentCheckIn.Checked;
             groupType.AttendancePrintTo = _ddlPrintTo.SelectedValueAsEnum<PrintTo>();
 
             // Reload Attributes
@@ -285,6 +290,50 @@ namespace Rock.Web.UI.Controls
             groupType.LoadAttributes();
 
             Rock.Attribute.Helper.GetEditValues( _phGroupTypeAttributes, groupType );
+        }
+
+        /// <summary>
+        /// Calculates the appropriate Inherited GroupType Identifier for the <see cref="GroupType"/>.  This method is utilized to avoid clearing
+        /// Inherited GroupType settings that may have been set elsewhere (e.g., the GroupType configuration) if no Inherited GroupType is
+        /// selected in the control.
+        /// </summary>
+        /// <param name="groupType"><see cref="GroupType"/>.</param>
+        /// <returns></returns>
+        private int? GetInheritedGroupTypeId( GroupType groupType )
+        {
+            var selectedValue = _ddlGroupTypeInheritFrom.SelectedValueAsId();
+            if ( selectedValue.HasValue )
+            {
+                // If a value was selected in the control, we can use that.
+                return selectedValue;
+            }
+            else if ( !groupType.InheritedGroupTypeId.HasValue )
+            {
+                // If the GroupType has no value, and nothing was selected, it will stay null.
+                return null;
+            }
+
+            var isExistingValueInList = false;
+            foreach ( ListItem item in _ddlGroupTypeInheritFrom.Items )
+            {
+                var itemValue = item.Value.AsIntegerOrNull();
+                if ( itemValue.HasValue && itemValue == groupType.InheritedGroupTypeId )
+                {
+                    isExistingValueInList = true;
+                    break;
+                }
+            }
+
+            if ( isExistingValueInList )
+            {
+                // This indicates that the previously configured value was in the dropdown, but was de-selected, so it should be cleared.
+                return null;
+            }
+            else
+            {
+                // The previously configured value was not in the dropdown, and the dropdown was left without a selection, so retain the previously configured value.
+                return groupType.InheritedGroupTypeId;
+            }
         }
 
         /// <summary>
@@ -302,6 +351,8 @@ namespace Rock.Web.UI.Controls
                 _tbGroupTypeName.Text = groupType.Name;
                 _ddlGroupTypeInheritFrom.SetValue( groupType.InheritedGroupTypeId );
                 _ddlAttendanceRule.SetValue( (int)groupType.AttendanceRule );
+                _rblMatchingLogic.SetValue( ( int ) groupType.AlreadyEnrolledMatchingLogic );
+                _cbPreventConcurrentCheckIn.Checked = groupType.IsConcurrentCheckInPrevented;
                 _ddlPrintTo.SetValue( (int)groupType.AttendancePrintTo );
 
                 CreateGroupTypeAttributeControls( groupType, rockContext );
@@ -356,11 +407,29 @@ namespace Rock.Web.UI.Controls
             }
             _ddlGroupTypeInheritFrom.AutoPostBack = true;
             _ddlGroupTypeInheritFrom.SelectedIndexChanged += _ddlGroupTypeInheritFrom_SelectedIndexChanged;
+
             _ddlAttendanceRule = new RockDropDownList();
             _ddlAttendanceRule.ID = this.ID + "_ddlAttendanceRule";
             _ddlAttendanceRule.Label = "Check-in Rule";
-            _ddlAttendanceRule.Help = "The rule that check in should use when a person attempts to check in to a group of this type.  If 'None' is selected, user will not be added to group and is not required to belong to group.  If 'Add On Check In' is selected, user will be added to group if they don't already belong.  If 'Already Belongs' is selected, user must already be a member of the group or they will not be allowed to check in.";
+            _ddlAttendanceRule.Help = "The rule that decides what happens when someone tries to check in to a group of this type.  If 'None' is selected, the individual will not be added to group and is not required to belong to group.  If 'Add On Check In' is selected, the individual will be added to group if they do not already belong.  If 'Already Enrolled in Group' is selected, the individual must already be a member of the group to check in.";
             _ddlAttendanceRule.BindToEnum<Rock.Model.AttendanceRule>();
+            _ddlAttendanceRule.AutoPostBack = true;
+
+            _rblMatchingLogic = new RockRadioButtonList
+            {
+                ID = $"{ID}_ddlMatchingLogic",
+                Label = "Matching Logic",
+                Help = "Only supported by next-gen check-in. 'Must Be Enrolled' simply requires that the person be an active member of the group. 'Prefer Enrolled Groups' will additionally exclude non-preferred groups if the person is a member of one of these preferred groups.",
+                RepeatDirection = RepeatDirection.Horizontal
+            };
+            _rblMatchingLogic.BindToEnum<AlreadyEnrolledMatchingLogic>();
+
+            _cbPreventConcurrentCheckIn = new RockCheckBox
+            {
+                ID = $"{ID}_cbPreventConcurrentCheckIn",
+                Label = "Prevent Concurrent Check-in",
+                Help = "Prevents checking into groups in this area if the person already has an attendance record for the same scheduled service. Only supported in next-gen check-in."
+            };
 
             _ddlPrintTo = new RockDropDownList();
             _ddlPrintTo.ID = this.ID + "_ddlPrintTo";
@@ -375,6 +444,8 @@ namespace Rock.Web.UI.Controls
             Controls.Add( _lblGroupTypeName );
             Controls.Add( _ddlGroupTypeInheritFrom );
             Controls.Add( _ddlAttendanceRule );
+            Controls.Add( _rblMatchingLogic );
+            Controls.Add( _cbPreventConcurrentCheckIn );
             Controls.Add( _ddlPrintTo );
             Controls.Add( _tbGroupTypeName );
             Controls.Add( _phGroupTypeAttributes );
@@ -415,6 +486,14 @@ namespace Rock.Web.UI.Controls
             _gCheckinLabels.Columns.Add( deleteField );
 
             Controls.Add( _gCheckinLabels );
+        }
+
+        /// <inheritdoc/>
+        protected override void OnPreRender( EventArgs e )
+        {
+            _rblMatchingLogic.Visible = _ddlAttendanceRule.SelectedValueAsEnum<AttendanceRule>() == AttendanceRule.AlreadyEnrolledInGroup;
+
+            base.OnPreRender( e );
         }
 
         /// <summary>
@@ -460,6 +539,8 @@ namespace Rock.Web.UI.Controls
                 _tbGroupTypeName.RenderControl( writer );
                 _ddlGroupTypeInheritFrom.RenderControl( writer );
                 _ddlAttendanceRule.RenderControl( writer );
+                _rblMatchingLogic.RenderControl( writer );
+                _cbPreventConcurrentCheckIn.RenderControl( writer );
                 _ddlPrintTo.RenderControl( writer );
 
                 _phGroupTypeAttributes.RenderControl( writer );
@@ -472,7 +553,7 @@ namespace Rock.Web.UI.Controls
                 }
                 _gCheckinLabels.RenderControl( writer );
 
-                writer.WriteLine( "<h3>Next Gen Check-in Labels</h3>" );
+                writer.WriteLine( "<h3>Next-Gen Check-in Labels</h3>" );
                 if ( NextGenCheckInLabels != null )
                 {
                     _gNextGenCheckInLabels.DataSource = NextGenCheckInLabels;

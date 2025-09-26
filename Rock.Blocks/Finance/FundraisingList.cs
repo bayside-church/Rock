@@ -32,8 +32,8 @@ namespace Rock.Blocks.Finance
     [DisplayName( "Fundraising List" )]
     [Category( "Fundraising" )]
     [Description( "Lists Fundraising Opportunities (Groups) that have the ShowPublic attribute set to true" )]
-    [IconCssClass( "fa fa-list" )]
-    // [SupportedSiteTypes( SiteType.Web )]
+    [IconCssClass( "ti ti-list" )]
+    [SupportedSiteTypes( SiteType.Web )]
 
     [DefinedValueField( "Fundraising Opportunity Types",
         DefinedTypeGuid = "53C8FFF6-3022-4A2D-9BAE-FD3435BEA43D",
@@ -86,6 +86,12 @@ namespace Rock.Blocks.Finance
             };
 
             return box;
+        }
+
+        /// <inheritdoc/>
+        protected override string GetInitialHtmlContent()
+        {
+            return GetBlockContent();
         }
 
         /// <summary>

@@ -26,6 +26,8 @@ export type State = {
     pageParameters: Record<string, string>;
     pageId: number;
     pageGuid: Guid;
+    sessionGuid: Guid;
+    interactionGuid: Guid;
     executionStartTime: number;
     debugTimings: DebugTiming[],
     loginUrlWithReturnUrl: string

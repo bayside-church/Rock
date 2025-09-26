@@ -38,9 +38,9 @@ namespace Rock.Blocks.CheckIn
     /// </summary>
     [DisplayName( "Attendance History" )]
     [Category( "Check-in" )]
-    [Description( "Block for displaying the attendance history of a person or a group." )]
-    [IconCssClass( "fa fa-list" )]
-    // [SupportedSiteTypes( Model.SiteType.Web )]
+    [Description( "Block for displaying the attendance history of a person or a person and group." )]
+    [IconCssClass( "ti ti-list" )]
+    [SupportedSiteTypes( Model.SiteType.Web )]
 
     [BooleanField( "Filter Attendance By Default",
         Key = AttributeKey.FilterAttendanceByDefault,
@@ -221,7 +221,16 @@ namespace Rock.Blocks.CheckIn
         protected override IQueryable<Attendance> GetListQueryable( RockContext rockContext )
         {
             var attendanceService = new AttendanceService( rockContext );
-            var queryable = attendanceService.Queryable();
+            var queryable = attendanceService
+            .AsNoFilter()
+            .AsNoTracking()
+            .Include( a => a.Occurrence )
+            .Include( a => a.Occurrence.Group )
+            .Include( a => a.Occurrence.Schedule )
+            .Include( a => a.Occurrence.Location )
+            .Include( a => a.PersonAlias.Person )
+            .Include( a => a.Campus );
+
             InitializeContextEntities();
 
             if ( _person != null )
@@ -245,6 +254,10 @@ namespace Rock.Blocks.CheckIn
                 if ( FilterPerson.HasValue )
                 {
                     queryable = queryable.Where( a => a.PersonAlias.Person.Guid == FilterPerson.Value );
+                }
+                else
+                {
+                    throw new Exception( "Unable to load attendance. This block is intended to be on a page with a Person context." );
                 }
             }
 
@@ -290,23 +303,47 @@ namespace Rock.Blocks.CheckIn
         {
             var listItems = base.GetListItems( queryable, rockContext );
 
-            // Filter out attendance records where the current user does not have View permission for the Group.
-            var securedAttendanceItems = listItems
-                .AsEnumerable()
-                .Where( a => ( a.Occurrence.Group?.IsAuthorized( Authorization.VIEW, GetCurrentPerson() ) == true ) || a.Occurrence.Group == null )
-                .ToList();
+            // Filter out attendance records where the current person does not have View permission for the Group.
+            var person = GetCurrentPerson();
+            if ( person != null )
+            {
+                var authCache = new Dictionary<int, bool>();
+
+                // Cache by Group.Id so IsAuthorized() runs once per group.
+                listItems = listItems
+                    .AsEnumerable()
+                    .Where( a =>
+                    {
+                        var group = a?.Occurrence?.Group;
+                        if ( group == null )
+                        {
+                            return true;
+                        }
+                        if ( authCache.TryGetValue( group.Id, out var ok ) )
+                        {
+                            return ok;
+                        }
+                        ok = group.IsAuthorized( Authorization.VIEW, person );
+                        authCache[group.Id] = ok;
+                        return ok;
+                    } )
+                    .ToList();
+            }
 
             // build a lookup for _checkInAreaPaths
             _checkInAreaPaths = new GroupTypeService( rockContext ).GetAllCheckinAreaPaths().ToList();
 
             // build a lookup for _locationPaths
-            var locationIdList = securedAttendanceItems.Select( a => a.Occurrence.LocationId )
+            var locationIdList = listItems.Select( a => a.Occurrence.LocationId )
                 .Distinct()
                 .ToList();
 
             _locationPaths = new Dictionary<int, string>();
             var qryLocations = new LocationService( rockContext )
                 .Queryable()
+                .AsNoTracking()
+                .Include( l => l.ParentLocation )
+                .Include( l => l.ParentLocation.ParentLocation )
                 .Where( l => locationIdList.Contains( l.Id ) );
 
             foreach ( var location in qryLocations )
@@ -338,11 +375,11 @@ namespace Rock.Blocks.CheckIn
             return new GridBuilder<Attendance>()
                 .WithBlock( this )
                 .AddTextField( "idKey", a => a.IdKey )
-                .AddTextField( "location", a => a.Occurrence.Location?.Name )
+                .AddTextField( "location", a => a.Occurrence.Location?.Name ?? "" )
                 .AddTextField( "locationPath", a => GetLocationPath( a.Occurrence.LocationId ) )
-                .AddTextField( "campus", a => a.Campus?.Name )
-                .AddTextField( "schedule", a => a.Occurrence.Schedule?.Name )
-                .AddTextField( "groupName", a => a.Occurrence.Group?.Name )
+                .AddTextField( "campus", a => a.Campus?.Name ?? "" )
+                .AddTextField( "schedule", a => a.Occurrence.Schedule?.Name ?? "" )
+                .AddTextField( "groupName", a => a.Occurrence.Group?.Name ?? "" )
                 .AddTextField( "checkInAreaPath", a => CheckInAreaPath( a.Occurrence.Group?.GroupTypeId ) )
                 .AddPersonField( "person", a => a.PersonAlias?.Person )
                 .AddDateTimeField( "startDateTime", a => a.StartDateTime )

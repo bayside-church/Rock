@@ -29,13 +29,16 @@ using Rock.CheckIn;
 using Rock.CheckIn.v2;
 using Rock.CheckIn.v2.Labels;
 using Rock.Data;
+using Rock.Enums.CheckIn;
 using Rock.Model;
-using Rock.Security;
+using Rock.RealTime;
+using Rock.RealTime.Topics;
 using Rock.Utility;
 using Rock.Utility.ExtensionMethods;
 using Rock.ViewModels.Blocks.CheckIn.CheckInKiosk;
 using Rock.ViewModels.CheckIn;
 using Rock.ViewModels.CheckIn.Labels;
+using Rock.ViewModels.Utility;
 using Rock.Web.Cache;
 
 namespace Rock.Blocks.CheckIn
@@ -47,7 +50,7 @@ namespace Rock.Blocks.CheckIn
     [DisplayName( "Check-in Kiosk" )]
     [Category( "Check-in" )]
     [Description( "The standard Rock block for performing check-in at a kiosk." )]
-    [IconCssClass( "fa fa-clipboard-check" )]
+    [IconCssClass( "ti ti-clipboard-check" )]
     [SupportedSiteTypes( Model.SiteType.Web )]
 
     #region Block Attributes
@@ -64,18 +67,25 @@ namespace Rock.Blocks.CheckIn
         Key = AttributeKey.ShowCountsByLocation,
         Order = 1 )]
 
-    [ContentChannelField( "Promotions Content Channel",
-        Description = "The content channel to use for displaying promotions on the kiosk welcome screen.",
-        Key = AttributeKey.PromotionsContentChannel,
-        IsRequired = false,
-        Order = 2 )]
-
     [CustomDropdownListField( "REST Key",
         Description = "If your kiosk pages are configured for anonymous access then you must create a REST key with access to the check-in API endpoints and select it here.",
         Key = AttributeKey.RestKey,
         ListSource = RestKeyAttributeQuery,
         IsRequired = false,
-        Order = 3)]
+        Order = 3 )]
+
+    [IntegerField( "Idle Timeout",
+        Description = "The number of seconds that the kiosk can be idle without mouse or keyboard interaction before returning to the welcome screen.",
+        Key = AttributeKey.IdleTimeout,
+        IsRequired = false,
+        DefaultIntegerValue = 20,
+        Order = 4 )]
+
+    [BooleanField( "Select All Schedules Automatically",
+        Description = "When enabled, the kiosk will automatically select all available schedules instead of asking the individual to make a selection. This will also disable the 'skip' screen when there is nothing to check into, instead those individuals will quietly be skipped and not checked in.",
+        Key = AttributeKey.SelectAllSchedulesAutomatically,
+        IsRequired = false,
+        Order = 5 )]
 
     #endregion
 
@@ -89,8 +99,9 @@ namespace Rock.Blocks.CheckIn
         {
             public const string SetupPage = "SetupPage";
             public const string ShowCountsByLocation = "ShowCountsByLocation";
-            public const string PromotionsContentChannel = "PromotionsContentChannel";
             public const string RestKey = "RestKey";
+            public const string IdleTimeout = "IdleTimeout";
+            public const string SelectAllSchedulesAutomatically = "SelectAllSchedulesAutomatically";
         }
 
         private static class PageParameterKey
@@ -115,24 +126,35 @@ WHERE [RT].[Guid] = '" + SystemGuid.DefinedValue.PERSON_RECORD_TYPE_RESTUSER + "
         public override object GetObsidianBlockInitialization()
         {
             var apiKey = string.Empty;
+            string loginRequiredUrl = null;
 
             RequestContext.Response.AddCssLink( RequestContext.ResolveRockUrl( "~/Styles/Blocks/Checkin/CheckInKiosk.css" ), true );
 
-            if ( RequestContext.CurrentPerson == null && GetAttributeValue( AttributeKey.RestKey ).IsNotNullOrWhiteSpace() )
+            if ( RequestContext.CurrentPerson == null )
             {
-                var activeRecordStatusValueId = DefinedValueCache.Get( SystemGuid.DefinedValue.PERSON_RECORD_STATUS_ACTIVE.AsGuid(), RockContext ).Id;
-                var userGuid = GetAttributeValue( AttributeKey.RestKey ).AsGuid();
+                if ( GetAttributeValue( AttributeKey.RestKey ).IsNotNullOrWhiteSpace() )
+                {
+                    var activeRecordStatusValueId = DefinedValueCache.Get( SystemGuid.DefinedValue.PERSON_RECORD_STATUS_ACTIVE.AsGuid(), RockContext ).Id;
+                    var userGuid = GetAttributeValue( AttributeKey.RestKey ).AsGuid();
 
-                apiKey = new UserLoginService( RockContext ).Queryable()
-                    .Where( u => u.Guid == userGuid && u.Person.RecordStatusValueId == activeRecordStatusValueId )
-                    .Select( u => u.ApiKey )
-                    .FirstOrDefault() ?? string.Empty;
+                    apiKey = new UserLoginService( RockContext ).Queryable()
+                        .Where( u => u.Guid == userGuid && u.Person.RecordStatusValueId == activeRecordStatusValueId )
+                        .Select( u => u.ApiKey )
+                        .FirstOrDefault() ?? string.Empty;
+                }
+                else
+                {
+                    loginRequiredUrl = this.GetLoginPageUrl( this.GetCurrentPageUrl() );
+                }
             }
 
             return new
             {
+                LoginRequiredUrl = loginRequiredUrl,
                 ApiKey = apiKey,
                 CurrentTheme = PageCache.Layout?.Site?.Theme?.ToLower(),
+                IdleTimeout = GetAttributeValue( AttributeKey.IdleTimeout ).AsInteger(),
+                AreAllSchedulesSelectedAutomatically = GetAttributeValue( AttributeKey.SelectAllSchedulesAutomatically ).AsBoolean(),
                 SetupPageRoute = this.GetLinkedPageUrl( AttributeKey.SetupPage ),
                 ShowCountsByLocation = GetAttributeValue( AttributeKey.ShowCountsByLocation ).AsBoolean()
             };
@@ -176,38 +198,15 @@ WHERE [RT].[Guid] = '" + SystemGuid.DefinedValue.PERSON_RECORD_TYPE_RESTUSER + "
         }
 
         /// <summary>
-        /// Gets the printer device that the kiosk is configured to use.
-        /// </summary>
-        /// <param name="kioskId">The encrypted identifier of the kiosk.</param>
-        /// <returns>An instance of <see cref="DeviceCache"/> that represents the printer device or <c>null</c></returns>
-        private DeviceCache GetKioskPrinter( string kioskId )
-        {
-            var kiosk = DeviceCache.GetByIdKey( kioskId, RockContext );
-
-            if ( kiosk == null )
-            {
-                return null;
-            }
-
-            if ( !kiosk.PrinterDeviceId.HasValue )
-            {
-                return null;
-            }
-
-            return DeviceCache.Get( kiosk.PrinterDeviceId.Value, RockContext );
-        }
-
-        /// <summary>
         /// Gets the promotion items that should be displayed on kiosks at the
         /// specified location.
         /// </summary>
+        /// <param name="configuration">The check-in configuration template data to use when pulling the promotions.</param>
         /// <param name="campusId">The identifier of the <see cref="Campus"/> to filter items for.</param>
         /// <returns>A collection of <see cref="PromotionBag"/> objects that represent the promotions to display.</returns>
-        private List<PromotionBag> GetPromotionItems( int? campusId )
+        private List<PromotionBag> GetPromotionItems( TemplateConfigurationData configuration, int? campusId )
         {
-            var promotionContentChannelGuid = GetAttributeValue( AttributeKey.PromotionsContentChannel ).AsGuidOrNull();
-
-            if ( !promotionContentChannelGuid.HasValue )
+            if ( !configuration.PromotionContentChannelGuid.HasValue )
             {
                 return new List<PromotionBag>();
             }
@@ -216,7 +215,7 @@ WHERE [RT].[Guid] = '" + SystemGuid.DefinedValue.PERSON_RECORD_TYPE_RESTUSER + "
                 .Queryable()
                 .AsNoTracking()
                 .Include( cc => cc.Items )
-                .Where( cc => cc.Guid == promotionContentChannelGuid.Value )
+                .Where( cc => cc.Guid == configuration.PromotionContentChannelGuid.Value )
                 .FirstOrDefault();
 
             if ( contentChannel == null )
@@ -228,7 +227,7 @@ WHERE [RT].[Guid] = '" + SystemGuid.DefinedValue.PERSON_RECORD_TYPE_RESTUSER + "
 
             // Get the campus to filter for as well as the current date.
             var campus = campusId.HasValue
-                ? CampusCache.Get( campusId.Value )
+                ? CampusCache.Get( campusId.Value, RockContext )
                 : null;
             var campusGuid = campus?.Guid ?? Guid.Empty;
             var now = campus?.CurrentDateTime ?? RockDateTime.Now;
@@ -251,8 +250,8 @@ WHERE [RT].[Guid] = '" + SystemGuid.DefinedValue.PERSON_RECORD_TYPE_RESTUSER + "
 
             // Order the items.
             promotionItems = contentChannel.ItemsManuallyOrdered
-                ? contentChannel.Items.OrderBy( item => item.Order )
-                : contentChannel.Items.OrderBy( item => item.StartDateTime );
+                ? promotionItems.OrderBy( item => item.Order )
+                : promotionItems.OrderBy( item => item.StartDateTime );
 
             return promotionItems
                 .Select( item => new PromotionBag
@@ -389,7 +388,6 @@ WHERE [RT].[Guid] = '" + SystemGuid.DefinedValue.PERSON_RECORD_TYPE_RESTUSER + "
                 .Select( a => new ActiveAttendanceBag
                 {
                     Id = a.AttendanceId,
-                    AreaId = a.GroupTypeId,
                     GroupId = a.GroupId,
                     LocationId = a.LocationId,
                     Status = a.Status
@@ -439,8 +437,11 @@ WHERE [RT].[Guid] = '" + SystemGuid.DefinedValue.PERSON_RECORD_TYPE_RESTUSER + "
                     Id = IdHasher.Instance.GetHash( g.Key.Id ),
                     Name = g.Key.Name,
                     AreaId = IdHasher.Instance.GetHash( g.Key.GroupTypeId ),
-                    LocationIds = g.Where( l => l.LocationId.HasValue )
-                        .Select( l => IdHasher.Instance.GetHash( l.LocationId.Value ) )
+                    Locations = g.Where( l => l.LocationId.HasValue )
+                        .Select( l => new LocationAndScheduleBag
+                        {
+                            LocationId = IdHasher.Instance.GetHash( l.LocationId.Value )
+                        } )
                         .ToList()
                 } )
                 .ToList();
@@ -522,6 +523,373 @@ WHERE [RT].[Guid] = '" + SystemGuid.DefinedValue.PERSON_RECORD_TYPE_RESTUSER + "
                 .ToList();
         }
 
+        /// <summary>
+        /// Populates the person attribute definitions in <paramref name="responseBag"/>
+        /// with the configured values.
+        /// </summary>
+        /// <param name="responseBag">The bag whose attributes should be populated.</param>
+        /// <param name="template">The configuration template to use for which attributes to populate.</param>
+        /// <param name="familyGroup">The group representing the primary family.</param>
+        private void PopulatePersonAttributeBags( EditFamilyResponseBag responseBag, TemplateConfigurationData template, Model.Group familyGroup )
+        {
+            var tempPerson = new Person();
+            var familyAttributeGuids = template.RequiredAttributeGuidsForFamilies
+                .Union( template.OptionalAttributeGuidsForFamilies )
+                .ToList();
+            var adultAttributeGuids = template.RequiredAttributeGuidsForAdults
+                .Union( template.OptionalAttributeGuidsForAdults )
+                .ToList();
+            var childAttributeGuids = template.RequiredAttributeGuidsForChildren
+                .Union( template.OptionalAttributeGuidsForChildren )
+                .ToList();
+            var requiredAttributeGuids = template.RequiredAttributeGuidsForAdults
+                .Union( template.RequiredAttributeGuidsForChildren )
+                .Union( template.RequiredAttributeGuidsForFamilies )
+                .ToList();
+
+            tempPerson.LoadAttributes( RockContext );
+
+            responseBag.AdultAttributes = tempPerson.GetPublicAttributesForEdit(
+                RequestContext.CurrentPerson,
+                false,
+                a => adultAttributeGuids.Contains( a.Guid ) );
+
+            responseBag.ChildAttributes = tempPerson.GetPublicAttributesForEdit(
+                RequestContext.CurrentPerson,
+                false,
+                a => childAttributeGuids.Contains( a.Guid ) );
+
+            responseBag.FamilyAttributes = familyGroup.GetPublicAttributesForEdit(
+                RequestContext.CurrentPerson,
+                false,
+                a => familyAttributeGuids.Contains( a.Guid ) );
+
+            foreach ( var attribute in responseBag.AdultAttributes.Values )
+            {
+                attribute.IsRequired = requiredAttributeGuids.Contains( attribute.AttributeGuid );
+            }
+
+            foreach ( var attribute in responseBag.ChildAttributes.Values )
+            {
+                attribute.IsRequired = requiredAttributeGuids.Contains( attribute.AttributeGuid );
+            }
+
+            foreach ( var attribute in responseBag.FamilyAttributes.Values )
+            {
+                attribute.IsRequired = requiredAttributeGuids.Contains( attribute.AttributeGuid );
+            }
+        }
+
+        /// <summary>
+        /// Converts the scanned PCL+ code into a list of check-in session guids.
+        /// </summary>
+        /// <param name="scannedCode">The code that was scanned.</param>
+        /// <returns>A list of session unique identifiers contained in the code.</returns>
+        private List<Guid> GetPreCheckInSessionGuids( string scannedCode )
+        {
+            try
+            {
+                if ( scannedCode.StartsWith( "PCL+" ) )
+                {
+                    scannedCode = scannedCode.Substring( 4 );
+                }
+
+                return scannedCode.SplitDelimitedValues()
+                    .Select( a =>
+                    {
+                        if ( Guid.TryParse( a, out var guid ) )
+                        {
+                            return guid;
+                        }
+
+                        return GuidHelper.FromShortStringOrNull( a );
+
+                    } )
+                    .Where( a => a.HasValue )
+                    .Select( a => a.Value )
+                    .ToList();
+            }
+            catch
+            {
+                return new List<Guid>();
+            }
+        }
+
+        /// <summary>
+        /// Prints the legacy labels for the specified attendance identifier.
+        /// </summary>
+        /// <param name="attendanceId">The attendance identifier to print labels for.</param>
+        /// <returns>An instance of <see cref="PrintResponseBag"/> that contains the result of the operation.</returns>
+        private PrintResponseBag PrintLegacyLabelsForAttendanceId( int attendanceId )
+        {
+            var attendance = new AttendanceService( RockContext ).Get( attendanceId );
+            var attendanceIds = new List<int> { attendance.Id };
+            var possibleLabels = ZebraPrint.GetLabelTypesForPerson( attendance.PersonAlias.PersonId, attendanceIds );
+            var fileGuids = possibleLabels.Select( pl => pl.FileGuid ).ToList();
+
+            var (errorMessages, legacyClientLabels) = ZebraPrint.ReprintZebraLabels( fileGuids, attendance.PersonAlias.PersonId, attendanceIds, null );
+
+            var legacyClientLabelBags = legacyClientLabels
+                .Select( label => new LegacyClientLabelBag
+                {
+                    LabelFile = RequestContext.RootUrlPath + label.LabelFile,
+                    LabelKey = label.LabelKey,
+                    MergeFields = label.MergeFields,
+                    PrinterAddress = label.PrinterAddress
+                } )
+                .ToList();
+
+            return new PrintResponseBag
+            {
+                ErrorMessages = errorMessages,
+                LegacyLabels = legacyClientLabelBags
+            };
+        }
+
+        /// <summary>
+        /// Prints the labels for the specified attendance identifier.
+        /// </summary>
+        /// <param name="director">The instance handling the check-in process.</param>
+        /// <param name="kiosk">The kiosk that we will be printing labels for.</param>
+        /// <param name="printer">The printer that will be used as an override for where to print if not <c>null</c>.</param>
+        /// <param name="attendanceId">The attendance identifier to print labels for.</param>
+        /// <returns>An instance of <see cref="PrintResponseBag"/> that contains the result of the operation.</returns>
+        private async Task<PrintResponseBag> PrintLabelsForAttendanceId( CheckInDirector director, DeviceCache kiosk, DeviceCache printer, int attendanceId )
+        {
+            // Use the new label format for re-printing.
+            var labels = director.LabelProvider.RenderLabels( new List<int> { attendanceId }, kiosk, printer, false );
+
+            var errorMessages = labels.Where( l => l.Error.IsNotNullOrWhiteSpace() )
+                .Select( l => l.Error )
+                .ToList();
+
+            if ( !labels.Any() )
+            {
+                return null;
+            }
+
+            labels = labels.Where( l => l.Error.IsNullOrWhiteSpace() ).ToList();
+
+            // Print the labels with a 5 second timeout.
+            var cts = new CancellationTokenSource( 5_000 );
+            var printProvider = new LabelPrintProvider();
+            var clientLabelBags = labels.Where( l => l.PrintFrom == PrintFrom.Client )
+                .Select( l => new ClientLabelBag
+                {
+                    PrinterAddress = l.PrintTo?.IPAddress,
+                    Data = Convert.ToBase64String( l.Data )
+                } )
+                .ToList();
+
+            try
+            {
+                var serverLabels = labels.Where( l => l.PrintFrom == PrintFrom.Server );
+                var printerErrors = await printProvider.PrintLabelsAsync( serverLabels, cts.Token );
+
+                errorMessages.AddRange( printerErrors );
+            }
+            catch ( TaskCanceledException ) when ( cts.IsCancellationRequested )
+            {
+                errorMessages.Add( "Timeout waiting for labels to print." );
+            }
+
+            return new PrintResponseBag
+            {
+                ErrorMessages = errorMessages,
+                Labels = clientLabelBags
+            };
+        }
+
+        /// <summary>
+        /// Prints the labels for the specified attendance identifiers. This will
+        /// determine whether or not to print legacy or next-gen labels.
+        /// </summary>
+        /// <param name="director">The instance handling the check-in process.</param>
+        /// <param name="kiosk">The kiosk that we will be printing labels for.</param>
+        /// <param name="printer">The printer that will be used as an override for where to print if not <c>null</c>.</param>
+        /// <param name="attendanceIds">The attendance identifiers to print labels for.</param>
+        /// <returns>An instance of <see cref="PrintResponseBag"/> that contains the result of the operation.</returns>
+        private async Task<PrintResponseBag> PrintLabelsForAttendanceIds( CheckInDirector director, DeviceCache kiosk, DeviceCache printer, List<int> attendanceIds )
+        {
+            var response = new PrintResponseBag
+            {
+                ErrorMessages = new List<string>(),
+                Labels = new List<ClientLabelBag>(),
+                LegacyLabels = new List<LegacyClientLabelBag>()
+            };
+
+            // If any attendance records for these sessions have legacy labels
+            // then use those for printing instead of the new label format.
+            var legacy = RockContext.Set<AttendanceData>().Any( a => attendanceIds.Contains( a.Id ) );
+            var hasLabels = false;
+
+            foreach ( var attendanceId in attendanceIds )
+            {
+                var attendanceResponse = legacy
+                    ? PrintLegacyLabelsForAttendanceId( attendanceId )
+                    : await PrintLabelsForAttendanceId( director, kiosk, printer, attendanceId );
+
+                if ( attendanceResponse != null )
+                {
+                    response.ErrorMessages.AddRange( attendanceResponse.ErrorMessages );
+
+                    if ( legacy )
+                    {
+                        response.LegacyLabels.AddRange( attendanceResponse.LegacyLabels );
+                    }
+                    else
+                    {
+                        response.Labels.AddRange( attendanceResponse.Labels );
+                    }
+
+                    hasLabels = true;
+                }
+            }
+
+            if ( !hasLabels )
+            {
+                return null;
+            }
+
+            return response;
+        }
+
+        /// <summary>
+        /// Begins the process of editing a new family. This loads all the
+        /// information about the family as well as information needed to paint
+        /// the UI screens for the current configuration.
+        /// </summary>
+        /// <param name="familyId">The encrypted identifier of the family to edit. This should be an empty string to add a new family.</param>
+        /// <param name="templateId">The encrypted identifier of the configuration template.</param>
+        /// <param name="kioskId">The encrypted identifier of the kiosk being used to edit a family.</param>
+        /// <param name="addIndividualOnly">If <c>true</c> then a single individual will be added to the family, no family edit operations allowed.</param>
+        /// <returns>An instance of <see cref="EditFamilyResponseBag"/> that describes the family and UI details.</returns>
+        private BlockActionResult GetEditFamilyResponseBag( string familyId, string templateId, string kioskId, bool addIndividualOnly )
+        {
+            Model.Group group = null;
+            var template = GroupTypeCache.GetByIdKey( templateId, RockContext )
+                ?.GetCheckInConfiguration( RockContext );
+            var kiosk = DeviceCache.GetByIdKey( kioskId, RockContext );
+
+            if ( familyId.IsNotNullOrWhiteSpace() )
+            {
+                group = new GroupService( RockContext ).GetQueryableByKey( familyId, false )
+                    .Include( g => g.Members.Select( gm => gm.Person ) )
+                    .FirstOrDefault();
+
+                if ( group == null )
+                {
+                    return ActionBadRequest( "Family not found." );
+                }
+
+                group.LoadAttributes( RockContext );
+                group.Members.Select( gm => gm.Person ).ToList().LoadAttributes( RockContext );
+            }
+            else
+            {
+                group = new Model.Group
+                {
+                    GroupTypeId = GroupTypeCache.Get( SystemGuid.GroupType.GROUPTYPE_FAMILY.AsGuid(), RockContext ).Id
+                };
+
+                group.LoadAttributes( RockContext );
+            }
+
+            if ( template == null )
+            {
+                return ActionBadRequest( "Check-in configuration template not found." );
+            }
+
+            if ( kiosk == null )
+            {
+                return ActionBadRequest( "Kiosk not found." );
+            }
+
+            if ( addIndividualOnly )
+            {
+                var addMode = kiosk.GetAttributeValue( SystemKey.DeviceAttributeKey.DEVICE_KIOSK_ALLOW_ADDING_INDIVIDUALS_TO_EXISTING_FAMILIES ).ConvertToEnum<AdultsOrChildrenSelectionMode>();
+
+                if ( addMode == AdultsOrChildrenSelectionMode.None )
+                {
+                    return ActionBadRequest( "This kiosk does not support individual registration." );
+                }
+            }
+            else if ( group.Id == 0 && !kiosk.GetAttributeValue( SystemKey.DeviceAttributeKey.DEVICE_KIOSK_ALLOW_ADDING_FAMILIES ).AsBoolean() )
+            {
+                return ActionBadRequest( "This kiosk does not support family registration." );
+            }
+            else if ( group.Id != 0 && !kiosk.GetAttributeValue( SystemKey.DeviceAttributeKey.DEVICE_KIOSK_ALLOW_EDITING_FAMILIES ).AsBoolean() )
+            {
+                return ActionBadRequest( "This kiosk does not support family registration." );
+            }
+
+            var canCheckInMembers = new CheckInDirector( RockContext )
+                .CreateSession( template )
+                .SearchProvider
+                .GetCanCheckInFamilyMembersQuery( group.IdKey )
+                .ToList();
+
+            var registration = new FamilyRegistration( RockContext, RequestContext.CurrentPerson, template );
+            var knownRelationshipsCache = GroupTypeCache.Get( SystemGuid.GroupType.GROUPTYPE_KNOWN_RELATIONSHIPS.AsGuid(), RockContext ).Roles;
+            ListItemBag childRelationship = null;
+
+            if ( template.KnownRelationshipRoleGuids.Contains( SystemGuid.GroupRole.GROUPROLE_KNOWN_RELATIONSHIPS_CHILD.AsGuid() ) )
+            {
+                var childRelationshipRole = knownRelationshipsCache
+                    .FirstOrDefault( r => r.Guid == SystemGuid.GroupRole.GROUPROLE_KNOWN_RELATIONSHIPS_CHILD.AsGuid() );
+
+                if ( childRelationshipRole != null )
+                {
+                    childRelationship = new ListItemBag
+                    {
+                        Value = childRelationshipRole.Guid.ToString(),
+                        Text = childRelationshipRole.Name
+                    };
+                }
+            }
+
+            var response = new EditFamilyResponseBag
+            {
+                Family = !addIndividualOnly ? registration.GetFamilyBag( group ) : null,
+                People = !addIndividualOnly ? registration.GetFamilyMemberBags( group, canCheckInMembers ) : null,
+                ForceSelectionOfKnownRelationshipType = template.ForceSelectionOfKnownRelationshipType,
+                IsAlternateIdFieldVisibleForAdults = template.IsAlternateIdFieldVisibleForAdults,
+                IsAlternateIdFieldVisibleForChildren = template.IsAlternateIdFieldVisibleForChildren,
+                IsSmsButtonVisible = template.IsSmsButtonVisible,
+                IsSmsButtonCheckedByDefault = template.IsSmsButtonCheckedByDefault,
+                IsCheckInAfterRegistrationAllowed = template.IsCheckInAfterRegistrationAllowed,
+                DisplayBirthdateForAdults = template.DisplayBirthdateForAdults,
+                DisplayBirthdateForChildren = template.DisplayBirthdateForChildren,
+                DisplayEthnicityForAdults = template.DisplayEthnicityForAdults,
+                DisplayEthnicityForChildren = template.DisplayEthnicityForChildren,
+                DisplayGradeForChildren = template.DisplayGradeForChildren,
+                GradeConfirmationAge = template.GradeConfirmationAge,
+                DisplayMobilePhoneForChildren = template.DisplayMobilePhoneForChildren,
+                DisplayRaceForAdults = template.DisplayRaceForAdults,
+                DisplayRaceForChildren = template.DisplayRaceForChildren,
+                DisplaySuffix = template.DisplaySuffix,
+                Suffixes = DefinedTypeCache.Get( SystemGuid.DefinedType.PERSON_SUFFIX.AsGuid(), RockContext )
+                    ?.DefinedValues
+                    .OrderBy( dv => dv.Order )
+                    .ToListItemBagList(),
+                Relationships = template.KnownRelationshipRoleGuids
+                    .Select( guid => knownRelationshipsCache.FirstOrDefault( r => r.Guid == guid ) )
+                    .Where( gtr => gtr != null )
+                    .OrderBy( gtr => gtr.Order )
+                    .Select( gtr => new ListItemBag
+                    {
+                        Value = gtr.Guid.ToString(),
+                        Text = gtr.Name
+                    } )
+                    .ToList(),
+                ChildRelationship = childRelationship
+            };
+
+            PopulatePersonAttributeBags( response, template, group );
+
+            return ActionOk( response );
+        }
+
         #endregion
 
         #region Block Actions
@@ -555,11 +923,11 @@ WHERE [RT].[Guid] = '" + SystemGuid.DefinedValue.PERSON_RECORD_TYPE_RESTUSER + "
         [BlockAction]
         public BlockActionResult GetPromotionList( string templateId, string kioskId )
         {
-            var promotionContentChannelGuid = GetAttributeValue( AttributeKey.PromotionsContentChannel ).AsGuidOrNull();
+            var configuration = GroupTypeCache.GetByIdKey( templateId, RockContext )?.GetCheckInConfiguration( RockContext );
 
-            if ( !promotionContentChannelGuid.HasValue )
+            if ( configuration == null )
             {
-                return ActionOk( new List<PromotionBag>() );
+                return ActionBadRequest( "Invalid check-in template." );
             }
 
             var kiosk = DeviceCache.GetByIdKey( kioskId, RockContext );
@@ -569,8 +937,178 @@ WHERE [RT].[Guid] = '" + SystemGuid.DefinedValue.PERSON_RECORD_TYPE_RESTUSER + "
                 return ActionBadRequest( "Invalid kiosk." );
             }
 
-            return ActionOk( GetPromotionItems( kiosk.GetCampusId() ) );
+            return ActionOk( GetPromotionItems( configuration, kiosk.GetCampusId() ) );
         }
+
+        /// <summary>
+        /// Request to print labels for a mobile check-in where they have
+        /// been giving a QR code for scanning at the kiosk.
+        /// </summary>
+        /// <param name="scannedCode">The scanned code from the barcode reader.</param>
+        /// <param name="kioskId">The encrypted identifier of the kiosk.</param>
+        /// <param name="attendanceId">The encrypted identifier of the attendance to print labels for.</param>
+        /// <returns>A 200-OK response that indicates if any errors occurred during printing.</returns>
+        [BlockAction]
+        public async Task<BlockActionResult> PrintPreCheckInLabels( string kioskId, string scannedCode )
+        {
+            var director = new CheckInDirector( RockContext );
+
+            var kiosk = DeviceCache.GetByIdKey( kioskId, RockContext );
+
+            if ( kiosk == null )
+            {
+                return ActionBadRequest( "Kiosk was not found." );
+            }
+
+            var sessionGuids = GetPreCheckInSessionGuids( scannedCode );
+            var attendanceIds = new AttendanceService( RockContext ).Queryable()
+                .Where( a => sessionGuids.Contains( a.AttendanceCheckInSession.Guid ) )
+                .Select( a => a.Id )
+                .ToList();
+
+            if ( !attendanceIds.Any() )
+            {
+                return ActionBadRequest( "No check-in sessions were found." );
+            }
+
+            var response = await PrintLabelsForAttendanceIds( director, kiosk, null, attendanceIds );
+
+            if ( response == null )
+            {
+                return ActionOk( new PrintResponseBag
+                {
+                    ErrorMessages = new List<string>
+                    {
+                        "No labels to print. You're all set."
+                    }
+                } );
+            }
+
+            return ActionOk( response );
+        }
+
+        /// <summary>
+        /// Subscribes to all real time topic channels that are needed for the
+        /// kiosk to track any changes.
+        /// </summary>
+        /// <param name="connectionId">The real-time connection identifier for the client.</param>
+        /// <param name="kioskId">The encrypted kiosk identifier.</param>
+        /// <param name="areaIds">The encrypted area identifiers the kiosk is configured to use.</param>
+        /// <returns>An object that contains additional data required to monitor real-time messages.</returns>
+        [BlockAction]
+        public async Task<BlockActionResult> SubscribeToRealTime( string connectionId, string kioskId, List<string> areaIds )
+        {
+            var hasher = IdHasher.Instance;
+            var kiosk = DeviceCache.GetByIdKey( kioskId, RockContext );
+
+            if ( kiosk == null )
+            {
+                return ActionBadRequest( "Kiosk not found." );
+            }
+
+            // Translate all the area IdKey values to Id numbers.
+            var areaIdNumbers = areaIds.Select( id => IdHasher.Instance.GetId( id ) )
+                .Where( id => id.HasValue )
+                .Select( id => id.Value )
+                .ToList();
+
+            // Get a map of all group IdKey => Guid values for groups that this
+            // kiosk may see.
+            var groupMap = new GroupService( RockContext )
+                .Queryable()
+                .Where( g => areaIdNumbers.Contains( g.GroupTypeId ) )
+                .Select( g => new
+                {
+                    g.Id,
+                    g.Guid
+                } )
+                .ToList()
+                .Select( g => new IdMapBag
+                {
+                    IdKey = hasher.GetHash( g.Id ),
+                    Guid = g.Guid
+                } )
+                .ToList();
+
+            var locationMap = kiosk.GetAllLocations()
+                .Select( l => new IdMapBag
+                {
+                    IdKey = hasher.GetHash( l.Id ),
+                    Guid = l.Guid
+                } )
+                .ToList();
+
+            // Subscribe the client connection to all the required channels.
+            var topicChannels = RealTimeHelper.GetTopicContext<IEntityUpdated>().Channels;
+
+            foreach ( var location in locationMap )
+            {
+                var channel = EntityUpdatedTopic.GetAttendanceChannelForLocation( location.Guid );
+
+                await topicChannels.AddToChannelAsync( connectionId, channel );
+            }
+
+            await topicChannels.AddToChannelAsync( connectionId, EntityUpdatedTopic.GetAttendanceDeletedChannel() );
+
+            return ActionOk( new SubscribeToRealTimeResponseBag
+            {
+                LocationMap = locationMap,
+                GroupMap = groupMap
+            } );
+        }
+
+        /// <summary>
+        /// Removes any "can check-in" relationship between the attendee and all
+        /// members of the family.
+        /// </summary>
+        /// <param name="templateId">The encrypted identifier of the configuration template being used.</param>
+        /// <param name="familyId">The encrypted identifier of the family.</param>
+        /// <param name="attendeeId">The encrypted identifier of the attendee.</param>
+        /// <returns>A status code of 200 to indicate all relationships were removed.</returns>
+        [BlockAction]
+        public BlockActionResult RemoveAttendee( string templateId, string familyId, string attendeeId )
+        {
+            var configuration = GroupTypeCache.GetByIdKey( templateId, RockContext )?.GetCheckInConfiguration( RockContext );
+
+            if ( configuration?.IsRemoveFromFamilyAtKioskAllowed != true )
+            {
+                return ActionBadRequest( "Removing family members is not allowed." );
+            }
+
+            var familyIdNumber = IdHasher.Instance.GetId( familyId );
+            var attendeeIdNumber = IdHasher.Instance.GetId( attendeeId );
+
+            if ( !familyIdNumber.HasValue || !attendeeIdNumber.HasValue )
+            {
+                return ActionBadRequest( "Invalid person or family specified." );
+            }
+
+            var groupMemberService = new GroupMemberService( RockContext );
+            var familyMemberPersonIds = groupMemberService
+                .Queryable()
+                .Where( fm => fm.GroupId == familyIdNumber.Value )
+                .Select( fm => fm.PersonId )
+                .ToList();
+
+            var knownRelationshipGroupType = GroupTypeCache.Get( Rock.SystemGuid.GroupType.GROUPTYPE_KNOWN_RELATIONSHIPS );
+            var canCheckInRoleIds = knownRelationshipGroupType.Roles
+                .Where( r => r.GetAttributeValue( "CanCheckin" ).AsBoolean() )
+                .Select( r => r.Id )
+                .ToList();
+
+            foreach ( var familyMemberPersonId in familyMemberPersonIds )
+            {
+                groupMemberService.DeleteKnownRelationships( familyMemberPersonId, attendeeIdNumber.Value, canCheckInRoleIds );
+            }
+
+            RockContext.SaveChanges();
+
+            return ActionOk();
+        }
+
+        #endregion
+
+        #region Supervisor Block Actions
 
         /// <summary>
         /// Gets the current attendance counts for this kiosk. This will return
@@ -623,7 +1161,7 @@ WHERE [RT].[Guid] = '" + SystemGuid.DefinedValue.PERSON_RECORD_TYPE_RESTUSER + "
 
         /// <summary>
         /// Verifies that the PIN code is valid and can be used. This is used
-        /// by the UI to perform the initial login step to the admins creen.
+        /// by the UI to perform the initial login step to the admins screen.
         /// </summary>
         /// <param name="pinCode">The PIN code to validate.</param>
         /// <returns>A 200-OK status if the PIN code was valid.</returns>
@@ -632,7 +1170,7 @@ WHERE [RT].[Guid] = '" + SystemGuid.DefinedValue.PERSON_RECORD_TYPE_RESTUSER + "
         {
             var director = new CheckInDirector( RockContext );
 
-            if ( !director.TryAuthenticatePin( pinCode, out var errorMessage ) )
+            if ( !director.TryAuthenticatePin( pinCode, out var errorMessage, true ) )
             {
                 return ActionBadRequest( errorMessage );
             }
@@ -719,12 +1257,16 @@ WHERE [RT].[Guid] = '" + SystemGuid.DefinedValue.PERSON_RECORD_TYPE_RESTUSER + "
                 return ActionBadRequest( errorMessage );
             }
 
-            var printer = GetKioskPrinter( kioskId );
+            var kiosk = DeviceCache.GetByIdKey( kioskId, RockContext );
 
-            if ( printer == null )
+            if ( kiosk == null )
             {
-                return ActionBadRequest( "This kiosk does not have a printer defined." );
+                return ActionBadRequest( "Kiosk was not found." );
             }
+
+            var printer = kiosk.PrinterDeviceId.HasValue
+                ? DeviceCache.Get( kiosk.PrinterDeviceId.Value, RockContext )
+                : null;
 
             var attendanceIdNumber = IdHasher.Instance.GetId( attendanceId );
 
@@ -733,72 +1275,20 @@ WHERE [RT].[Guid] = '" + SystemGuid.DefinedValue.PERSON_RECORD_TYPE_RESTUSER + "
                 return ActionBadRequest( "Invalid attendance." );
             }
 
-            // If the attendance record has legacy labels then use those for
-            // re-printing instead of the new label format.
-            if ( RockContext.Set<AttendanceData>().Any( a => a.Id == attendanceIdNumber.Value ) )
+            var response = await PrintLabelsForAttendanceIds( director, kiosk, printer, new List<int> { attendanceIdNumber.Value } );
+
+            if ( response == null )
             {
-                var attendance = new AttendanceService( RockContext ).Get( attendanceIdNumber.Value );
-                var attendanceIds = new List<int> { attendance.Id };
-                var possibleLabels = ZebraPrint.GetLabelTypesForPerson( attendance.PersonAlias.PersonId, attendanceIds );
-                var fileGuids = possibleLabels.Select( pl => pl.FileGuid ).ToList();
-
-                var (legacyMessages, legacyClientLabels) = ZebraPrint.ReprintZebraLabels( fileGuids, attendance.PersonAlias.PersonId, attendanceIds, null );
-
-                var clientLabels = legacyClientLabels
-                    .Select( label => new LegacyClientLabelBag
-                    {
-                        LabelFile = RequestContext.RootUrlPath + label.LabelFile,
-                        LabelKey = label.LabelKey,
-                        MergeFields = label.MergeFields,
-                        PrinterAddress = label.PrinterAddress
-                    } )
-                    .ToList();
-
-                return ActionOk( new
+                return ActionOk( new PrintResponseBag
                 {
-                    ErrorMessages = legacyMessages,
-                    LegacyLabels = clientLabels
+                    ErrorMessages = new List<string>
+                    {
+                        "No labels found to print."
+                    }
                 } );
             }
 
-            // Use the new label format for re-printing.
-            var labels = director.LabelProvider.RenderLabels( new List<int> { attendanceIdNumber.Value }, null, false );
-
-            var errorMessages = labels.Where( l => l.Error.IsNotNullOrWhiteSpace() )
-                .Select( l => l.Error )
-                .ToList();
-
-            if ( !labels.Any() )
-            {
-                errorMessages.Add( "No labels to print." );
-            }
-
-            labels = labels.Where( l => l.Error.IsNullOrWhiteSpace() ).ToList();
-            foreach ( var label in labels )
-            {
-                label.PrintTo = printer;
-                label.PrintFrom = PrintFrom.Server;
-            }
-
-            // Print the labels with a 5 second timeout.
-            var cts = new CancellationTokenSource( 5_000 );
-            var printProvider = new LabelPrintProvider();
-
-            try
-            {
-                var printerErrors = await printProvider.PrintLabelsAsync( labels, cts.Token );
-
-                errorMessages.AddRange( printerErrors );
-            }
-            catch ( TaskCanceledException ) when ( cts.IsCancellationRequested )
-            {
-                errorMessages.Add( "Timeout waiting for labels to print." );
-            }
-
-            return ActionOk( new
-            {
-                ErrorMessages = errorMessages
-            } );
+            return ActionOk( response );
         }
 
         /// <summary>
@@ -998,6 +1488,130 @@ WHERE [RT].[Guid] = '" + SystemGuid.DefinedValue.PERSON_RECORD_TYPE_RESTUSER + "
             }
 
             return ActionOk();
+        }
+
+        #endregion
+
+        #region Registration Block Actions
+
+        /// <summary>
+        /// Begins the process of editing a new family. This loads all the
+        /// information about the family as well as information needed to paint
+        /// the UI screens for the current configuration.
+        /// </summary>
+        /// <param name="familyId">The encrypted identifier of the family to edit. This should be an empty string to add a new family.</param>
+        /// <param name="templateId">The encrypted identifier of the configuration template.</param>
+        /// <param name="kioskId">The encrypted identifier of the kiosk being used to edit a family.</param>
+        /// <returns>An instance of <see cref="EditFamilyResponseBag"/> that describes the family and UI details.</returns>
+        [BlockAction]
+        public BlockActionResult EditFamily( string familyId, string templateId, string kioskId )
+        {
+            return GetEditFamilyResponseBag( familyId, templateId, kioskId, false );
+        }
+
+        /// <summary>
+        /// Begins the process of adding a single individual to an existing family.
+        /// This loads all the information needed to paint the UI screens for the
+        /// current configuration.
+        /// </summary>
+        /// <param name="templateId">The encrypted identifier of the configuration template.</param>
+        /// <param name="kioskId">The encrypted identifier of the kiosk being used to add the individual.</param>
+        /// <returns>An instance of <see cref="EditFamilyResponseBag"/> that describes the UI details.</returns>
+        [BlockAction]
+        public BlockActionResult BeginAddIndividual( string templateId, string kioskId )
+        {
+            return GetEditFamilyResponseBag( null, templateId, kioskId, true );
+        }
+
+        /// <summary>
+        /// Saves changes made to a family on a kiosk registration screen.
+        /// </summary>
+        /// <param name="options">The options that describe the request.</param>
+        /// <returns>An instance of <see cref="SaveFamilyResponseBag"/> that describes if the operation was successful or not.</returns>
+        [BlockAction]
+        public BlockActionResult SaveFamily( SaveFamilyOptionsBag options )
+        {
+            var template = GroupTypeCache.GetByIdKey( options.TemplateId, RockContext )
+                ?.GetCheckInConfiguration( RockContext );
+            var kiosk = DeviceCache.GetByIdKey( options.KioskId, RockContext );
+            var familyId = options.Family?.Bag?.Id;
+
+            if ( template == null )
+            {
+                return ActionBadRequest( "Check-in configuration template not found." );
+            }
+
+            if ( kiosk == null )
+            {
+                return ActionBadRequest( "Kiosk not found." );
+            }
+
+            if ( familyId.IsNullOrWhiteSpace() && !kiosk.GetAttributeValue( SystemKey.DeviceAttributeKey.DEVICE_KIOSK_ALLOW_ADDING_FAMILIES ).AsBoolean() )
+            {
+                return ActionBadRequest( "This kiosk does not support family registration." );
+            }
+            else if ( familyId.IsNotNullOrWhiteSpace() && !kiosk.GetAttributeValue( SystemKey.DeviceAttributeKey.DEVICE_KIOSK_ALLOW_EDITING_FAMILIES ).AsBoolean() )
+            {
+                return ActionBadRequest( "This kiosk does not support family registration." );
+            }
+
+            var registration = new FamilyRegistration( RockContext, RequestContext.CurrentPerson, template );
+            var result = registration.SaveRegistration( options.Family, options.People, kiosk.GetCampusId(), options.RemovedPersonIds );
+
+            registration.ProcessSaveResult( result );
+
+            var response = new SaveFamilyResponseBag
+            {
+                FamilyId = result.PrimaryFamily.IdKey,
+                IsCheckInAllowed = template.IsCheckInAfterRegistrationAllowed,
+                IsSuccess = result.IsSuccess,
+                ErrorMessage = result.ErrorMessage
+            };
+
+            return ActionOk( response );
+        }
+
+        /// <summary>
+        /// Adds a single individual to an existing family.
+        /// </summary>
+        /// <param name="options">The options that describe the request.</param>
+        /// <returns>An instance of <see cref="SaveFamilyResponseBag"/> that describes if the operation was successful or not.</returns>
+        [BlockAction]
+        public BlockActionResult AddIndividual( AddIndividualOptionsBag options )
+        {
+            var template = GroupTypeCache.GetByIdKey( options.TemplateId, RockContext )
+                ?.GetCheckInConfiguration( RockContext );
+            var kiosk = DeviceCache.GetByIdKey( options.KioskId, RockContext );
+
+            if ( template == null )
+            {
+                return ActionBadRequest( "Check-in configuration template not found." );
+            }
+
+            if ( kiosk == null )
+            {
+                return ActionBadRequest( "Kiosk not found." );
+            }
+
+            if ( options.FamilyId == null )
+            {
+                return ActionBadRequest( "Missing family identifier." );
+            }
+
+            var registration = new FamilyRegistration( RockContext, RequestContext.CurrentPerson, template );
+            var result = registration.AddIndividual( options.FamilyId, options.Person, kiosk.GetCampusId() );
+
+            registration.ProcessSaveResult( result );
+
+            var response = new SaveFamilyResponseBag
+            {
+                FamilyId = result.PrimaryFamily.IdKey,
+                IsCheckInAllowed = true,
+                IsSuccess = result.IsSuccess,
+                ErrorMessage = result.ErrorMessage
+            };
+
+            return ActionOk( response );
         }
 
         #endregion

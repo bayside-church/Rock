@@ -36,17 +36,60 @@ namespace Rock.Workflow.Action
     [Export( typeof( ActionComponent ) )]
     [ExportMetadata( "ComponentName", "Group Member Add" )]
 
-    [WorkflowAttribute( "Person", "Workflow attribute that contains the person to add to the group.", true, "", "", 0, null, 
-        new string[] { "Rock.Field.Types.PersonFieldType" })]
-    [WorkflowAttribute( "Group Member", "An optional GroupMember attribute to store the group member that is added.", false, "", "", 1, null, 
-        new string[] { "Rock.Field.Types.GroupMemberFieldType" } )]
+    [WorkflowAttribute( "Person",
+        Description = "Workflow attribute that contains the person to add to the group.",
+        Key = AttributeKey.Person,
+        IsRequired = true,
+        FieldTypeClassNames = new string[] { "Rock.Field.Types.PersonFieldType" },
+        Order = 0 )]
 
-    [GroupAndRoleFieldAttribute( "Group and Role", "Group/Role to add the person to. Leave role blank to use the default role for that group.", "Group", true, "", "", 1, "GroupAndRole" )]
-    [EnumField( "Group Member Status", "The  status to set the user to in the group.", typeof( GroupMemberStatus ), true, "1", "", 2 )]
-    [BooleanField("Update Existing", "If the selected person already belongs to the selected group, should their current role and status be updated to reflect the configured values above.", true, "", 3)]
+    [GroupAndRoleFieldAttribute( "Group and Role", "Group/Role to add the person to. Leave role blank to use the default role for that group.", "Group", true, "", "", 1, AttributeKey.GroupAndRole )]
+
+    [EnumField( "Group Member Status",
+        Description = "The status to set the user to in the group.",
+        Key = AttributeKey.GroupMemberStatus,
+        DefaultEnumValue = 1,
+        EnumSourceType = typeof( GroupMemberStatus ),
+        IsRequired = true,
+        Order = 2 )]
+
+    [BooleanField( "Update Existing",
+        Description = "If the selected person already belongs to the selected group, should their current role and status be updated to reflect the configured values above.",
+        Key = AttributeKey.UpdateExisting,
+        IsRequired = true,
+        Order = 3 )]
+
+    [BooleanField( "Ignore Group Member Requirements",
+        Description = "When enabled, group member requirements are bypassed, allowing the person to be added regardless of whether they meet the criteria.",
+        Key = AttributeKey.IgnoreGroupMemberRequirements,
+        IsRequired = false,
+        Order = 4 )]
+
+    [WorkflowAttribute( "Group Member",
+        Description = "An optional GroupMember attribute to store the group member that is added.",
+        Key = AttributeKey.GroupMember,
+        IsRequired = false,
+        FieldTypeClassNames = new string[] { "Rock.Field.Types.GroupMemberFieldType" },
+        Order = 6 )]
+
     [Rock.SystemGuid.EntityTypeGuid( "DF0167A1-6928-4FBC-893B-5826A28AAC83")]
     public class AddPersonToGroup : ActionComponent
     {
+        #region Attribute Keys
+
+        private static class AttributeKey
+        {
+            public const string Person = "Person";
+            public const string GroupMember = "GroupMember";
+            public const string GroupAndRole = "GroupAndRole";
+            public const string GroupMemberStatus = "GroupMemberStatus";
+            public const string IsSecurityRole = "IsSecurityRole";
+            public const string UpdateExisting = "UpdateExisting";
+            public const string IgnoreGroupMemberRequirements = "IgnoreGroupMemberRequirements";
+        }
+
+        #endregion
+
         /// <summary>
         /// Executes the specified workflow.
         /// </summary>
@@ -63,7 +106,7 @@ namespace Rock.Workflow.Action
             Group group = null;
             int? groupRoleId = null;
 
-            var groupAndRoleValues = ( GetAttributeValue( action, "GroupAndRole" ) ?? string.Empty ).Split( '|' );
+            var groupAndRoleValues = ( GetAttributeValue( action, AttributeKey.GroupAndRole ) ?? string.Empty ).Split( '|' );
             if ( groupAndRoleValues.Count() > 1 )
             {
                 var groupGuid = groupAndRoleValues[1].AsGuidOrNull();
@@ -111,7 +154,7 @@ namespace Rock.Workflow.Action
             Person person = null;
 
             // get the Attribute.Guid for this workflow's Person Attribute so that we can lookup the value
-            var guidPersonAttribute = GetAttributeValue( action, "Person" ).AsGuidOrNull();
+            var guidPersonAttribute = GetAttributeValue( action, AttributeKey.Person ).AsGuidOrNull();
 
             if ( guidPersonAttribute.HasValue )
             {
@@ -148,7 +191,7 @@ namespace Rock.Workflow.Action
             // Add Person to Group
             if ( !errorMessages.Any() )
             {
-                var status = this.GetAttributeValue( action, "GroupMemberStatus" ).ConvertToEnum<GroupMemberStatus>( GroupMemberStatus.Active );
+                var status = this.GetAttributeValue( action, AttributeKey.GroupMemberStatus ).ConvertToEnum<GroupMemberStatus>( GroupMemberStatus.Active );
                 var groupMemberService = new GroupMemberService( rockContext );
                 var groupMember = GetByGroupIdAndPersonIdAndPreferredGroupRoleId( groupMemberService, group.Id, person.Id, groupRoleId.Value );
                 bool isNew = false;
@@ -164,7 +207,7 @@ namespace Rock.Workflow.Action
                 else
                 {
                     groupMember.IsArchived = false;
-                    if ( GetAttributeValue( action, "UpdateExisting" ).AsBoolean() )
+                    if ( GetAttributeValue( action, AttributeKey.UpdateExisting ).AsBoolean() )
                     {
                         groupMember.GroupRoleId = groupRoleId.Value;
                         groupMember.GroupMemberStatus = status;
@@ -173,12 +216,16 @@ namespace Rock.Workflow.Action
                     action.AddLogEntry( $"{person.FullName} was already a member of the selected group.", true );
                 }
 
+                // Set to skip group member requirements checking if the option is enabled.
+                groupMember.IsSkipRequirementsCheckingDuringValidationCheck = GetAttributeValue( action, AttributeKey.IgnoreGroupMemberRequirements ).AsBoolean();
+
                 if ( groupMember.IsValidGroupMember( rockContext ) )
                 {
                     if (isNew)
                     {
                         groupMemberService.Add(groupMember);
                     }
+
                     rockContext.SaveChanges();
                 }
                 else
@@ -187,8 +234,8 @@ namespace Rock.Workflow.Action
                     errorMessages.AddRange( groupMember.ValidationResults.Select( a => a.ErrorMessage ) );
                 }
 
-                // If group member attribute was specified, requery the request and set the attribute's value
-                Guid? groupMemberAttributeGuid = GetAttributeValue( action, "GroupMember" ).AsGuidOrNull();
+                // If group member attribute was specified, re-query the request and set the attribute's value
+                Guid? groupMemberAttributeGuid = GetAttributeValue( action, AttributeKey.GroupMember ).AsGuidOrNull();
                 if ( groupMemberAttributeGuid.HasValue )
                 {
                     groupMember = groupMemberService.Get( groupMember.Id );

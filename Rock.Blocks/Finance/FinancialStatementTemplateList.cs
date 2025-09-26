@@ -38,8 +38,8 @@ namespace Rock.Blocks.Finance
     [DisplayName( "Financial Statement Template List" )]
     [Category( "Finance" )]
     [Description( "Displays a list of financial statement templates." )]
-    [IconCssClass( "fa fa-list" )]
-    // [SupportedSiteTypes( Model.SiteType.Web )]
+    [IconCssClass( "ti ti-list" )]
+    [SupportedSiteTypes( Model.SiteType.Web )]
 
     [LinkedPage( "Detail Page",
         Description = "The page that will show the financial statement template details.",
@@ -69,28 +69,6 @@ namespace Rock.Blocks.Finance
         }
 
         #endregion Keys
-
-        #region Properties
-
-        /// <summary>
-        /// Gets the name of the templates(s) to include in the result.
-        /// </summary>
-        /// <value>
-        /// The name of the template.
-        /// </value>
-        protected string FilterName => GetBlockPersonPreferences()
-            .GetValue( PreferenceKey.FilterName );
-
-        /// <summary>
-        /// Determines whether or not to include inactive templates in the result.
-        /// </summary>
-        /// <value>
-        /// The filter include inactive.
-        /// </value>
-        protected string FilterIncludeInactive => GetBlockPersonPreferences()
-            .GetValue( PreferenceKey.FilterIncludeInactive );
-
-        #endregion
 
         #region Methods
 
@@ -138,7 +116,7 @@ namespace Rock.Blocks.Finance
         {
             return new Dictionary<string, string>
             {
-                [NavigationUrlKey.DetailPage] = this.GetLinkedPageUrl( AttributeKey.DetailPage, "FinancialStatementTemplateId", "((Key))" )
+                [NavigationUrlKey.DetailPage] = this.GetLinkedPageUrl( AttributeKey.DetailPage, "StatementTemplateId", "((Key))" )
             };
         }
 
@@ -146,21 +124,7 @@ namespace Rock.Blocks.Finance
         protected override IQueryable<FinancialStatementTemplate> GetListQueryable( RockContext rockContext )
         {
             var financialStatementTemplateService = new FinancialStatementTemplateService( rockContext );
-            var queryable = financialStatementTemplateService.Queryable().AsNoTracking();
-
-            // name filter
-            if ( !string.IsNullOrEmpty( FilterName ) )
-            {
-                queryable = queryable.Where( a => a.Name.Contains( FilterName ) );
-            }
-
-            bool showInactiveAccounts = FilterIncludeInactive.AsBoolean();
-            if ( !showInactiveAccounts )
-            {
-                queryable = queryable.Where( a => a.IsActive );
-            }
-
-            return queryable;
+            return financialStatementTemplateService.Queryable().AsNoTracking();
         }
 
         /// <inheritdoc/>

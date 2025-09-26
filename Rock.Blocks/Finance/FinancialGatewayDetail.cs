@@ -39,8 +39,8 @@ namespace Rock.Blocks.Finance
     [DisplayName( "Gateway Detail" )]
     [Category( "Finance" )]
     [Description( "Displays the details of the given financial gateway." )]
-    [IconCssClass( "fa fa-question" )]
-    // [SupportedSiteTypes( Model.SiteType.Web )]
+    [IconCssClass( "ti ti-question-mark" )]
+    [SupportedSiteTypes( Model.SiteType.Web )]
 
     #region Block Attributes
 
@@ -229,7 +229,7 @@ namespace Rock.Blocks.Finance
 
             var bag = GetCommonEntityBag( entity );
 
-            bag.LoadAttributesAndValuesForPublicView( entity, RequestContext.CurrentPerson );
+            bag.LoadAttributesAndValuesForPublicView( entity, RequestContext.CurrentPerson, enforceSecurity: true, attributeFilter: IsAttributeIncluded );
 
             return bag;
         }
@@ -244,7 +244,7 @@ namespace Rock.Blocks.Finance
 
             var bag = GetCommonEntityBag( entity );
 
-            bag.LoadAttributesAndValuesForPublicEdit( entity, RequestContext.CurrentPerson, attributeFilter: IsAttributeIncluded );
+            bag.LoadAttributesAndValuesForPublicEdit( entity, RequestContext.CurrentPerson, enforceSecurity: true, attributeFilter: IsAttributeIncluded );
 
             return bag;
         }
@@ -289,7 +289,7 @@ namespace Rock.Blocks.Finance
                 {
                     entity.LoadAttributes( RockContext );
 
-                    entity.SetPublicAttributeValues( box.Bag.AttributeValues, RequestContext.CurrentPerson );
+                    entity.SetPublicAttributeValues( box.Bag.AttributeValues, RequestContext.CurrentPerson, enforceSecurity: true, attributeFilter: IsAttributeIncluded );
                 } );
 
             return true;

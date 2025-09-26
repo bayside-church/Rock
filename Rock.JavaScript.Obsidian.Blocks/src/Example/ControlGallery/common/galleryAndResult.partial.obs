@@ -1,0 +1,214 @@
+<template>
+    <div class="galleryContent-header">
+        <SectionHeader :title="componentName" :description="description" isSeparatorHidden>
+            <template #actions>
+                <InlineSwitch v-model="showUsage" label="Usage" />
+            </template>
+        </SectionHeader>
+    </div>
+
+    <div class="galleryContent-main" :class="{ 'galleryContent-showUsage': showUsage }">
+        <div class="galleryContent-body">
+            <div class="row">
+                <div v-if="$slots.default" :class="value === void 0 ? 'col-sm-12' : 'col-lg-6'">
+                    <slot name="default" />
+
+                    <div v-if="enableReflection && config.showReflection" class="mt-3">
+                        <div class="mb-3 galleryContent-reflectionToggle">
+                            <Switch v-model="showReflection" text="Show Reflection" />
+                        </div>
+                        <TransitionVerticalCollapse>
+                            <div v-if="showReflection">
+                                <h4 class="mt-0">Control Reflection</h4>
+                                <slot name="default" />
+                            </div>
+                        </TransitionVerticalCollapse>
+                    </div>
+                </div>
+
+                <div v-if="value !== void 0" class="col-lg-6">
+                    <div class="well">
+                        <h4>Current Value<template v-if="hasMultipleValues">s</template></h4>
+                        <template v-if="hasMultipleValues" v-for="value, key in formattedValue">
+                            <h5><code>{{ key }}</code></h5>
+                            <pre class="m-0 p-0 border-0 galleryContent-valueBox">{{ value }}</pre>
+                        </template>
+                        <pre v-else class="m-0 p-0 border-0 galleryContent-valueBox">{{ formattedValue }}</pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="galleryContent-usage">
+            <h4 v-if="importCode">Import</h4>
+            <CodeSample v-if="importCode" :code="importCode" language="typescript" />
+
+            <h4 v-if="$slots.usageNotes">Usage Notes</h4>
+            <slot name="usageNotes" />
+
+            <h5 v-if="exampleCode || $slots.syntaxNotes">Template Syntax</h5>
+            <slot name="syntaxNotes" />
+            <CodeSample v-if="exampleCode" :code="exampleCode" language="html" />
+
+            <div v-if="$slots.props">
+                <h4 class="mt-0 mb-0">Props</h4>
+                <slot name="props" />
+            </div>
+        </div>
+    </div>
+
+    <div v-if="$slots.settings" class="galleryContent-settings">
+        <slot name="settings" />
+    </div>
+</template>
+
+<style scoped>
+.galleryContent-header {
+    margin: 0 -20px 20px;
+    padding: 0 20px 14px;
+    border-bottom: 1px solid var(--color-interface-soft);
+}
+
+.galleryContent-main {
+    position: relative;
+    flex-grow: 1;
+    overflow: hidden;
+}
+
+.galleryContent-body {
+    position: absolute;
+    height: 100%;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden auto;
+    transition: transform 0.65s ease-in-out;
+    transform: rotateY(0deg);
+    backface-visibility: hidden;
+    padding: var(--spacing-tiny);
+}
+
+.galleryContent-usage {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    transition: transform 0.65s ease-in-out;
+    transform: rotateY(180deg);
+    backface-visibility: hidden;
+    pointer-events: none;
+}
+
+.galleryContent-showUsage .galleryContent-body {
+    transform: rotateY(180deg);
+}
+
+.galleryContent-showUsage .galleryContent-usage {
+    transform: rotateY(0deg);
+    pointer-events: initial;
+}
+
+.galleryContent-reflectionToggle {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.galleryContent-valueBox {
+    max-height: 300px;
+    overflow: auto;
+}
+
+.galleryContent-settings {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-small);
+    margin: 0 -20px;
+    padding: 12px 20px 0;
+    border-top: 1px solid var(--color-interface-soft);
+}
+
+.galleryContent-settings > :deep(.automatic-layout) {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    column-gap: var(--spacing-small);
+}
+</style>
+
+<script setup lang="ts">
+    import InlineSwitch from "@Obsidian/Controls/inlineSwitch.obs";
+    import SectionHeader from "@Obsidian/Controls/sectionHeader.obs";
+    import Switch from "@Obsidian/Controls/switch.obs";
+    import TransitionVerticalCollapse from "@Obsidian/Controls/transitionVerticalCollapse.obs";
+    import CodeSample from "./codeSample.partial.obs";
+    import * as ObjectUtils from "@Obsidian/Utility/objectUtils";
+    import { computed, getCurrentInstance, PropType, ref } from "vue";
+    import { convertComponentName } from "./utils.partial";
+    import { useConfigurationValues } from "@Obsidian/Utility/block";
+    import { ControlGalleryInitializationBox } from "@Obsidian/ViewModels/Blocks/Example/ControlGallery/controlGalleryInitializationBox";
+
+    const props = defineProps({
+        // The value passed into/controlled by the component, if any
+        value: {
+            required: false
+        },
+        // If true, the provided value is a map of multiple values
+        hasMultipleValues: {
+            type: Boolean as PropType<boolean>,
+            default: false
+        },
+        // Show another copy of the component so you can see that the value is reflected across them
+        enableReflection: {
+            type: Boolean as PropType<boolean>,
+            default: false
+        },
+        // Code snippet showing how to import the component
+        importCode: {
+            type: String as PropType<string>
+        },
+        // Code snippet of the component being used
+        exampleCode: {
+            type: String as PropType<string>
+        },
+        // Describe what this component is/does
+        description: {
+            type: String as PropType<string>,
+            default: ""
+        },
+        /** Display the value raw and unformatted inside the PRE element. */
+        displayAsRaw: {
+            type: Boolean as PropType<boolean>,
+            default: false
+        },
+    });
+
+    const config = useConfigurationValues<ControlGalleryInitializationBox>();
+
+    const showUsage = ref(false);
+
+    // Calculate a header based on the name of the component, adding spaces and stripping out the "Gallery" suffix
+    const componentName = convertComponentName(getCurrentInstance()?.parent?.type?.name);
+
+    const formattedValue = computed(() => {
+        if (props.displayAsRaw) {
+            return props.value;
+        }
+        else if (!props.hasMultipleValues) {
+            return JSON.stringify(props.value, null, 4);
+        }
+        else {
+            // Convert each property's value to a JSON string.
+            return ObjectUtils.fromEntries(
+                Object.entries(props.value as Record<string, unknown>).map(([key, val]) => {
+                    return [
+                        key,
+                        JSON.stringify(val, null, 4)
+                    ];
+                })
+            );
+        }
+    });
+
+    const showReflection = ref(false);
+</script>

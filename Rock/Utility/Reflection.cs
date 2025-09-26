@@ -50,6 +50,50 @@ namespace Rock
         }
 
         /// <summary>
+        /// Get's an enum as a type from it's type name 'Rock.Model.SiteType'
+        /// </summary>
+        /// <param name="enumTypeName"></param>
+        /// <returns></returns>
+        public static Type GetEnumType( string enumTypeName )
+        {
+            if ( string.IsNullOrWhiteSpace( enumTypeName ) )
+            {
+                return null;
+            }
+
+            if ( _enumTypeCache.TryGetValue( enumTypeName, out var cachedType ) )
+            {
+                return cachedType;
+            }
+
+            var enumType = AppDomain.CurrentDomain
+                .GetAssemblies()
+                .SelectMany( assembly =>
+                {
+                    try
+                    {
+                        return assembly.GetTypes();
+                    }
+                    catch
+                    {
+                        return Array.Empty<Type>();
+                    }
+                } )
+                .FirstOrDefault( t =>
+                    t.IsEnum &&
+                    ( t.Name.Equals( enumTypeName, StringComparison.OrdinalIgnoreCase ) ||
+                     t.FullName.Equals( enumTypeName, StringComparison.OrdinalIgnoreCase ) ) );
+
+            if ( enumType != null )
+            {
+                _enumTypeCache[enumTypeName] = enumType;
+            }
+
+            return enumType;
+        }
+        private static readonly Dictionary<string, Type> _enumTypeCache = new Dictionary<string, Type>();
+
+        /// <summary>
         /// Finds the first matching type in Rock or any of the assemblies that reference Rock
         /// </summary>
         /// <param name="baseType">Type of the base.</param>
@@ -95,7 +139,28 @@ namespace Rock
         /// <returns></returns>
         public static Dictionary<string, Type> SearchAssembly( Assembly assembly, Type baseType )
         {
-            Dictionary<string, Type> types = new Dictionary<string, Type>();
+            var cacheKey = $"{assembly.FullName}:{baseType.FullName}";
+
+            // Searching an assembly is relatively slow. Every single type has
+            // to be enumerated and checked. Because some assemblies can have
+            // tens of thousands of types, caching the results provides a
+            // significant boost to performance. This is especially true when
+            // it is being called inside a loop such as when registering REST
+            // controllers and actions.
+            return ( Dictionary<string, Type> ) RockCache.GetOrAddExisting( cacheKey, () => SearchAssemblyInternal( assembly, baseType ) );
+        }
+
+        /// <summary>
+        /// Searches the assembly.
+        /// </summary>
+        /// <param name="assembly">The assembly.</param>
+        /// <param name="baseType">Type of the base.</param>
+        /// <returns></returns>
+        private static Dictionary<string, Type> SearchAssemblyInternal( Assembly assembly, Type baseType )
+        {
+            // Pre-allocate for up to 32 types. It's probably safe to assume
+            // we will find close to that many for a given base type.
+            Dictionary<string, Type> types = new Dictionary<string, Type>( 32 );
 
             try
             {
@@ -272,6 +337,28 @@ namespace Rock
 
         /// <summary>
         /// Gets the <see cref="IEntity"/> that corresponds to the entity type and
+        /// identifier key specified.
+        /// </summary>
+        /// <param name="entityType">Type of the entity.</param>
+        /// <param name="key">The key that identifies the entity.</param>
+        /// <param name="allowIntegerIdentifier">if set to <c>true</c> integer identifiers will be allowed; otherwise <c>null</c> will be returned if an integer identifier is provided.</param>
+        /// <param name="dbContext">The database context to use when accessing the database.</param>
+        /// <returns>An instance of the entity or null if not found.</returns>
+        public static Rock.Data.IEntity GetIEntityForEntityType( Type entityType, string key, bool allowIntegerIdentifier, Data.DbContext dbContext = null )
+        {
+            Rock.Data.IService serviceInstance = Reflection.GetServiceForEntityType( entityType, dbContext );
+
+            if ( serviceInstance != null )
+            {
+                System.Reflection.MethodInfo getMethod = serviceInstance.GetType().GetMethod( "Get", new Type[] { typeof( string ), typeof( bool ) } );
+                return getMethod.Invoke( serviceInstance, new object[] { key, allowIntegerIdentifier } ) as Rock.Data.IEntity;
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Gets the <see cref="IEntity"/> that corresponds to the entity type and
         /// identifier specified.
         /// </summary>
         /// <param name="entityType">Type of the entity.</param>
@@ -354,6 +441,28 @@ namespace Rock
             var getMethod = serviceInstance?.GetType().GetMethod( "Get", new Type[] { typeof( Guid ) } );
             var entity = getMethod?.Invoke( serviceInstance, new object[] { entityGuid } ) as IEntity;
             return entity;
+        }
+
+        /// <summary>
+        /// Gets the specified entity.
+        /// </summary>
+        /// <param name="entityTypeId">The entity type identifier.</param>
+        /// <param name="entityId">The entity identifier.</param>
+        /// <param name="dbContext">The database context.</param>
+        /// <returns></returns>
+        public static IEntity GetIEntityForEntityType( int entityTypeId, int entityId, Data.DbContext dbContext = null )
+        {
+            var type = EntityTypeCache.Get( entityTypeId )?.GetEntityType();
+
+            if ( type == null )
+            {
+                return null;
+            }
+
+            var serviceInstance = GetServiceForEntityType( type, dbContext ?? new RockContext() );
+            var getMethod = serviceInstance?.GetType().GetMethod( "Get", new Type[] { typeof( int ) } );
+
+            return getMethod?.Invoke( serviceInstance, new object[] { entityId } ) as IEntity;
         }
 
         /// <summary>
@@ -934,7 +1043,17 @@ namespace Rock
             string pluginsFolder = Path.Combine( AppDomain.CurrentDomain.BaseDirectory, "Plugins" );
 
             // blacklist of files that would never have Rock MEF components or Rock types
-            string[] ignoredFileStart = { "Lucene.", "Microsoft.", "msvcr100.", "System.", "JavaScriptEngineSwitcher.", "React.", "CacheManager." };
+            string[] ignoredFileStart = {
+                "Lucene.",
+                "Microsoft.",
+                "msvcr100.",
+                "System.",
+                "JavaScriptEngineSwitcher.",
+                "React.",
+                "CacheManager.",
+                // This was moved into core in v18.0, it can be removed in v19.0
+                "tech.triumph.Lava.Helix.dll"
+            };
 
             // get all *.dll in the bin and plugin directories except for blacklisted ones
             var assemblyFileNames = Directory.EnumerateFiles( binDirectory, "*.dll", SearchOption.AllDirectories ).ToList();

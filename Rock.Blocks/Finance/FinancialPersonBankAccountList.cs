@@ -38,8 +38,8 @@ namespace Rock.Blocks.Finance
     [DisplayName( "Bank Account List" )]
     [Category( "Finance" )]
     [Description( "Lists bank accounts for a person." )]
-    [IconCssClass( "fa fa-list" )]
-    // [SupportedSiteTypes( Model.SiteType.Web )]
+    [IconCssClass( "ti ti-list" )]
+    [SupportedSiteTypes( Model.SiteType.Web )]
 
     [Rock.SystemGuid.EntityTypeGuid( "30150fa5-a4e9-4767-a320-c9092b8ffd61" )]
     [Rock.SystemGuid.BlockTypeGuid( "e1dce349-2f5b-46ed-9f3d-8812af857f69" )]

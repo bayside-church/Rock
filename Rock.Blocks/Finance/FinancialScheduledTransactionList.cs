@@ -45,7 +45,7 @@ namespace Rock.Blocks.Finance
     [DisplayName( "Financial Scheduled Transaction List" )]
     [Category( "Finance" )]
     [Description( "Displays a list of financial scheduled transactions." )]
-    [IconCssClass( "fa fa-list" )]
+    [IconCssClass( "ti ti-list" )]
     // [SupportedSiteTypes( Model.SiteType.Web )]
 
     [LinkedPage( "View Page",
@@ -370,8 +370,8 @@ namespace Rock.Blocks.Finance
         {
             return queryable.OrderBy( t => t.FinancialScheduledTransaction.AuthorizedPersonAlias.Person.LastName )
                         .ThenBy( t => t.FinancialScheduledTransaction.AuthorizedPersonAlias.Person.NickName )
-                        .ThenByDescending( t => t.FinancialScheduledTransaction.AuthorizedPersonAlias.Person )
-                        .ThenByDescending( t => t.FinancialScheduledTransaction.AuthorizedPersonAlias.Person );
+                        .ThenByDescending( t => t.FinancialScheduledTransaction.IsActive )
+                        .ThenByDescending( t => t.FinancialScheduledTransaction.StartDate );
         }
 
         /// <inheritdoc/>

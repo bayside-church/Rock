@@ -14,8 +14,16 @@
 // limitations under the License.
 // </copyright>
 //
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.ComponentModel.Composition;
+
+using Rock.Attribute;
+using Rock.Cms.StructuredContent;
+using Rock.Data;
+using Rock.Enums.Lms;
+using Rock.Model;
+using Rock.Net;
 
 namespace Rock.Lms
 {
@@ -27,27 +35,116 @@ namespace Rock.Lms
     [Export( typeof( LearningActivityComponent ) )]
     [ExportMetadata( "ComponentName", "Point Assessment" )]
 
+    [RockInternal( "17.0" )]
     [Rock.SystemGuid.EntityTypeGuid( "a6e91c3c-4a4c-4fc2-816a-a6b1e6422381" )]
     public class PointAssessmentComponent : LearningActivityComponent
     {
-        /// <summary>
-        /// Gets the Highlight color for the component.
-        /// </summary>
-        public override string HighlightColor => "#ebe9f1";
+        #region Keys
 
-        /// <summary>
-        /// Gets the icon CSS class for the component.
-        /// </summary>
-        public override string IconCssClass => "fa fa-photo-video";
+        private static class SettingKey
+        {
+            public const string Instructions = "instructions";
 
-        /// <summary>
-        /// Gets the name of the component.
-        /// </summary>
+            public const string Rubric = "rubric";
+
+            public const string AcknowledgedButtonText = "acknowledgedButtonText";
+        }
+
+        private static class CompletionKey
+        {
+            public const string PointsAvailableAtCompletion = "pointsAvailableAtCompletion";
+        }
+
+        #endregion
+
+        #region Properties
+
+        /// <inheritdoc/>
+        public override string HighlightColor => "#9d174d";
+
+        /// <inheritdoc/>
+        public override string IconCssClass => "ti ti-photo-video";
+
+        /// <inheritdoc/>
         public override string Name => "Point Assessment";
 
-        /// <summary>
-        /// Initializes a new instance of the CheckOffComponent.
-        /// </summary>
-        public PointAssessmentComponent(): base( @"/Obsidian/Controls/Internal/LearningActivity/pointAssessmentLearningActivity.obs" ) { }
+        /// <inheritdoc/>
+        public override string ComponentUrl => @"/Obsidian/Controls/Internal/LearningActivity/pointAssessmentLearningActivity.obs";
+
+        #endregion
+
+        #region Methods
+
+        /// <inheritdoc/>
+        public override Dictionary<string, string> GetActivityConfiguration( LearningClassActivity activity, Dictionary<string, string> componentData, PresentedFor presentation, RockContext rockContext, RockRequestContext requestContext )
+        {
+            if ( presentation == PresentedFor.Configuration )
+            {
+                return new Dictionary<string, string>();
+            }
+            else
+            {
+                var instructions = componentData.GetValueOrNull( SettingKey.Instructions );
+                var rubric = componentData.GetValueOrNull( SettingKey.Rubric );
+                var mergeFields = requestContext.GetCommonMergeFields();
+
+                var instructionsHtml = instructions.IsNotNullOrWhiteSpace()
+                    ? new StructuredContentHelper( instructions ).Render().ResolveMergeFields( mergeFields )
+                    : string.Empty;
+
+                var rubricHtml = instructions.IsNotNullOrWhiteSpace()
+                    ? new StructuredContentHelper( rubric ).Render().ResolveMergeFields( mergeFields )
+                    : string.Empty;
+
+                return new Dictionary<string, string>
+                {
+                    [SettingKey.AcknowledgedButtonText] = componentData.GetValueOrNull( SettingKey.AcknowledgedButtonText ),
+                    [SettingKey.Instructions] = instructionsHtml,
+                    [SettingKey.Rubric] = rubricHtml
+                };
+            }
+        }
+
+
+        /// <inheritdoc/>
+        public override Dictionary<string, string> GetComponentData( LearningClassActivity activity, Dictionary<string, string> componentSettings, RockContext rockContext, RockRequestContext requestContext )
+        {
+            // This is a cheat, we shouldn't really be trying to access the original
+            // JSON this way, but we don't have a better way to do it.
+            var oldData = activity.LearningActivity?.ActivityComponentSettingsJson?.FromJsonOrNull<Dictionary<string, string>>();
+
+            new StructuredContentHelper( componentSettings?.GetValueOrNull( SettingKey.Instructions ) )
+                .DetectAndApplyDatabaseChanges( oldData?.GetValueOrNull( SettingKey.Instructions ), rockContext );
+
+            new StructuredContentHelper( componentSettings?.GetValueOrNull( SettingKey.Rubric ) )
+                .DetectAndApplyDatabaseChanges( oldData?.GetValueOrNull( SettingKey.Rubric ), rockContext );
+
+            return base.GetComponentData( activity, componentSettings, rockContext, requestContext );
+        }
+
+        /// <inheritdoc/>
+        public override int? CalculatePointsEarned( LearningClassActivityCompletion completion, Dictionary<string, string> completionData, Dictionary<string, string> componentData, int pointsPossible, RockContext rockContext, RockRequestContext requestContext )
+        {
+            // We don't auto-assign points based on submission.
+            return null;
+        }
+
+        /// <inheritdoc/>
+        public override bool RequiresGrading( LearningClassActivityCompletion completion, Dictionary<string, string> completionData, Dictionary<string, string> componentData, RockContext rockContext, RockRequestContext requestContext )
+        {
+            // It has already been graded.
+            if ( completion.PointsEarned.HasValue )
+            {
+                return false;
+            }
+
+            var isPastDue = completion.DueDate.HasValue
+                && completion.DueDate.Value.IsPast();
+
+            // If it is past due or completed then it needs to be graded.
+            return isPastDue || completion.CompletedDateTime.HasValue;
+        }
+
+        #endregion
     }
 }

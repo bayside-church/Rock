@@ -27,7 +27,7 @@
 
         <div class="panel panel-block">
             <div class="panel-heading">
-                <h1 class="panel-title"><i class="fa fa-flask"></i> Sample Data Import</h1>
+                <h1 class="panel-title"><i class="ti ti-flask"></i> Sample Data Import</h1>
             </div>
             <div class="panel-body">
 
@@ -42,13 +42,13 @@
                         <Rock:BootstrapButton ID="bbtnLoadData" runat="server" CssClass="btn btn-primary" OnClick="bbtnLoadData_Click" Text="Load Sample Data" DataLoadingText="Loading...(this may take a few minutes)"></Rock:BootstrapButton>
                     </div>
                 </asp:Panel>
-
-                <div class="alert alert-info" id="messageContainer" runat="server" style="display:none;">
-                    <strong>Stopwatch Log</strong><br />
-                    <asp:Literal ID="lStopwatchLog" runat="server"></asp:Literal>
-                </div>
             </div>
         </div>
 
     </ContentTemplate>
 </asp:UpdatePanel>
+
+<div class="alert alert-info mt-5" id="messageContainer" runat="server" style="display:none;">
+    <strong>Stopwatch Log</strong><br />
+    <asp:Literal ID="lStopwatchLog" runat="server"></asp:Literal>
+</div>

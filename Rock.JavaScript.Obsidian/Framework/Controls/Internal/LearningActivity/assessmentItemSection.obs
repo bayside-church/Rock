@@ -10,6 +10,7 @@
 
             <TextBox v-model="summary"
                      :disabled="disabled"
+                     label="Description"
                      textMode="multiline"
                      inputClasses="form-control" />
         </div>
@@ -25,7 +26,8 @@
     import { PropType, computed, ref, toValue, watch } from "vue";
     import TextBox from "@Obsidian/Controls/textBox.obs";
     import { ComponentScreen } from "./learningActivity";
-    import { AssessmentItem, SectionItem } from "./assessmentLearningActivity.partial";
+    import { AssessmentItem } from "./assessmentLearningActivity.partial";
+    import { ContentArticleItem } from "./contentArticleLearningActivity.partial";
 
     const props = defineProps({
         disabled: {
@@ -35,7 +37,7 @@
 
         /** The assessment item's configuration. */
         modelValue: {
-            type: Object as PropType<SectionItem | AssessmentItem>,
+            type: Object as PropType<AssessmentItem | ContentArticleItem>,
             required: true
         },
 
@@ -46,29 +48,25 @@
     });
 
     const emit = defineEmits<{
-        (event: "update:modelValue", value: SectionItem): void
+        (event: "update:modelValue", value: AssessmentItem | ContentArticleItem): void
     }>();
 
-    const disabled = ref(props.disabled ?? false);
-    const internalModelValue = props.modelValue as SectionItem;
-
-    const screenToShow = ref(props.screenToShow);
-    const title = ref(internalModelValue.title ?? "");
-    const summary = ref(internalModelValue.summary ?? "");
+    const title = ref(props.modelValue.title ?? "");
+    const summary = ref(props.modelValue.summary ?? "");
 
     watch([title, summary], () => {
         const newModelValue = {
-            typeName: internalModelValue.typeName,
+            ...props.modelValue,
             title: title.value,
             summary: summary.value,
-        } as SectionItem;
+        };
 
         emit("update:modelValue", newModelValue);
     });
 
     /** CSS classes for the panel. */
     const containerClasses = computed((): string[] => {
-        const screenName = toValue(screenToShow);
+        const screenName = toValue(props.screenToShow);
         return [
             "lms-assessment-item-container",
             `lms-assessment-item-${screenName.toLowerCase()}-container`,

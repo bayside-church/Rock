@@ -1,19 +1,19 @@
 <!-- Copyright by the Spark Development Network; Licensed under the Rock Community License -->
 <template>
-    <div id="pnlAssetManager" class="picker-wrapper align-items-stretch flex-nowrap" :style="wrapperStyles">
-        <div class="picker-folders d-flex flex-column bg-body p-3 mh-100 position-relative flex-shrink-0">
+    <div id="pnlAssetManager" class="picker-wrapper align-items-stretch flex-nowrap styled-scroll" :style="wrapperStyles">
+        <div class="picker-folders d-flex flex-column p-3 mh-100 position-relative flex-shrink-0" style="background-color: var(--color-interface-softer)">
 
             <div class="mb-3 d-flex flex-shrink-0">
                 <RockButton type="button" btnSize="xs" class="mr-2" title="Create a new folder in the selected folder" @click="showAddFolderForm" :disabled="!isFolderSelected">
-                    <i class="fa fa-folder-plus"></i> <span class="hidden-xs">Add Folder</span>
+                    <i class="ti ti-folder-plus"></i> <span class="hidden-xs">Add Folder</span>
                 </RockButton>
                 <RockButton type="button" btnSize="xs" title="Refresh folder list" isSquare class="ml-auto mr-2" @click="onRefreshFolders">
-                    <i class="fa fa-sync"></i>
+                    <i class="ti ti-refresh"></i>
                 </RockButton>
                 <DropDownMenu :items="folderDropDownMenuItems" align="right" class="d-flex">
                     <template #anchor="anchorAttrs">
                         <RockButton type="button" btnSize="xs" title="Additional Actions" isSquare :disabled="!isFolderSelected || isRootSelected || isFolderRestricted" v-bind="anchorAttrs">
-                            <i class="fa fa-ellipsis-v"></i>
+                            <i class="ti ti-dots-vertical"></i>
                         </RockButton>
                     </template>
                 </DropDownMenu>
@@ -25,10 +25,10 @@
                 </NotificationBox>
                 <TextBox v-model="newFolderName" size="small" label="Folder Name" :rules="addFolderValidation" help="Cannot contain any of the following characters: ^ * > < ? / \ | : , ~" />
                 <RockButton type="submit" btnSize="xs" class="mr-2" :disabled="!newFolderName">
-                    <i class="fa fa-check"></i> Create Folder
+                    <i class="ti ti-check"></i> Create Folder
                 </RockButton>
                 <RockButton @click="hideAddFolder" type="button" btnSize="xs">
-                    <i class="fa fa-times"></i> Cancel
+                    <i class="ti ti-x"></i> Cancel
                 </RockButton>
             </RockForm>
 
@@ -39,14 +39,7 @@
             <div v-if="folderListScrolled" class="scroll-shadow"><!-- Intentionally Empty... just used to create a shadow when the container below is scrolled --></div>
 
             <div ref="folderScrollContainer" class="overflow-y-auto overflow-x-auto mh-100" style="z-index:0">
-                <TreeList v-model="selectedFolderArray"
-                          :provider="itemProvider"
-                          v-model:items="folders"
-                          autoExpand
-                          @treeitem-expanded="onTreeItemExpanded"
-                          @treeitem-collapsed="onTreeItemCollapsed"
-                          :initiallyExpanded="openFolders"
-                          :key="treeRefreshKey" />
+                <TreeList v-model="selectedFolderArray" :provider="itemProvider" v-model:items="folders" autoExpand @treeitem-expanded="onTreeItemExpanded" @treeitem-collapsed="onTreeItemCollapsed" :initiallyExpanded="openFolders" :key="treeRefreshKey" />
             </div>
 
             <Transition>
@@ -59,21 +52,21 @@
         <div class="picker-files d-flex flex-column p-3 mh-100 flex-shrink-0 position-relative">
             <div class="mb-3 d-flex align-items-center">
                 <div v-if="isUploadingFile" class="js-upload-progress upload-progress-sm mr-2">
-                    <i class="fa fa-refresh fa-spin"></i>
+                    <i class="ti ti-refresh ti-spin"></i>
                 </div>
                 <RockButton type="button" btnSize="xs" class="mr-2" title="Upload a file to the selected location." :disabled="isUploadDisabled" @click.prevent="fileInputElement?.click()">
-                    <i class="fa fa-upload"></i> <span class="hidden-xs">Upload File</span>
+                    <i class="ti ti-upload"></i> <span class="hidden-xs">Upload File</span>
                 </RockButton>
                 <input type="file" ref="fileInputElement" class="hidden" @change="uploadFile" :disabled="isUploadDisabled">
                 <RockButton type="button" btnSize="xs" class="mr-2" title="Upload and extract a zip file in the selected location. The extracted files will overwrite existing files of the same name." v-if="enableFileManager && enableZipUpload" :disabled="isZipUploadDisabled" @click.prevent="zipFileInputElement?.click()">
-                    <i class="fa fa-archive"></i> <span class="hidden-xs">Upload Package</span>
+                    <i class="ti ti-archive"></i> <span class="hidden-xs">Upload Package</span>
                 </RockButton>
                 <input type="file" ref="zipFileInputElement" class="hidden" accept=".zip" @change="uploadZipFile" :disabled="isZipUploadDisabled">
                 <RockButton type="button" btnSize="xs" title="Delete selected files" class="mr-2" :disabled="selectedFileKeys.length < 1" @click="deleteFiles(selectedFileKeys)">
-                    <i class="fa fa-trash-alt"></i> <span class="hidden-xs">Delete Selected</span>
+                    <i class="ti ti-trash"></i> <span class="hidden-xs">Delete Selected</span>
                 </RockButton>
                 <RockButton type="button" btnSize="xs" title="Refresh file list" class="ml-auto" @click="refreshFiles">
-                    <i class="fa fa-sync"></i>
+                    <i class="ti ti-refresh"></i>
                 </RockButton>
             </div>
 
@@ -84,10 +77,10 @@
             <div v-if="fileListScrolled" class="scroll-shadow"><!-- Intentionally Empty... just used to create a shadow when the container below is scrolled --></div>
 
             <div class="overflow-y-auto mh-100 flex-grow-1 d-flex align-items-start" ref="fileScrollContainer">
-                <table v-if="files.length > 0" class="table table-responsive table-borderless assetmanager-files">
+                <table v-if="files.length > 0" class="table table-responsive assetmanager-files">
                     <tbody>
                         <tr v-for="file in files" :key="file.key">
-                            <td>
+                            <td class="grid-selector">
                                 <div class="control-wrapper">
                                     <div class="checkbox">
                                         <label class="rock-checkbox-icon">
@@ -97,29 +90,29 @@
                                     </div>
                                 </div>
                             </td>
-                            <td>
-                                <img :src="file.iconPath" style="object-fit: cover; height: 58px; width: 44px;">
+                            <td class="grid-thumbnail">
+                                <img :src="file.iconPath">
                             </td>
-                            <td>
+                            <td class="grid-filename">
                                 <span v-show="shownFileRenameForm != file.key">{{ file.name }}</span>
                                 <RockForm v-if="shownFileRenameForm == file.key" @submit="() => renameFile(file)" @keyup.esc="hideRenameFileForm">
                                     <div class="d-flex align-items-center">
                                         <TextBox v-model="renameFileName" size="small" formGroupClasses="mb-0" rules="required" label="File Name" disableLabel id="asset-manager-current-file-rename-input" /><span class="mr-2">{{ renameFileExtension }}</span>
-                                        <RockButton type="submit" btnType="default" btnSize="xs" class="mr-2 flex-shrink-0" title="Rename File" isSquare><i class="fa fa-check"></i></RockButton>
-                                        <RockButton type="button" btnType="default" btnSize="xs" class="flex-shrink-0" title="Cancel" isSquare @click="hideRenameFileForm"><i class="fa fa-times"></i></RockButton>
+                                        <RockButton type="submit" btnType="default" btnSize="xs" class="mr-2 flex-shrink-0" title="Rename File" isSquare><i class="ti ti-check"></i></RockButton>
+                                        <RockButton type="button" btnType="default" btnSize="xs" class="flex-shrink-0" title="Cancel" isSquare @click="hideRenameFileForm"><i class="ti ti-x"></i></RockButton>
                                     </div>
                                 </RockForm>
                             </td>
-                            <td data-priority="3">
-                                {{ formatDate(file.lastModifiedDateTime) }}
+                            <td class="grid-modified" data-priority="3">
+                                <small>{{ formatDate(file.lastModifiedDateTime) }}</small>
                             </td>
-                            <td>
-                                {{ file.formattedFileSize }}
+                            <td class="grid-filesize">
+                                <small>{{ file.formattedFileSize }}</small>
                             </td>
-                            <td>
-                                <DropDownMenu :items="getFileDropDownMenuItems(file)" align="right" class="d-flex">
+                            <td class="grid-actions">
+                                <DropDownMenu :items="getFileDropDownMenuItems(file)" align="right" class="d-flex justify-content-end">
                                     <template #anchor="anchorAttrs">
-                                        <RockButton type="button" btnType="link" class="text-body" v-bind="anchorAttrs"><i class="fa fa-ellipsis-v"></i></RockButton>
+                                        <RockButton type="button" btnType="link" class="text-body" v-bind="anchorAttrs"><i class="ti ti-dots-vertical"></i></RockButton>
                                     </template>
                                 </DropDownMenu>
                             </td>
@@ -168,6 +161,11 @@
 </template>
 
 <style scoped>
+#pnlAssetManager {
+    height: 100%;
+    min-height: 250px;
+}
+
 .assetmanager-files th,
 .assetmanager-files td {
     vertical-align: middle;
@@ -183,9 +181,51 @@
     z-index: 1;
 }
 
-.table-borderless th,
-.table-borderless td {
-    border: 0;
+/* Add rollover effect so that images that are white with transparent backgrounds can be determined */
+.assetmanager-files tr:hover {
+    background-color: var(--color-interface-softer);
+    transition: background-color 0.3s ease-in-out;
+}
+
+/* Add widths to each column so that the filename column will flex in size */
+.assetmanager-files {
+    table-layout: fixed;
+}
+
+.assetmanager-files td.grid-selector {
+    width: 50px;
+    > .control-wrapper {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    }
+}
+
+.assetmanager-files td.grid-thumbnail {
+    width: 60px;
+    > img {
+        object-fit: fill;
+        height: 100%;
+        width: 100%;
+    }
+}
+
+.assetmanager-files td.grid-filename {
+    text-overflow: ellipsis;
+    overflow: hidden;
+}
+
+.assetmanager-files td.grid-modified {
+    width: 150px;
+}
+
+.assetmanager-files td.grid-filesize {
+    width: 80px;
+}
+
+.assetmanager-files td.grid-actions {
+    width: 40px;
+    background-color: transparent;
 }
 
 .loader-overlay {
@@ -1022,7 +1062,14 @@
         const response = await post<AssetManagerGetFilesResultsBag<FileAsset>>(url, undefined, options);
 
         if (response.isSuccess && response.data) {
-            files.value = response.data.files ?? [];
+            let fileData = response.data.files ?? [];
+
+            // For some reason, most/all of the asset providers don't actually set the assetStorageProviderId
+            // so we need to set it here
+            files.value = fileData.map(asset => {
+                asset.assetStorageProviderId = parseInt(parseFolderName(selectedFolder.value ?? "").providerId, 10) || asset.assetStorageProviderId || 0;
+                return asset;
+            });
             isFolderRestricted.value = response.data.isFolderRestricted ?? false;
             isUploadRestricted.value = response.data.isFolderUploadRestricted ?? false;
         }

@@ -183,6 +183,7 @@ namespace RockWeb.Blocks.Examples
             gfSettings.SetFilterPreference( "IsRequired", ddlIsRequired.SelectedValue );
             gfSettings.SetFilterPreference( "IsDatabase", ddlIsDatabase.SelectedValue );
             gfSettings.SetFilterPreference( "IsLava", ddlIsLava.SelectedValue );
+            gfSettings.SetFilterPreference( "IsAttributeQualifier", ddlIsAttributeQualifier.SelectedValue );
 
             ShowData( hfSelectedCategoryGuid.Value.AsGuidOrNull(), hfSelectedEntityId.Value.AsIntegerOrNull() );
         }
@@ -230,6 +231,7 @@ namespace RockWeb.Blocks.Examples
             ddlIsRequired.SelectedValue = gfSettings.GetFilterPreference( "IsRequired" );
             ddlIsDatabase.SelectedValue = gfSettings.GetFilterPreference( "IsDatabase" );
             ddlIsLava.SelectedValue = gfSettings.GetFilterPreference( "IsLava" );
+            ddlIsAttributeQualifier.SelectedValue = gfSettings.GetFilterPreference( "IsAttributeQualifier" );
         }
 
         private void LoadCategories()
@@ -269,7 +271,7 @@ namespace RockWeb.Blocks.Examples
                     if ( entityCategory == null )
                     {
                         entityCategory = new MCategory { Guid = Guid.NewGuid(), Name = category, RockEntityIds = new List<int>() };
-                        entityCategory.IconCssClass = categoryIcons.ContainsKey( category ) ? categoryIcons[category] : "fa fa-network-wired";
+                        entityCategory.IconCssClass = categoryIcons.ContainsKey( category ) ? categoryIcons[category] : "ti ti-schema";
                         entityCategories.Add( entityCategory );
                     }
 
@@ -393,13 +395,14 @@ namespace RockWeb.Blocks.Examples
                                 IsInherited = p.DeclaringType != type,
                                 IsVirtual = p.GetGetMethod( true ) != null && p.GetGetMethod( true ).IsVirtual && !p.GetGetMethod( true ).IsFinal,
                                 IsLavaInclude = p.IsDefined( typeof( LavaIncludeAttribute ) ) || p.IsDefined( typeof( LavaVisibleAttribute ) ) || p.IsDefined( typeof( DataMemberAttribute ) ),
+                                IsAttributeQualifier = p.GetCustomAttribute<EnableAttributeQualificationAttribute>() != null,
                                 IsObsolete = p.IsDefined( typeof( ObsoleteAttribute ) ) || p.IsDefined( typeof( RockObsolete ) ),
                                 ObsoleteMessage = GetObsoleteMessage( p ),
                                 NotMapped = p.IsDefined( typeof( NotMappedAttribute ) ),
                                 Required = p.IsDefined( typeof( RequiredAttribute ) ),
                                 Id = p.MetadataToken,
                                 Comment = GetComments( p, xmlComments, properties ),
-                                IsEnum = p.PropertyType.IsEnum,
+                                IsEnum = p.PropertyType.IsEnum || Nullable.GetUnderlyingType( p.PropertyType )?.IsEnum == true,
                                 IsDefinedValue = p.Name.EndsWith( "ValueId" ) && p.IsDefined( typeof( DefinedValueAttribute ) )
                             };
 #pragma warning restore CS0618 // LavaIncludeAttribute is obsolete
@@ -407,7 +410,8 @@ namespace RockWeb.Blocks.Examples
                             if ( property.IsEnum )
                             {
                                 property.KeyValues = new Dictionary<string, string>();
-                                var values = p.PropertyType.GetEnumValues();
+                                Type enumType = Nullable.GetUnderlyingType( p.PropertyType ) ?? p.PropertyType;
+                                var values = Enum.GetValues( enumType );
                                 foreach ( var value in values )
                                 {
                                     property.KeyValues.AddOrReplace( ( ( int ) value ).ToString(), value.ToString() );
@@ -456,7 +460,7 @@ namespace RockWeb.Blocks.Examples
                         pageReference.QueryString = new System.Collections.Specialized.NameValueCollection();
                         pageReference.QueryString["EntityType"] = entityType.Guid.ToString();
 
-                        lClassName.Text = mClass.IsObsolete ? $"<span>{mClass.Name}</span><p><i class='fa fa-ban fa-fw text-danger' title='no longer supported'></i><i>{mClass.ObsoleteMessage}</i></p>" : mClass.Name;
+                        lClassName.Text = mClass.IsObsolete ? $"<span>{mClass.Name}</span><p><i class='ti ti-ban ti-fw text-danger' title='no longer supported'></i><i>{mClass.ObsoleteMessage}</i></p>" : mClass.Name;
                         lActualTableName.Text = "";
 
                         // Check if there is a TableAttribute.
@@ -525,6 +529,7 @@ namespace RockWeb.Blocks.Examples
                         bool? isRequired = gfSettings.GetFilterPreference( "IsRequired" ).AsBooleanOrNull();
                         bool? isDatabase = gfSettings.GetFilterPreference( "IsDatabase" ).AsBooleanOrNull();
                         bool? isLava = gfSettings.GetFilterPreference( "IsLava" ).AsBooleanOrNull();
+                        bool? isAttributeQualifier = gfSettings.GetFilterPreference( "IsAttributeQualifier" ).AsBooleanOrNull();
 
                         if ( isRequired.HasValue && isRequired.Value != property.Required )
                         {
@@ -541,21 +546,26 @@ namespace RockWeb.Blocks.Examples
                             continue;
                         }
 
+                        if ( isAttributeQualifier.HasValue && isAttributeQualifier.Value != property.IsAttributeQualifier )
+                        {
+                            continue;
+                        }
+
                         sb.AppendFormat(
                             "<tr data-id='p{0}' {11}><td class='d-block d-sm-table-cell'>{8}<tt class='cursor-default font-weight-bold {3}' title='{6}'>{1}</tt> {4}{5}</td><td class='d-block d-sm-table-cell'>{9}{2}{12}{10}</td></tr>{7}",
                             property.Id, // 0
                             HttpUtility.HtmlEncode( property.Name ), // 1
                             ( property.Comment != null && !string.IsNullOrWhiteSpace( property.Comment.Summary ) ) ? " " + property.Comment.Summary : string.Empty, // 2
                             property.Required ? "required-indicator" : string.Empty, // 3
-                            property.IsLavaInclude ? " <i class='fa fa-bolt fa-fw text-warning unselectable'></i> " : string.Empty, // 4
-                            string.Empty, // 5
+                            property.IsLavaInclude ? " <i class='ti ti-bolt ti-fw text-warning unselectable'></i> " : string.Empty, // 4
+                            property.IsAttributeQualifier ? " <i class='ti ti-filter ti-fw text-info unselectable'></i> " : string.Empty, // 5
                             property.IsInherited ? "inherited" : string.Empty, // 6
                             Environment.NewLine, // 7
-                            property.NotMapped || property.IsVirtual ? "<i class='fa fa-square fa-fw o-20'></i> " : "<i class='fa fa-database fa-fw'></i> ", // 8
-                            property.IsObsolete ? "<i class='fa fa-ban fa-fw text-danger' title='no longer supported'></i> <span class='small text-danger'>" + property.ObsoleteMessage + " </span> " : string.Empty, // 9
-                            ( property.IsEnum || property.IsDefinedValue ) && property.KeyValues != null ? GetStringFromKeyValues( property.KeyValues ) : string.Empty, /*10*/
-                            property.IsObsolete ? "class='o-50' title='Obsolete'" : "class=''",
-                            ( property.IsEnum || property.IsDefinedValue ) ? GetStringForEnumOrDefinedType( property ) : string.Empty
+                            property.NotMapped || property.IsVirtual ? "<i class='ti ti-square ti-fw o-20'></i> " : "<i class='ti ti-database ti-fw'></i> ", // 8
+                            property.IsObsolete ? "<i class='ti ti-ban ti-fw text-danger' title='no longer supported'></i> <span class='small text-danger'>" + property.ObsoleteMessage + " </span> " : string.Empty, // 9
+                            ( property.IsEnum || property.IsDefinedValue ) && property.KeyValues != null ? GetStringFromKeyValues( property.KeyValues ) : string.Empty, // 10
+                            property.IsObsolete ? "class='o-50' title='Obsolete'" : "class=''", // 11
+                            ( property.IsEnum || property.IsDefinedValue ) ? GetStringForEnumOrDefinedType( property ) : string.Empty // 12
                             );
                     }
 
@@ -581,7 +591,7 @@ namespace RockWeb.Blocks.Examples
                             "js-model hidden ",
                             method.IsInherited ? " (inherited)" : string.Empty,
                             Environment.NewLine, // 5
-                            method.IsObsolete ? "<i class='fa fa-ban fa-fw text-danger' title='no longer supported'></i> <i>" + method.ObsoleteMessage + " </i> " : string.Empty  /*6*/ );
+                            method.IsObsolete ? "<i class='ti ti-ban ti-fw text-danger' title='no longer supported'></i> <i>" + method.ObsoleteMessage + " </i> " : string.Empty  /*6*/ );
                     }
 
                     sb.AppendLine( "</ul>" );
@@ -946,7 +956,7 @@ namespace RockWeb.Blocks.Examples
                 value += "</tr>";
             }
 
-            return string.Format( "<br/><span class='js-show-values btn btn-default btn-xs mt-2 mb-3'><span>Show Values</span> <i class='fa fa-chevron-down'></i></span><div class='js-value-table' style='display:none'><table class='table table-condensed w-75 mb-3'>{0}</table></div>", value );
+            return string.Format( "<br/><span class='js-show-values btn btn-default btn-xs mt-2 mb-3'><span>Show Values</span> <i class='ti ti-chevron-down'></i></span><div class='js-value-table' style='display:none'><table class='table table-condensed w-75 mb-3'>{0}</table></div>", value );
         }
 
         #endregion
@@ -1002,6 +1012,8 @@ namespace RockWeb.Blocks.Examples
         public bool IsVirtual { get; set; }
 
         public bool IsLavaInclude { get; set; }
+
+        public bool IsAttributeQualifier { get; set; }
 
         public bool IsObsolete { get; set; }
 

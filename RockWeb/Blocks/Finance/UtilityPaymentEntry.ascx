@@ -97,7 +97,7 @@
             <asp:Panel ID="pnlSelection" CssClass="panel panel-block" runat="server">
 
                 <asp:Panel ID="pnlHeadingSelection" runat="server" CssClass="panel-heading">
-                    <h1 class="panel-title"><i class="fa fa-credit-card"></i>
+                    <h1 class="panel-title"><i class="ti ti-credit-card"></i>
                         <asp:Literal ID="lPanelTitleSelection" runat="server" /></h1>
                 </asp:Panel>
                 <div class="panel-body">
@@ -126,7 +126,10 @@
                                                 <Rock:RockLiteral ID="txtFrequency" runat="server" Label="Frequency" Visible="false" />
                                                 <Rock:ButtonDropDownList ID="btnFrequency" runat="server" Label="Frequency"
                                                     DataTextField="Value" DataValueField="Id" AutoPostBack="true" OnSelectionChanged="btnFrequency_SelectionChanged" />
-                                                <Rock:DatePicker ID="dtpStartDate" runat="server" Label="First Gift" AutoPostBack="true" AllowPastDateSelection="false" OnTextChanged="btnFrequency_SelectionChanged" />
+                                                <div class="d-flex gap-3 flex-wrap">
+                                                    <Rock:DatePicker ID="dtpStartDate" runat="server" Label="First Gift" AutoPostBack="true" AllowPastDateSelection="false" OnTextChanged="btnFrequency_SelectionChanged" />
+                                                    <Rock:DatePicker ID="dtpEndDate" runat="server" Label="End Date" AutoPostBack="true" AllowPastDateSelection="false" OnTextChanged="btnFrequency_SelectionChanged" />
+                                                </div>
                                             </div>
                                             
                                             <Rock:RockTextBox ID="txtCommentEntry" runat="server" Required="true" Label="Comment" />
@@ -194,7 +197,7 @@
 
                                                 <div class="row">
                                                     <div class="col-sm-6">
-                                                        <Rock:RockTextBox ID="txtBusinessContactFirstName" runat="server" Label="First Name" />
+                                                        <Rock:FirstNameTextBox ID="txtBusinessContactFirstName" runat="server" Label="First Name" />
                                                     </div>
                                                     <div class="col-sm-6">
                                                         <Rock:RockTextBox ID="txtBusinessContactLastName" runat="server" Label="Last Name" />
@@ -288,7 +291,7 @@
             <asp:Panel ID="pnlConfirmation" CssClass="panel panel-block contribution-confirmation" runat="server" Visible="false">
 
                 <asp:Panel ID="pnlHeadingConfirmation" runat="server" CssClass="panel-heading">
-                    <h1 class="panel-title"><i class="fa fa-credit-card"></i>
+                    <h1 class="panel-title"><i class="ti ti-credit-card"></i>
                         <asp:Literal ID="lPanelTitleConfirmation" runat="server" /></h1>
                 </asp:Panel>
 

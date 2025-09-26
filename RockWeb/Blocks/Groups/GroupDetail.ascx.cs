@@ -19,15 +19,20 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data.Entity;
 using System.Linq;
+using System.Text;
 using System.Web.UI;
 using System.Web.UI.WebControls;
+
+using Humanizer;
 
 using Newtonsoft.Json;
 
 using Rock;
 using Rock.Attribute;
+using Rock.Communication.Chat;
 using Rock.Constants;
 using Rock.Data;
+using Rock.Enums.Communication.Chat;
 using Rock.Enums.Group;
 using Rock.Model;
 using Rock.Model.Groups.Group.Options;
@@ -173,8 +178,15 @@ namespace RockWeb.Blocks.Groups
         DefaultBooleanValue = false,
         Order = 19 )]
 
+    [LinkedPage( "Group Placement Page",
+        Key = AttributeKey.GroupPlacementPage,
+        Description = "The page used for performing group placements.",
+        IsRequired = false,
+        Order = 20 )]
+
     #endregion Block Attributes
 
+    [Rock.Cms.DefaultBlockRole( Rock.Enums.Cms.BlockRole.Primary )]
     [Rock.SystemGuid.BlockTypeGuid( "582BEEA1-5B27-444D-BC0A-F60CEB053981" )]
     public partial class GroupDetail : ContextEntityBlock
     {
@@ -211,6 +223,7 @@ namespace RockWeb.Blocks.Groups
             public const string EnableGroupTags = "EnableGroupTags";
             public const string AddAdministrateSecurityToGroupCreator = "AddAdministrateSecurityToGroupCreator";
             public const string IsScheduleTabVisible = "IsScheduleTabVisible";
+            public const string GroupPlacementPage = "GroupPlacementPage";
         }
 
         #endregion Attribute Keys
@@ -468,6 +481,8 @@ namespace RockWeb.Blocks.Groups
             {
                 divBadgeContainer.Visible = false;
             }
+
+            rblRelationshipStrength.BindToEnum<RelationshipStrength>();
         }
 
         /// <summary>
@@ -558,6 +573,7 @@ namespace RockWeb.Blocks.Groups
             ViewState["AllowMultipleLocations"] = AllowMultipleLocations;
             ViewState["GroupSyncState"] = JsonConvert.SerializeObject( GroupSyncState, Formatting.None, jsonSetting );
             ViewState["MemberWorkflowTriggersState"] = JsonConvert.SerializeObject( MemberWorkflowTriggersState, Formatting.None, jsonSetting );
+            ViewState["ScheduleCoordinatorNotificationTypes"] = cblScheduleCoordinatorNotificationTypes.SelectedValuesAsInt;
 
             return base.SaveViewState();
         }
@@ -860,11 +876,11 @@ namespace RockWeb.Blocks.Groups
                 groupRequirement.CopyPropertiesFrom( groupRequirementState );
             }
 
-            var deletedSchedules = new List<int>();
-
             // Add/Update any group locations that were added or changed in the UI (we already removed the ones that were removed above).
             foreach ( var groupLocationState in GroupLocationsState )
             {
+                var deletedSchedules = new List<int>();
+
                 GroupLocation groupLocation = group.GroupLocations.Where( l => l.Guid == groupLocationState.Guid ).FirstOrDefault();
                 if ( groupLocation == null )
                 {
@@ -952,14 +968,35 @@ namespace RockWeb.Blocks.Groups
                     currentSchedulingConfig.MaximumCapacity = updatedSchedulingConfig.MaximumCapacity;
                 }
 
-                // Delete the scheduling configs
+                // Delete the scheduling configs for this group location only
                 foreach ( var deletedScheduleId in deletedSchedules )
                 {
                     var associatedConfig = groupLocation.GroupLocationScheduleConfigs.Where( cfg => cfg.Schedule != null && cfg.Schedule.Id == deletedScheduleId ).FirstOrDefault();
-                    groupLocation.GroupLocationScheduleConfigs.Remove( associatedConfig );
+                    if ( associatedConfig != null )
+                    {
+                        groupLocation.GroupLocationScheduleConfigs.Remove( associatedConfig );
+                    }
                 }
 
                 checkinDataUpdated = true;
+            }
+
+            int? orphanedChatChannelAvatarId = null;
+
+            if ( ChatHelper.IsChatEnabled && group.GroupType?.IsChatAllowed == true )
+            {
+                group.IsChatEnabledOverride = ddlIsChatEnabled.SelectedValue.AsBooleanOrNull();
+                group.IsLeavingChatChannelAllowedOverride = ddlIsLeavingChatChannelAllowed.SelectedValue.AsBooleanOrNull();
+                group.IsChatChannelPublicOverride = ddlIsChatChannelPublic.SelectedValue.AsBooleanOrNull();
+                group.IsChatChannelAlwaysShownOverride = ddlIsChatChannelAlwaysShown.SelectedValue.AsBooleanOrNull();
+                group.ChatPushNotificationModeOverride = ddlChatPushNotificationMode.SelectedValueAsEnumOrNull<ChatNotificationMode>();
+
+                if ( group.ChatChannelAvatarBinaryFileId != imgChatChannelAvatar.BinaryFileId )
+                {
+                    orphanedChatChannelAvatarId = group.ChatChannelAvatarBinaryFileId;
+                }
+
+                group.ChatChannelAvatarBinaryFileId = imgChatChannelAvatar.BinaryFileId;
             }
 
             // Add/update GroupSyncs
@@ -1010,6 +1047,15 @@ namespace RockWeb.Blocks.Groups
             group.GroupCapacity = nbGroupCapacity.Text.AsIntegerOrNull();
             group.RequiredSignatureDocumentTemplateId = ddlSignatureDocumentTemplate.SelectedValueAsInt();
 
+            if ( group.GroupType.AllowGroupSpecificRecordSource )
+            {
+                group.GroupMemberRecordSourceValueId = dvpRecordSource.SelectedValueAsInt();
+            }
+            else
+            {
+                group.GroupMemberRecordSourceValueId = null;
+            }
+
             group.IsSecurityRole = cbIsSecurityRole.Checked;
 
             // If this block's attribute limits group to SecurityRoleGroups, don't let them edit the SecurityRole checkbox value
@@ -1030,6 +1076,36 @@ namespace RockWeb.Blocks.Groups
             // Don't save inactive properties if the group is active.
             group.InactiveReasonValueId = cbIsActive.Checked ? null : ddlInactiveReason.SelectedValueAsInt();
             group.InactiveReasonNote = cbIsActive.Checked ? null : tbInactiveNote.Text;
+
+            // Save Peer Network settings.
+            if ( group.GroupType.IsPeerNetworkEnabled )
+            {
+                if ( cbOverrideRelationshipStrength.Checked )
+                {
+                    group.RelationshipStrengthOverride = rblRelationshipStrength.SelectedValueAsInt() ?? ( int ) RelationshipStrength.None;
+                    group.RelationshipGrowthEnabledOverride = cbEnableRelationshipGrowth.Checked;
+
+                    // This approach will only apply overrides if they're explicitly assigned (and will allow null values
+                    // so the parent group type's values can take effect where needed).
+                    group.LeaderToLeaderRelationshipMultiplierOverride = tbLeaderToLeaderRelationshipMultiplier.Text.AsDecimalPercentageOrNull( minPercentage: 0, maxPercentage: 100 );
+                    group.LeaderToNonLeaderRelationshipMultiplierOverride = tbLeaderToNonLeaderRelationshipMultiplier.Text.AsDecimalPercentageOrNull( minPercentage: 0, maxPercentage: 100 );
+                    group.NonLeaderToLeaderRelationshipMultiplierOverride = tbNonLeaderToLeaderRelationshipMultiplier.Text.AsDecimalPercentageOrNull( minPercentage: 0, maxPercentage: 100 );
+                    group.NonLeaderToNonLeaderRelationshipMultiplierOverride = tbNonLeaderToNonLeaderRelationshipMultiplier.Text.AsDecimalPercentageOrNull( minPercentage: 0, maxPercentage: 100 );
+                }
+                else
+                {
+                    // Clear out any previous overrides, so the parent group type settings will take full effect.
+                    group.RelationshipStrengthOverride = null;
+                    group.RelationshipGrowthEnabledOverride = null;
+
+                    group.LeaderToLeaderRelationshipMultiplierOverride = null;
+                    group.LeaderToNonLeaderRelationshipMultiplierOverride = null;
+                    group.NonLeaderToLeaderRelationshipMultiplierOverride = null;
+                    group.NonLeaderToNonLeaderRelationshipMultiplierOverride = null;
+                }
+            }
+            // else: leave the group's existing relationship strength overrides (if any) in place, as the calculations
+            // will safely ignore this group's values (since the parent group type has disabled the peer network feature).
 
             // Save RSVP settings.
             if ( group.GroupType.EnableRSVP )
@@ -1065,11 +1141,35 @@ namespace RockWeb.Blocks.Groups
             // Save Scheduling settings.
             group.SchedulingMustMeetRequirements = cbSchedulingMustMeetRequirements.Checked;
             group.AttendanceRecordRequiredForCheckIn = ddlAttendanceRecordRequiredForCheckIn.SelectedValueAsEnum<AttendanceRecordRequiredForCheckIn>();
-            group.ScheduleCancellationPersonAliasId = ppScheduleCancellationPerson.PersonAliasId;
+            group.ScheduleCoordinatorPersonAliasId = ppScheduleCoordinatorPerson.PersonAliasId;
             group.DisableScheduling = cbDisableGroupScheduling.Checked;
             group.DisableScheduleToolboxAccess = cbDisableScheduleToolboxAccess.Checked;
             group.ScheduleConfirmationLogic = ddlScheduleConfirmationLogic.SelectedValueAsEnumOrNull<ScheduleConfirmationLogic>();
             string iCalendarContent = string.Empty;
+
+            ScheduleCoordinatorNotificationType? notificationTypes = null;
+            foreach ( var li in cblScheduleCoordinatorNotificationTypes.Items.Cast<ListItem>() )
+            {
+                if ( !li.Selected )
+                {
+                    continue;
+                }
+
+                var selectedType = ( ScheduleCoordinatorNotificationType ) li.Value.AsInteger();
+                if ( selectedType == ScheduleCoordinatorNotificationType.None )
+                {
+                    // Ensure that if "None" is selected, it's the only value that can be saved.
+                    notificationTypes = ScheduleCoordinatorNotificationType.None;
+                    break;
+                }
+
+                // Otherwise save all selected values.
+                notificationTypes = notificationTypes.HasValue
+                    ? notificationTypes | selectedType
+                    : selectedType;
+            }
+
+            group.ScheduleCoordinatorNotificationTypes = notificationTypes;
 
             // If unique schedule option was selected, but a schedule was not defined, set option to 'None'
             var scheduleType = rblScheduleSelect.SelectedValueAsEnum<ScheduleType>( ScheduleType.None );
@@ -1269,6 +1369,31 @@ namespace RockWeb.Blocks.Groups
 
                     rockContext.SaveChanges();
                 }
+
+                if ( orphanedChatChannelAvatarId.HasValue || group.ChatChannelAvatarBinaryFileId.HasValue )
+                {
+                    var binaryFileService = new BinaryFileService( rockContext );
+
+                    if ( orphanedChatChannelAvatarId.HasValue )
+                    {
+                        var binaryFile = binaryFileService.Get( orphanedChatChannelAvatarId.Value );
+                        if ( binaryFile != null )
+                        {
+                            binaryFile.IsTemporary = true;
+                        }
+                    }
+
+                    if ( group.ChatChannelAvatarBinaryFileId.HasValue )
+                    {
+                        var binaryFile = binaryFileService.Get( group.ChatChannelAvatarBinaryFileId.Value );
+                        if ( binaryFile != null )
+                        {
+                            binaryFile.IsTemporary = false;
+                        }
+                    }
+
+                    rockContext.SaveChanges();
+                }
             } );
 
             bool isNowSecurityRole = group.IsActive && ( group.IsSecurityRole || group.GroupTypeId == roleGroupTypeId );
@@ -1413,12 +1538,15 @@ namespace RockWeb.Blocks.Groups
                 var group = new Group { GroupTypeId = CurrentGroupTypeId };
                 var groupType = CurrentGroupTypeCache;
 
+                SetRecordSourceControls( groupType, group );
+                SetPeerNetworkControls( groupType, group );
                 SetRsvpControls( groupType, null );
                 SetScheduleControls( groupType, null );
                 ShowGroupTypeEditDetails( groupType, group, true );
                 BindInheritedAttributes( CurrentGroupTypeId, new AttributeService( new RockContext() ) );
                 BindGroupRequirementsGrid();
                 BindAdministratorPerson( group, groupType );
+                SetChatControls( groupType, group );
             }
         }
 
@@ -1528,6 +1656,53 @@ namespace RockWeb.Blocks.Groups
         protected void rblScheduleSelect_SelectedIndexChanged( object sender, EventArgs e )
         {
             SetScheduleDisplay();
+        }
+
+        /// <summary>
+        /// Handles the SelectedIndexChanged event of the cblScheduleCoordinatorNotificationTypes control.
+        /// </summary>
+        /// <param name="sender">The source of the event.</param>
+        /// <param name="e">The <see cref="EventArgs"/> instance containing the event data.</param>
+        protected void cblScheduleCoordinatorNotificationTypes_SelectedIndexChanged( object sender, EventArgs e )
+        {
+            // Retrieve the previously-selected values before this postback.
+            var previouslySelectedValues = ( List<int> ) ViewState["ScheduleCoordinatorNotificationTypes"] ?? new List<int>();
+
+            // Was "None" selected before this postback?
+            var wasNoneSelected = previouslySelectedValues.Any( v =>
+                ( ScheduleCoordinatorNotificationType ) v == ScheduleCoordinatorNotificationType.None
+            );
+
+            // Get the currently-selected values.
+            var selectedValues = cblScheduleCoordinatorNotificationTypes.SelectedValuesAsInt ?? new List<int>();
+
+            // Is "None" selected now?
+            var isNoneSelected = selectedValues.Any( v =>
+                ( ScheduleCoordinatorNotificationType ) v == ScheduleCoordinatorNotificationType.None
+            );
+
+            // Are any other options selected now?
+            var anyOthersSelected = selectedValues.Any( v =>
+                ( ScheduleCoordinatorNotificationType ) v != ScheduleCoordinatorNotificationType.None
+            );
+
+            foreach ( var li in cblScheduleCoordinatorNotificationTypes.Items.Cast<ListItem>() )
+            {
+                var notificationType = ( ScheduleCoordinatorNotificationType ) li.Value.AsInteger();
+
+                // If "None" wasn't selected, but is now, deselect all other options.
+                if ( !wasNoneSelected && isNoneSelected )
+                {
+                    li.Selected = notificationType == ScheduleCoordinatorNotificationType.None;
+                    continue;
+                }
+
+                // If "None" was (and still is) selected, but other options have now been selected, deselect "None".
+                if ( isNoneSelected && anyOthersSelected && notificationType == ScheduleCoordinatorNotificationType.None )
+                {
+                    li.Selected = false;
+                }
+            }
         }
 
         #endregion
@@ -1864,9 +2039,12 @@ namespace RockWeb.Blocks.Groups
             BindAdministratorPerson( group, groupTypeCache );
             nbGroupCapacity.Visible = groupTypeCache != null && groupTypeCache.GroupCapacityRule != GroupCapacityRule.None;
             nbGroupCapacity.Help = nbGroupCapacity.Visible ? GetGroupCapacityHelpText( groupTypeCache.GroupCapacityRule ) : string.Empty;
+            SetRecordSourceControls( groupTypeCache, group );
+            SetPeerNetworkControls( groupTypeCache, group );
             SetRsvpControls( groupTypeCache, group );
             SetScheduleControls( groupTypeCache, group );
             ShowGroupTypeEditDetails( groupTypeCache, group, true );
+            SetChatControls( groupTypeCache, group );
 
             cbSchedulingMustMeetRequirements.Checked = group.SchedulingMustMeetRequirements;
             cbDisableScheduleToolboxAccess.Checked = group.DisableScheduleToolboxAccess;
@@ -1874,13 +2052,27 @@ namespace RockWeb.Blocks.Groups
             ddlAttendanceRecordRequiredForCheckIn.SetValue( group.AttendanceRecordRequiredForCheckIn.ConvertToInt() );
             ddlScheduleConfirmationLogic.SetValue( group.ScheduleConfirmationLogic.HasValue ? group.ScheduleConfirmationLogic.ConvertToInt().ToString() : null );
 
-            if ( group.ScheduleCancellationPersonAlias != null )
+            foreach ( var li in cblScheduleCoordinatorNotificationTypes.Items.Cast<ListItem>() )
             {
-                ppScheduleCancellationPerson.SetValue( group.ScheduleCancellationPersonAlias.Person );
+                var notificationType = ( ScheduleCoordinatorNotificationType ) li.Value.AsInteger();
+                if ( notificationType == ScheduleCoordinatorNotificationType.None )
+                {
+                    // "None" must be explicitly evaluated, otherwise the bitwise operator could return false positives.
+                    li.Selected = group.ScheduleCoordinatorNotificationTypes == ScheduleCoordinatorNotificationType.None;
+                }
+                else
+                {
+                    li.Selected = ( group.ScheduleCoordinatorNotificationTypes & notificationType ) == notificationType;
+                }
+            }
+
+            if ( group.ScheduleCoordinatorPersonAlias != null )
+            {
+                ppScheduleCoordinatorPerson.SetValue( group.ScheduleCoordinatorPersonAlias.Person );
             }
             else
             {
-                ppScheduleCancellationPerson.SetValue( null );
+                ppScheduleCoordinatorPerson.SetValue( null );
             }
 
             // If this block's attribute limit group to SecurityRoleGroups, don't let them edit the SecurityRole checkbox value
@@ -2141,6 +2333,98 @@ namespace RockWeb.Blocks.Groups
         }
 
         /// <summary>
+        /// Sets the record source controls.
+        /// </summary>
+        /// <param name="groupType">The group type cache.</param>
+        /// <param name="group">The group.</param>
+        private void SetRecordSourceControls( GroupTypeCache groupType, Group group )
+        {
+            if ( groupType?.AllowGroupSpecificRecordSource == true )
+            {
+                // Setting the type here, as setting it in `LoadDropDowns()` wasn't reliably working.
+                dvpRecordSource.DefinedTypeId = DefinedTypeCache.Get( Rock.SystemGuid.DefinedType.RECORD_SOURCE_TYPE.AsGuid() )?.Id;
+                dvpRecordSource.SetValue( group.GroupMemberRecordSourceValueId );
+                dvpRecordSource.Visible = true;
+            }
+            else
+            {
+                dvpRecordSource.Visible = false;
+            }
+        }
+
+        /// <summary>
+        /// Sets the Peer Network controls.
+        /// </summary>
+        /// <param name="groupType">The group type cache.</param>
+        /// <param name="group">The group.</param>
+        private void SetPeerNetworkControls( GroupTypeCache groupType, Group group )
+        {
+            var isPeerNetworkOverridable = groupType?.IsPeerNetworkEnabled == true;
+
+            pnlPeerNetworkOverride.Visible = isPeerNetworkOverridable;
+
+            if ( !isPeerNetworkOverridable )
+            {
+                return;
+            }
+
+            cbOverrideRelationshipStrength.Checked = group.IsOverridingGroupTypePeerNetworkConfiguration;
+            pnlPeerNetwork.Visible = group.IsOverridingGroupTypePeerNetworkConfiguration;
+
+            // For relationship strength and growth settings, start by checking if a value is defined for this group,
+            // and fall back to the values defined at the group type level.
+            var relationshipStrength = group.RelationshipStrengthOverride ?? groupType.RelationshipStrength;
+            rblRelationshipStrength.SetValue( relationshipStrength );
+
+            cbEnableRelationshipGrowth.Checked = group.RelationshipGrowthEnabledOverride ?? groupType.RelationshipGrowthEnabled;
+
+            var showPeerNetworkAdvancedSettings = groupType.AreAnyRelationshipMultipliersCustomized || group.AreAnyRelationshipMultipliersCustomized;
+            swShowPeerNetworkAdvancedSettings.Checked = showPeerNetworkAdvancedSettings;
+            pnlPeerNetworkAdvanced.Visible = showPeerNetworkAdvancedSettings;
+
+            // For relationship multipliers, set the group type's values as placeholders on the textboxes, while setting
+            // the group's values as the actual values. This is because the stored procedure that's used to calculate
+            // role-based strengths checks for each individual group-based multiplier override (rather than considering
+            // them ALL to be overridden as a set). By showing the group type multiplier values as placeholders, the
+            // admin can easily see which values they want to override without having to go back to the group type config.
+            tbLeaderToLeaderRelationshipMultiplier.Placeholder = groupType.LeaderToLeaderRelationshipMultiplier.FormatAsPercent();
+            tbLeaderToLeaderRelationshipMultiplier.Text = group.LeaderToLeaderRelationshipMultiplierOverride.HasValue
+                ? group.LeaderToLeaderRelationshipMultiplierOverride.Value.FormatAsPercent()
+                : null;
+
+            tbLeaderToNonLeaderRelationshipMultiplier.Placeholder = groupType.LeaderToNonLeaderRelationshipMultiplier.FormatAsPercent();
+            tbLeaderToNonLeaderRelationshipMultiplier.Text = group.LeaderToNonLeaderRelationshipMultiplierOverride.HasValue
+                ? group.LeaderToNonLeaderRelationshipMultiplierOverride.Value.FormatAsPercent()
+                : null;
+
+            tbNonLeaderToLeaderRelationshipMultiplier.Placeholder = groupType.NonLeaderToLeaderRelationshipMultiplier.FormatAsPercent();
+            tbNonLeaderToLeaderRelationshipMultiplier.Text = group.NonLeaderToLeaderRelationshipMultiplierOverride.HasValue
+                ? group.NonLeaderToLeaderRelationshipMultiplierOverride.Value.FormatAsPercent()
+                : null;
+
+            tbNonLeaderToNonLeaderRelationshipMultiplier.Placeholder = groupType.NonLeaderToNonLeaderRelationshipMultiplier.FormatAsPercent();
+            tbNonLeaderToNonLeaderRelationshipMultiplier.Text = group.NonLeaderToNonLeaderRelationshipMultiplierOverride.HasValue
+                ? group.NonLeaderToNonLeaderRelationshipMultiplierOverride.Value.FormatAsPercent()
+                : null;
+
+            SetPeerNetworkSubControlVisibility( relationshipStrength, showPeerNetworkAdvancedSettings );
+        }
+
+        /// <summary>
+        /// Sets the visibility of peer network secondary controls, based on the provided relationship strength.
+        /// </summary>
+        /// <param name="relationshipStrength">The relationship strength.</param>
+        /// <param name="isAdvancedPanelVisible">Whether the peer network advanced panel is currently visible.</param>
+        private void SetPeerNetworkSubControlVisibility( int relationshipStrength, bool isAdvancedPanelVisible )
+        {
+            var isVisible = relationshipStrength != 0;
+
+            pnlRelationshipGrowth.Visible = isVisible;
+            pnlShowPeerNetworkAdvancedSettings.Visible = isVisible;
+            pnlPeerNetworkAdvanced.Visible = isAdvancedPanelVisible && isVisible;
+        }
+
+        /// <summary>
         /// Sets the RSVP controls.
         /// </summary>
         /// <param name="groupType">Type of the group.</param>
@@ -2190,6 +2474,62 @@ namespace RockWeb.Blocks.Groups
         }
 
         /// <summary>
+        /// Sets the chat controls.
+        /// </summary>
+        /// <param name="groupType">The group type cache.</param>
+        /// <param name="group">The group.</param>
+        private void SetChatControls( GroupTypeCache groupType, Group group )
+        {
+            if ( ChatHelper.IsChatEnabled && groupType?.IsChatAllowed == true )
+            {
+                var isChatEnabled = group.IsChatEnabledOverride.HasValue
+                    ? group.IsChatEnabledOverride.Value ? "y" : "n"
+                    : string.Empty;
+
+                var isLeavingChatChannelAllowed = group.IsLeavingChatChannelAllowedOverride.HasValue
+                    ? group.IsLeavingChatChannelAllowedOverride.Value ? "y" : "n"
+                    : string.Empty;
+
+                var isChatChannelPublic = group.IsChatChannelPublicOverride.HasValue
+                    ? group.IsChatChannelPublicOverride.Value ? "y" : "n"
+                    : string.Empty;
+
+                var isChatChannelAlwaysShown = group.IsChatChannelAlwaysShownOverride.HasValue
+                    ? group.IsChatChannelAlwaysShownOverride.Value ? "y" : "n"
+                    : string.Empty;
+
+                var chatPushNotificationMode = group.ChatPushNotificationModeOverride.HasValue
+                    ? group.ChatPushNotificationModeOverride.Value.ConvertToInt()
+                    : ( int? ) null;
+
+                ddlIsChatEnabled.SetValue( isChatEnabled );
+                ddlIsLeavingChatChannelAllowed.SetValue( isLeavingChatChannelAllowed );
+                ddlIsChatChannelPublic.SetValue( isChatChannelPublic );
+                ddlIsChatChannelAlwaysShown.SetValue( isChatChannelAlwaysShown );
+                ddlChatPushNotificationMode.SetValue( chatPushNotificationMode );
+
+                imgChatChannelAvatar.BinaryFileTypeGuid = Rock.SystemGuid.BinaryFiletype.DEFAULT.AsGuid();
+                imgChatChannelAvatar.BinaryFileId = group.ChatChannelAvatarBinaryFileId;
+
+                if ( group.IsSystem )
+                {
+                    ddlIsChatEnabled.Enabled = false;
+                    ddlIsLeavingChatChannelAllowed.Enabled = false;
+                    ddlIsChatChannelPublic.Enabled = false;
+                    ddlIsChatChannelAlwaysShown.Enabled = false;
+                    ddlChatPushNotificationMode.Enabled = false;
+                    imgChatChannelAvatar.Enabled = false;
+                }
+
+                wpChat.Visible = true;
+            }
+            else
+            {
+                wpChat.Visible = false;
+            }
+        }
+
+        /// <summary>
         /// Shows the readonly details.
         /// </summary>
         /// <param name="group">The group.</param>
@@ -2234,6 +2574,71 @@ namespace RockWeb.Blocks.Groups
             {
                 groupIconHtml = !string.IsNullOrWhiteSpace( groupType.IconCssClass ) ?
                     string.Format( "<i class='{0}' ></i>", groupType.IconCssClass ) : string.Empty;
+
+                if ( groupType.IsPeerNetworkEnabled )
+                {
+                    var groupTypeRelationshipStrength = groupType.RelationshipStrength;
+                    var groupRelationshipStrength = group.RelationshipStrengthOverride;
+
+                    var isRelationshipStrengthOverridden = groupRelationshipStrength.HasValue
+                        && groupRelationshipStrength.Value != groupTypeRelationshipStrength;
+
+                    var finalRelationshipStrength = isRelationshipStrengthOverridden
+                        ? groupRelationshipStrength.Value
+                        : groupTypeRelationshipStrength;
+
+                    var strengthLabel = GetRelationshipStrengthLabel( finalRelationshipStrength );
+
+                    var isRelationshipGrowthEnabled = group.RelationshipGrowthEnabledOverride.HasValue
+                        ? group.RelationshipGrowthEnabledOverride.Value
+                        : groupType.RelationshipGrowthEnabled;
+
+                    var relationshipGrowthTooltip = string.Empty;
+                    var relationshipOverrideTooltip = string.Empty;
+
+                    var relationshipLabelIconsSb = new StringBuilder();
+
+                    // Only show the growth icon and tooltip if growth enabled AND the strength is not "None".
+                    if ( isRelationshipGrowthEnabled && finalRelationshipStrength > 0 )
+                    {
+                        relationshipLabelIconsSb.Append( $@" <i class=""ti ti-chart-line""></i>" );
+
+                        relationshipGrowthTooltip = " The relationship is also set to strengthen over time.";
+                    }
+
+                    // Show the overridden icon if this group is overriding its parent group type's peer network configuration in any way.
+                    if ( group.IsOverridingGroupTypePeerNetworkConfiguration )
+                    {
+                        relationshipLabelIconsSb.Append( $@" <i class=""ti ti-asterisk""></i>" );
+                    }
+
+                    // Only show the overridden tooltip if the relationship strength itself has been overridden.
+                    if ( isRelationshipStrengthOverridden )
+                    {
+                        var overriddenStrengthLabel = GetRelationshipStrengthLabel( groupTypeRelationshipStrength );
+
+                        relationshipOverrideTooltip = $", overriding the group type's default setting of{( overriddenStrengthLabel.Article.IsNotNullOrWhiteSpace() ? $" {overriddenStrengthLabel.Article}" : string.Empty )} {overriddenStrengthLabel.Relationship} relationship";
+                    }
+
+                    hlPeerNetwork.Text = $"{strengthLabel.Relationship.Titleize()} Relationships{relationshipLabelIconsSb}";
+                    hlPeerNetwork.ToolTip = $"Individuals in this group share{( strengthLabel.Article.IsNotNullOrWhiteSpace() ? $" {strengthLabel.Article}" : string.Empty )} {strengthLabel.Relationship} relationship{relationshipOverrideTooltip}.{relationshipGrowthTooltip}";
+
+                    hlPeerNetwork.Visible = true;
+                }
+                else
+                {
+                    hlPeerNetwork.Visible = false;
+                }
+
+                if ( ChatHelper.IsChatEnabled && group.GetIsChatEnabled() )
+                {
+                    hlChat.Text = $"Chat-Enabled <i class=\"ti ti-messages\"></i>";
+                    hlChat.Visible = true;
+                }
+                else
+                {
+                    hlChat.Visible = false;
+                }
 
                 if ( groupType.IsAuthorized( Authorization.ADMINISTRATE, CurrentPerson ) )
                 {
@@ -2346,6 +2751,30 @@ namespace RockWeb.Blocks.Groups
                 hlGroupScheduler.Visible = false;
             }
 
+            string groupPlacementUrl = LinkedPageUrl( AttributeKey.GroupPlacementPage, new Dictionary<string, string>
+            {
+                { "SourceGroup", group.Id.ToString() },
+                { "AllowMultiplePlacements", "false" },
+                { "ReturnUrl", GetCurrentPageUrl() }
+            } );
+            if ( groupPlacementUrl.IsNotNullOrWhiteSpace() )
+            {
+                hlGroupPlacement.Visible = groupType != null;
+                if ( group.DisableScheduling )
+                {
+                    hlGroupPlacement.Enabled = false;
+                }
+                else
+                {
+                    hlGroupPlacement.NavigateUrl = groupPlacementUrl;
+                    hlGroupPlacement.Enabled = true;
+                }
+            }
+            else
+            {
+                hlGroupPlacement.Visible = false;
+            }
+
             string groupHistoryUrl = LinkedPageUrl( AttributeKey.GroupHistoryPage, pageParams );
             mergeFields.Add( "GroupHistoryUrl", groupHistoryUrl );
             if ( groupHistoryUrl.IsNotNullOrWhiteSpace() )
@@ -2380,6 +2809,58 @@ namespace RockWeb.Blocks.Groups
 
             btnSecurity.Visible = group.IsAuthorized( Authorization.ADMINISTRATE, CurrentPerson );
             btnSecurity.EntityId = group.Id;
+        }
+
+        /// <summary>
+        /// A POCO to provide a friendly label for a given relationship strength.
+        /// </summary>
+        private class RelationshipStrengthLabel
+        {
+            /// <summary>
+            /// The indefinite article to use when describing this relationship.
+            /// </summary>
+            public string Article { get; set; }
+
+            /// <summary>
+            /// The friendly relationship label.
+            /// </summary>
+            public string Relationship { get; set; }
+        }
+
+        /// <summary>
+        /// Gets a friendly label for the provided relationship strength.
+        /// </summary>
+        /// <param name="strength">The integer representation of the relationship strength.</param>
+        /// <returns>A friendly label for the provided relationship strength.</returns>
+        private RelationshipStrengthLabel GetRelationshipStrengthLabel( int strength )
+        {
+            var label = new RelationshipStrengthLabel();
+
+            var relationshipStrength = strength.ToString().ConvertToEnumOrNull<RelationshipStrength>();
+            if ( relationshipStrength == null )
+            {
+                // Since the db holds an int value, it's possible someone could manually set an unrepresented value here
+                // (and the stored procedure performing peer network calculations would still work just fine). Let's at
+                // least use this opportunity to point out to the admin that an unknown strength value is in place.
+                label.Article = "an";
+                label.Relationship = "unknown";
+            }
+            else
+            {
+                switch ( relationshipStrength.Value )
+                {
+                    case RelationshipStrength.None:
+                        label.Article = null;
+                        label.Relationship = "no";
+                        break;
+                    default:
+                        label.Article = "a";
+                        label.Relationship = relationshipStrength.Value.ConvertToString().ToLower();
+                        break;
+                }
+            }
+
+            return label;
         }
 
         /// <summary>
@@ -3540,7 +4021,7 @@ namespace RockWeb.Blocks.Groups
             GroupRequirement requirement = e.Row.DataItem as GroupRequirement;
             if ( requirement != null )
             {
-                lAppliesToDataViewId.Text = requirement.AppliesToDataViewId.HasValue ? "<i class=\"fa fa-check\"></i>" : string.Empty;
+                lAppliesToDataViewId.Text = requirement.AppliesToDataViewId.HasValue ? "<i class=\"ti ti-check\"></i>" : string.Empty;
             }
         }
 
@@ -4484,6 +4965,43 @@ namespace RockWeb.Blocks.Groups
         }
 
         #endregion
+
+        #region Peer Network Controls
+
+        /// <summary>
+        /// Handles the CheckedChanged event of the cbOverrideRelationshipStrength control.
+        /// </summary>
+        /// <param name="sender">The source of the event.</param>
+        /// <param name="e">The <see cref="EventArgs" /> instance containing the event data.</param>
+        protected void cbOverrideRelationshipStrength_CheckedChanged( object sender, EventArgs e )
+        {
+            pnlPeerNetwork.Visible = cbOverrideRelationshipStrength.Checked;
+        }
+
+        /// <summary>
+        /// Handles the SelectedIndexChanged event of the rblRelationshipStrength control.
+        /// </summary>
+        /// <param name="sender">The source of the event.</param>
+        /// <param name="e">The <see cref="EventArgs" /> instance containing the event data.</param>
+        protected void rblRelationshipStrength_SelectedIndexChanged( object sender, EventArgs e )
+        {
+            var relationshipStrength = rblRelationshipStrength.SelectedValueAsInt() ?? 0;
+            var isAdvancedPanelVisible = swShowPeerNetworkAdvancedSettings.Checked;
+
+            SetPeerNetworkSubControlVisibility( relationshipStrength, isAdvancedPanelVisible );
+        }
+
+        /// <summary>
+        /// Handles the CheckedChanged event of the swShowPeerNetworkAdvancedSettings control.
+        /// </summary>
+        /// <param name="sender">The source of the event.</param>
+        /// <param name="e">The <see cref="EventArgs" /> instance containing the event data.</param>
+        protected void swShowPeerNetworkAdvancedSettings_CheckedChanged( object sender, EventArgs e )
+        {
+            pnlPeerNetworkAdvanced.Visible = swShowPeerNetworkAdvancedSettings.Checked;
+        }
+
+        #endregion Peer Network Controls
 
         /// <summary>
         /// Handles the CheckedChanged event of the cbIsSecurityRole control.

@@ -1,6 +1,6 @@
 <!-- Copyright by the Spark Development Network; Licensed under the Rock Community License -->
 <template>
-    <Grid :definition="config.gridDefinition ?? undefined"
+    <Grid v-if="config.options?.isGridVisible" :definition="config.gridDefinition ?? undefined"
           :data="gridDataSource"
           keyField="idKey"
           itemTerm="Active Registration Instance"
@@ -9,25 +9,25 @@
           :showLaunchWorkflow="false"
           liveUpdates
           @selectItem="onSelectItem">
-        <SelectColumn />
 
         <TextColumn name="name"
                     title="Name"
                     field="name"
                     :filter="textValueFilter"
+                    width="30%"
                     visiblePriority="xs" />
 
         <DateColumn name="startDateTime"
-                        title="Start Date Time"
-                        field="startDateTime"
-                        :filter="dateValueFilter"
-                        visiblePriority="xs" />
+                    title="Start Date"
+                    field="startDateTime"
+                    :filter="dateValueFilter"
+                    visiblePriority="xs" />
 
         <DateColumn name="endDateTime"
-                        title="End Date Time"
-                        field="endDateTime"
-                        :filter="dateValueFilter"
-                        visiblePriority="xs" />
+                    title="End Date"
+                    field="endDateTime"
+                    :filter="dateValueFilter"
+                    visiblePriority="xs" />
 
         <TextColumn name="details"
                     title="Details"
@@ -36,13 +36,13 @@
                     visiblePriority="xs" />
 
         <NumberColumn name="registrantsCount"
-                      title="Registrant Count"
+                      title="Registrants"
                       field="registrantsCount"
                       :filter="numberValueFilter"
                       visiblePriority="xs" />
 
         <BooleanColumn name="isActive"
-                       title="Is Active"
+                       title="Active"
                        field="isActive"
                        visiblePriority="xs" />
 
@@ -55,7 +55,7 @@
 <script setup lang="ts">
     import { useConfigurationValues, useInvokeBlockAction } from "@Obsidian/Utility/block";
     import { EntityType } from "@Obsidian/SystemGuids/entityType";
-    import Grid, { AttributeColumns, BooleanColumn, TextColumn, NumberColumn, numberValueFilter, textValueFilter, dateValueFilter, SelectColumn, DateColumn } from "@Obsidian/Controls/grid";
+    import Grid, { AttributeColumns, BooleanColumn, TextColumn, NumberColumn, numberValueFilter, textValueFilter, dateValueFilter, DateColumn } from "@Obsidian/Controls/grid";
     import { ListBlockBox } from "@Obsidian/ViewModels/Blocks/listBlockBox";
     import { RegistrationInstanceActiveListOptionsBag } from "@Obsidian/ViewModels/Blocks/Event/RegistrationInstanceActiveList/registrationInstanceActiveListOptionsBag";
     import { GridDataBag } from "@Obsidian/ViewModels/Core/Grid/gridDataBag";

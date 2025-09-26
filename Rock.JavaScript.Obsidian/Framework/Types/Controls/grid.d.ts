@@ -253,6 +253,20 @@ export type SortValueFunction = (row: Record<string, unknown>, column: ColumnDef
 export type FilterValueFunction = (row: Record<string, unknown>, column: ColumnDefinition, grid: IGridState) => string | number | boolean | undefined;
 
 /**
+ * A function that will be called to determine the values to use when
+ * performing a column filter operation. This value will be cached by the
+ * grid until the row is modified. This is used by components that handle
+ * multiple values in a single cell.
+ *
+ * @param row The data object that represents the row.
+ * @param column The column definition for this operation.
+ * @param grid The grid that owns this operation.
+ *
+ * @returns The individual values that can be filtered.
+ */
+export type FilterValuesFunction = (row: Record<string, unknown>, column: ColumnDefinition, grid: IGridState) => MultiValueFilterItem[];
+
+/**
  * A function that will be called to get the value to use when exporting the
  * cell to an external document.
  */
@@ -270,6 +284,19 @@ export type ExportValueFunction = (row: Record<string, unknown>, column: ColumnD
  * @returns True if `haystack` matches `needle`, otherwise false.
  */
 export type ColumnFilterMatchesFunction = (needle: unknown, haystack: unknown, column: ColumnDefinition, grid: IGridState) => boolean;
+
+/**
+ * A function that will be called to get the tooltip text to display for a cell.
+ * This function will be called when the cell is initialized so any changes to
+ * the value while the cell is visible will not be reflected in the tooltip.
+ *
+ * @param row The data object that represents the row.
+ * @param column The column definition for this operation.
+ * @param grid The grid that owns this operation.
+ *
+ * @returns The string of text to display in the tooltip. An empty string, `null`, or `undefined` will not display a tooltip.
+ */
+export type TooltipFunction = (row: Record<string, unknown>, column: ColumnDefinition, grid: IGridState) => string | undefined | null;
 
 // #endregion
 
@@ -360,6 +387,21 @@ type StandardColumnProps = {
      */
     filterValue: {
         type: PropType<(FilterValueFunction | string)>,
+        required: false
+    },
+
+    /**
+     * Specifies how to get the values to use when filtering by this column if
+     * it supports multiple values. Each value of the multi-value set will be
+     * treated as a distinct value for filtering. Only one of the values needs
+     * to match. If the column does not support multiple values then this should
+     * be left undefined. The function will be called with the row and column
+     * definition.
+     *
+     * This will only be used by filters that support multiple values.
+     */
+    filterValues: {
+        type: PropType<FilterValuesFunction>,
         required: false
     },
 
@@ -467,12 +509,40 @@ type StandardColumnProps = {
     width: {
         type: PropType<string>,
         required: false
-    }
+    },
+
+    /**
+     * If `true` then the cell will wrap content by way of adding the class
+     * `grid-wrapcell` to the data cells.
+     */
+    wrapped: {
+        type: PropType<boolean>,
+        default: false
+    },
 
     /**
      * If 'true', disables sorting for this column.
      */
     disableSort: {
+        type: PropType<boolean>,
+        default: false
+    },
+
+    /**
+     * Either a string that represents the field to use when displaying the
+     * tooltip or a function that will be called to get the tooltip text.
+     */
+    tooltip: {
+        type: PropType<string | TooltipFunction>,
+        required: false
+    },
+
+    /**
+     * If `true` then the tooltip will be rendered as HTML. This is useful if
+     * you need to provide custom formatting inside the tooltip. Any plain text
+     * must be properly escaped.
+     */
+    tooltipHtml: {
         type: PropType<boolean>,
         default: false
     },
@@ -627,6 +697,22 @@ type TextSearchBag = {
 
 // #endregion
 
+/**
+ * Defines a single filter value returned by columns that support multi-value
+ * cells. An example of this is the label column.
+ */
+export type MultiValueFilterItem = {
+    /** The value that will be passed to {@link ColumnFilterMatchesFunction}. */
+    value: string | number | boolean;
+
+    /**
+     * The row data that represents this single value. This would normally be
+     * a copy of the original row with the field value replaced with the single
+     * value instead of an array value.
+     */
+    rowData: Record<string, unknown>;
+};
+
 /** Defines a single action related to a Grid control. */
 export type GridAction = {
     /**
@@ -733,6 +819,9 @@ export type ColumnDefinition = {
     /** Gets the value to use when performing column filtering. */
     filterValue: FilterValueFunction;
 
+    /** Gets the values to use when performing multi-value column filtering. */
+    filterValues?: FilterValuesFunction;
+
     /**
      * Gets the function to call that will provide the value to use when
      * exporting the column values to a document.
@@ -781,9 +870,28 @@ export type ColumnDefinition = {
     data: Record<string, unknown>;
 
     /**
+     * If `true`, the CSS class `grid-wrapcell` will be added to cause the
+     * content to wrap.
+     */
+    wrapped: boolean;
+
+    /**
      * If 'true', disables sorting for this column.
      */
     disableSort: boolean;
+
+    /**
+     * Either a string that represents the field to use when displaying the
+     * tooltip or a function that will be called to get the tooltip text.
+     */
+    tooltip?: string | TooltipFunction;
+
+    /**
+     * If `true` then the tooltip will be rendered as HTML. This is useful if
+     * you need to provide custom formatting inside the tooltip. Any plain text
+     * must be properly escaped.
+     */
+    tooltipHtml: boolean;
 };
 
 /**

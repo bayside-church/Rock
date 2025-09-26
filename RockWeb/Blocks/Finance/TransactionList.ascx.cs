@@ -156,6 +156,7 @@ namespace RockWeb.Blocks.Finance
         Key = AttributeKey.HideTransactionsInPendingBatches
         )]
 
+    [Rock.Cms.DefaultBlockRole( Rock.Enums.Cms.BlockRole.Secondary )]
     [Rock.SystemGuid.BlockTypeGuid( "E04320BC-67C3-452D-9EF6-D74D8C177154" )]
     public partial class TransactionList : Rock.Web.UI.RockBlock, ISecondaryBlock, IPostBackEventHandler, ICustomGridColumns
     {
@@ -840,9 +841,9 @@ namespace RockWeb.Blocks.Finance
             var lTransactionImage = e.Row.FindControl( "lTransactionImage" ) as Literal;
             if ( lTransactionImage != null && lTransactionImage.Visible )
             {
-                if ( _imageBinaryFileIdLookupByTransactionId.ContainsKey( txn.Id ) )
+                if ( _imageBinaryFileIdLookupByTransactionId.ContainsKey( txn.TransactionId ) )
                 {
-                    int? firstImageId = _imageBinaryFileIdLookupByTransactionId[txn.Id].FirstOrDefault();
+                    int? firstImageId = _imageBinaryFileIdLookupByTransactionId[txn.TransactionId].FirstOrDefault();
                     if ( firstImageId != null )
                     {
                         var options = new GetImageUrlOptions
@@ -968,61 +969,89 @@ namespace RockWeb.Blocks.Finance
         {
             var rockContext = new RockContext();
             var transactionService = new FinancialTransactionService( rockContext );
-            var transaction = transactionService.Get( e.RowKeyId );
-            if ( transaction != null )
+            if ( hfTransactionViewMode.Value == "Transaction Details" )
             {
-                string errorMessage;
-                if ( !transactionService.CanDelete( transaction, out errorMessage ) )
+                var transactionDetailService = new FinancialTransactionDetailService( rockContext );
+                var transactionDetail = transactionDetailService.Get( e.RowKeyId );
+                var transaction = transactionDetail.Transaction;
+                if ( transaction != null )
                 {
-                    mdGridWarning.Show( errorMessage, ModalAlertType.Information );
-                    return;
-                }
-
-                // prevent deleting a Transaction that is in a closed or an automated batch
-                if ( transaction.Batch != null )
-                {
-                    if ( transaction.Batch.Status == BatchStatus.Closed )
+                    // prevent deleting a Financial Transaction Detail which belongs to a Transaction that is in a closed or an automated batch
+                    if ( transaction.Batch != null )
                     {
-                        mdGridWarning.Show( string.Format( "This {0} is assigned to a closed {1}", FinancialTransaction.FriendlyTypeName, FinancialBatch.FriendlyTypeName ), ModalAlertType.Information );
-                        return;
+                        if ( transaction.Batch.Status == BatchStatus.Closed )
+                        {
+                            mdGridWarning.Show( string.Format( "This {0} is assigned to a closed {1} and cannot be deleted.", FinancialTransaction.FriendlyTypeName, FinancialBatch.FriendlyTypeName ), ModalAlertType.Information );
+                            return;
+                        }
+
+                        if ( transaction.Batch.IsAutomated )
+                        {
+                            mdGridWarning.Show( string.Format( "This {0} is assigned to an automated {1} and cannot be deleted.", FinancialTransaction.FriendlyTypeName, FinancialBatch.FriendlyTypeName ), ModalAlertType.Information );
+                            return;
+                        }
                     }
 
-                    if ( transaction.Batch.IsAutomated )
-                    {
-                        mdGridWarning.Show( string.Format( "This {0} is assigned to an automated {1}", FinancialTransaction.FriendlyTypeName, FinancialBatch.FriendlyTypeName ), ModalAlertType.Information );
-                        return;
-                    }
+                    transactionDetailService.Delete( transactionDetail );
                 }
-
-                if ( transaction.BatchId.HasValue )
-                {
-                    var caption = ( transaction.AuthorizedPersonAlias != null && transaction.AuthorizedPersonAlias.Person != null ) ?
-                        transaction.AuthorizedPersonAlias.Person.FullName :
-                        string.Format( "Transaction: {0}", transaction.Id );
-
-                    var changes = new History.HistoryChangeList();
-                    changes.AddChange( History.HistoryVerb.Delete, History.HistoryChangeType.Record, "Transaction" );
-
-                    HistoryService.SaveChanges(
-                        rockContext,
-                        typeof( FinancialBatch ),
-                        Rock.SystemGuid.Category.HISTORY_FINANCIAL_TRANSACTION.AsGuid(),
-                        transaction.BatchId.Value,
-                        changes,
-                        caption,
-                        typeof( FinancialTransaction ),
-                        transaction.Id,
-                        false
-                    );
-                }
-
-                transactionService.Delete( transaction );
-
-                rockContext.SaveChanges();
-
-                RockPage.UpdateBlocks( "~/Blocks/Finance/BatchDetail.ascx" );
             }
+            else
+            {
+                var transaction = transactionService.Get( e.RowKeyId );
+                if ( transaction != null )
+                {
+                    string errorMessage;
+                    if ( !transactionService.CanDelete( transaction, out errorMessage ) )
+                    {
+                        mdGridWarning.Show( errorMessage, ModalAlertType.Information );
+                        return;
+                    }
 
+                    // prevent deleting a Transaction that is in a closed or an automated batch
+                    if ( transaction.Batch != null )
+                    {
+                        if ( transaction.Batch.Status == BatchStatus.Closed )
+                        {
+                            mdGridWarning.Show( string.Format( "This {0} is assigned to a closed {1}", FinancialTransaction.FriendlyTypeName, FinancialBatch.FriendlyTypeName ), ModalAlertType.Information );
+                            return;
+                        }
+
+                        if ( transaction.Batch.IsAutomated )
+                        {
+                            mdGridWarning.Show( string.Format( "This {0} is assigned to an automated {1}", FinancialTransaction.FriendlyTypeName, FinancialBatch.FriendlyTypeName ), ModalAlertType.Information );
+                            return;
+                        }
+                    }
+
+                    if ( transaction.BatchId.HasValue )
+                    {
+                        var caption = ( transaction.AuthorizedPersonAlias != null && transaction.AuthorizedPersonAlias.Person != null ) ?
+                            transaction.AuthorizedPersonAlias.Person.FullName :
+                            string.Format( "Transaction: {0}", transaction.Id );
+
+                        var changes = new History.HistoryChangeList();
+                        changes.AddChange( History.HistoryVerb.Delete, History.HistoryChangeType.Record, "Transaction" );
+
+                        HistoryService.SaveChanges(
+                            rockContext,
+                            typeof( FinancialBatch ),
+                            Rock.SystemGuid.Category.HISTORY_FINANCIAL_TRANSACTION.AsGuid(),
+                            transaction.BatchId.Value,
+                            changes,
+                            caption,
+                            typeof( FinancialTransaction ),
+                            transaction.Id,
+                            false
+                        );
+                    }
+
+                    transactionService.Delete( transaction );
+                }
+            }
+            rockContext.SaveChanges();
+
+            // Refresh the current page to update the Financial Batch Detail Obsidian Block with the Transactions updates.
+            NavigateToCurrentPageReference();
             BindGrid();
         }
 
@@ -1170,13 +1199,27 @@ namespace RockWeb.Blocks.Finance
                 {
                     using ( var rockContext = new RockContext() )
                     {
-                        foreach ( var txn in new FinancialTransactionService( rockContext )
-                            .Queryable( "AuthorizedPersonAlias.Person" )
-                            .Where( t => txnsSelected.Contains( t.Id ) )
-                            .ToList() )
+                        if ( hfTransactionViewMode.Value == "Transactions" )
                         {
-                            txn.AuthorizedPersonAliasId = personAliasId.Value;
+                            foreach ( var txn in new FinancialTransactionService( rockContext )
+                                .Queryable( "AuthorizedPersonAlias.Person" )
+                                .Where( t => txnsSelected.Contains( t.Id ) )
+                                .ToList() )
+                            {
+                                txn.AuthorizedPersonAliasId = personAliasId.Value;
+                            }
                         }
+                        else
+                        {
+                            foreach ( var txn in new FinancialTransactionService( rockContext )
+                                .Queryable( "AuthorizedPersonAlias.Person, TransactionDetails" )
+                                .Where( t => t.TransactionDetails.Any( d => txnsSelected.Contains( d.Id ) ) )
+                                .ToList() )
+                            {
+                                txn.AuthorizedPersonAliasId = personAliasId.Value;
+                            }
+                        }
+
                         rockContext.SaveChanges();
 
                         var acctAction = rblReassignBankAccounts.SelectedValue;
@@ -1581,6 +1624,25 @@ namespace RockWeb.Blocks.Finance
                 if ( hfTransactionViewMode.Value == "Transaction Details" )
                 {
                     gTransactions.RowItemText = "Transaction Detail";
+
+                    /*
+                        9/5/2025 - NA
+
+                        The "Show Merge Template" and "Enable Default Launch Workflow" features are being disabled, 
+                        but only for the "Transaction Details" mode. In this mode, the SelectedKeys values are set 
+                        automatically by the Grid's <SelectField> when a person checks a row's checkbox. The issue 
+                        is that these SelectedKeys correspond to the Ids of FinancialTransactionDetail records rather 
+                        than the FinancialTransaction itself, which leads to incorrect behavior.
+
+                        Attempting to adjust how SelectedKeys are assigned during this v17.5 alpha would be more risky 
+                        than simply disabling these two grid features. This should be addressed when the block is
+                        converted to NextGen.
+
+                        Reason: Temporary fix to avoid incorrect key usage in Transaction Details mode.
+                    */
+                    gTransactions.Actions.ShowMergeTemplate = false;
+                    gTransactions.EnableDefaultLaunchWorkflow = false;
+
                     var financialTransactionDetailService = new FinancialTransactionDetailService( rockContext );
                     var financialTransactionDetailQuery = financialTransactionDetailService.Queryable().AsNoTracking();
 
@@ -1620,7 +1682,8 @@ namespace RockWeb.Blocks.Finance
 
                     query = financialTransactionDetailQuery.Select( a => new FinancialTransactionRow
                     {
-                        Id = a.TransactionId,
+                        Id = a.Id,
+                        TransactionId = a.TransactionId,
                         BatchId = a.Transaction.BatchId,
                         TransactionTypeValueId = a.Transaction.TransactionTypeValueId,
                         ScheduledTransactionId = a.Transaction.ScheduledTransactionId,
@@ -1663,6 +1726,9 @@ namespace RockWeb.Blocks.Finance
                 else
                 {
                     gTransactions.RowItemText = "Transactions";
+                    gTransactions.Actions.ShowMergeTemplate = true;
+                    gTransactions.EnableDefaultLaunchWorkflow = true;
+
                     var financialTransactionService = new FinancialTransactionService( rockContext );
                     var financialTransactionQuery = financialTransactionService.Queryable().AsNoTracking();
 
@@ -1704,6 +1770,7 @@ namespace RockWeb.Blocks.Finance
                         .Select( a => new FinancialTransactionRow
                         {
                             Id = a.Id,
+                            TransactionId = a.Id,
                             BatchId = a.BatchId,
                             TransactionTypeValueId = a.TransactionTypeValueId,
                             ScheduledTransactionId = a.ScheduledTransactionId,
@@ -2018,7 +2085,7 @@ namespace RockWeb.Blocks.Finance
 
                 if ( showImages )
                 {
-                    _imageBinaryFileIdLookupByTransactionId = new FinancialTransactionImageService( rockContext ).Queryable().Where( a => query.Any( q => q.Id == a.TransactionId ) )
+                    _imageBinaryFileIdLookupByTransactionId = new FinancialTransactionImageService( rockContext ).Queryable().Where( a => query.Any( q => q.TransactionId == a.TransactionId ) )
                         .Select( a => new { a.TransactionId, a.BinaryFileId, a.Order } )
                         .GroupBy( a => a.TransactionId )
                         .ToDictionary( k => k.Key, v => v.OrderBy( x => x.Order ).Select( x => x.BinaryFileId ).ToList() );
@@ -2031,11 +2098,27 @@ namespace RockWeb.Blocks.Finance
                 if ( _availableAttributes.Any() )
                 {
                     gTransactions.ObjectList = new Dictionary<string, object>();
-                    var txns = new FinancialTransactionService( rockContext )
-                        .Queryable().AsNoTracking()
-                        .Where( t => query.Select( q => q.Id ).Contains( t.Id ) )
-                        .ToList();
-                    txns.ForEach( t => gTransactions.ObjectList.Add( t.Id.ToString(), t ) );
+                    if ( hfTransactionViewMode.Value == "Transactions" )
+                    {
+                        gTransactions.EntityIdField = "Id";
+
+                        var txns = new FinancialTransactionService( rockContext )
+                            .Queryable().AsNoTracking()
+                            .Where( t => query.Select( q => q.Id ).Contains( t.Id ) ) // Note: In this case, q.Id is the FinancialTransaction.Id
+                            .ToList();
+                        txns.ForEach( t => gTransactions.ObjectList.Add( t.Id.ToString(), t ) );
+                    }
+                    else
+                    {
+                        // Ensure the EntityIdField is set to TransactionId so that the Workflow is created on the Financial Transaction Entity.
+                        gTransactions.EntityIdField = "TransactionId";
+
+                        var txns = new FinancialTransactionDetailService( rockContext )
+                            .Queryable().AsNoTracking()
+                            .Where( t => query.Select( q => q.Id ).Contains( t.Id ) )  // Note: In this case, q.Id is the FinancialTransactionDetail.Id
+                            .ToList();
+                        txns.ForEach( t => gTransactions.ObjectList.Add( t.Id.ToString(), t ) );
+                    }
                 }
 
                 gTransactions.EntityTypeId = EntityTypeCache.GetId<Rock.Model.FinancialTransaction>();
@@ -2181,6 +2264,12 @@ namespace RockWeb.Blocks.Finance
         /// <param name="id">The id.</param>
         protected void ShowDetailForm( int id )
         {
+            // Update the id to have the value of the Transaction Id if the View is pointing to the "Transaction Details".
+            if ( hfTransactionViewMode.Value == "Transaction Details" )
+            {
+                id = new FinancialTransactionDetailService( new RockContext() ).Get( id )?.TransactionId ?? 0;
+            }
+
             if ( _batch != null )
             {
                 var qryParams = new Dictionary<string, string>();
@@ -2282,6 +2371,7 @@ namespace RockWeb.Blocks.Finance
         private class FinancialTransactionRow : RockDynamic
         {
             public int Id { get; set; }
+            public int TransactionId { get; set; }
             public int? AuthorizedPersonAliasId { get; internal set; }
             public string AuthorizedPersonLastName { get; set; }
             public string AuthorizedPersonNickName { get; set; }

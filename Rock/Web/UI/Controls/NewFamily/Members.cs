@@ -159,7 +159,7 @@ namespace Rock.Web.UI.Controls
             _lbAddGroupMember.CausesValidation = false;
 
             var iAddFilter = new HtmlGenericControl( "i" );
-            iAddFilter.AddCssClass("fa fa-user");
+            iAddFilter.AddCssClass("ti ti-user");
             _lbAddGroupMember.Controls.Add( iAddFilter );
 
             var spanAddFilter = new HtmlGenericControl("span");
@@ -236,7 +236,7 @@ namespace Rock.Web.UI.Controls
                     writer.AddAttribute( HtmlTextWriterAttribute.Class, "required" );
                 }
                 writer.RenderBeginTag( HtmlTextWriterTag.Th );
-                writer.Write( "Birthdate" );
+                writer.Write( "Birth Date" );
                 writer.RenderEndTag();
 
                 if ( ShowGrade )

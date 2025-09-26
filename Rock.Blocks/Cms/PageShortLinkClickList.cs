@@ -33,12 +33,13 @@ namespace Rock.Blocks.Cms
     /// Lists clicks for a particular short link.
     /// </summary>
 
-    [DisplayName( "Short Link Click List" )]
+    [DisplayName( "Page Short Link Click List" )]
     [Category( "CMS" )]
     [Description( "Lists clicks for a particular short link." )]
-    [IconCssClass( "fa fa-question" )]
-    // [SupportedSiteTypes(Model.SiteType.Web)]
+    [IconCssClass( "ti ti-question-mark" )]
+    [SupportedSiteTypes( Model.SiteType.Web )]
 
+    [Rock.Cms.DefaultBlockRole( Rock.Enums.Cms.BlockRole.Secondary )]
     [Rock.SystemGuid.EntityTypeGuid( "aa860dc7-d590-4d0e-bbb3-16990f2cd680" )]
     [Rock.SystemGuid.BlockTypeGuid( "e44cac85-346f-41a4-884b-a6fb5fc64de1" )]
     [CustomizedGrid]
@@ -73,19 +74,14 @@ namespace Rock.Blocks.Cms
         /// <inheritdoc/>
         protected override IQueryable<Interaction> GetListQueryable( RockContext rockContext )
         {
-            string shortLinkIdKey = RequestContext?.PageParameters?["ShortLinkId"]?.ToString() ?? string.Empty;
-            if ( string.IsNullOrWhiteSpace( shortLinkIdKey ) )
-            {
-                return Enumerable.Empty<Interaction>().AsQueryable();
-            }
-
             var dv = DefinedValueCache.Get( Rock.SystemGuid.DefinedValue.INTERACTIONCHANNELTYPE_URLSHORTENER );
             if ( dv == null )
             {
                 return Enumerable.Empty<Interaction>().AsQueryable();
             }
 
-            var shortLinkId = IdHasher.Instance.GetId(shortLinkIdKey);
+            var shortLinkIdParam = RequestContext?.PageParameters?["ShortLinkId"];
+            var shortLinkId = Rock.Utility.IdHasher.Instance.GetId( shortLinkIdParam ) ?? shortLinkIdParam.AsIntegerOrNull();
 
             var interactions = new InteractionService( rockContext )
                 .Queryable().AsNoTracking()
@@ -95,9 +91,7 @@ namespace Rock.Blocks.Cms
                 .Include( i => i.InteractionComponent )
                 .Where( i =>
                    i.InteractionComponent.InteractionChannel.ChannelTypeMediumValueId == dv.Id &&
-                   i.InteractionComponent.EntityId == shortLinkId )
-                .ToList()
-                .AsQueryable();
+                   i.InteractionComponent.EntityId == shortLinkId );
 
             return interactions;
         }
@@ -107,18 +101,23 @@ namespace Rock.Blocks.Cms
         {
             return new GridBuilder<Interaction>()
                 .WithBlock( this )
-                .AddField("idKey", a => a.InteractionComponent.IdKey )
-                .AddField( "id", a => a.InteractionComponent.EntityId )
-                .AddField( "interactionDateTime", a => a.InteractionDateTime )
+                .AddTextField( "idKey", a => a.IdKey )
+                .AddTextField( "id", a => a.Id.ToString() )
+                .AddDateTimeField( "interactionDateTime", a => a.InteractionDateTime )
                 .AddPersonField( "person", a => a.PersonAlias?.Person )
-                .AddTextField( "application", a => a.InteractionSession.DeviceType.Application )
-                .AddTextField( "clientType", a => a.InteractionSession.DeviceType.ClientType )
-                .AddTextField( "operatingSystem", a => a.InteractionSession.DeviceType.OperatingSystem )
+                .AddTextField( "application", a => a.InteractionSession?.DeviceType?.Application )
+                .AddTextField( "clientType", a => a.InteractionSession?.DeviceType?.ClientType )
+                .AddTextField( "operatingSystem", a => a.InteractionSession?.DeviceType?.OperatingSystem )
                 .AddTextField( "source", a => GetUtmSourceName(a.SourceValueId) );
         }
 
         #endregion
 
+        /// <summary>
+        /// Gets the UTM source name for the given source value ID.
+        /// </summary>
+        /// <param name="sourceValueId">The source value ID.</param>
+        /// <returns>The UTM source name or empty string.</returns>
         private string GetUtmSourceName( int? sourceValueId )
         {
             if ( sourceValueId == null )

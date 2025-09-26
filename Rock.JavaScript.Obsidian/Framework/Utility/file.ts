@@ -15,28 +15,19 @@
 // </copyright>
 //
 
-import { Workbook } from "exceljs";
 import { useHttp } from "./http";
 import Cache from "./cache";
 
 /**
- * Triggers an automatic download of the workbook so it can be saved to
- * the filesystem.
+ * Triggers an automatic download of the data so it can be saved to the
+ * filesystem.
  *
- * @param workbook The workbook to be downloaded by the browser.
- * @param title The title of the workbook, this is used as the base for the filename.
- * @param format The format to use when downloading the workbook.
+ * @param data The data to be downloaded by the browser.
+ * @param filename The name of the filename to suggest to the browser.
  */
-export async function downloadWorkbook(workbook: Workbook, title: string, format: "csv" | "xlsx"): Promise<void> {
-    // Get the export data.
-    const buffer = format === "xlsx"
-        ? await workbook.xlsx.writeBuffer()
-        : await workbook.csv.writeBuffer();
-
+export async function downloadFile(data: Blob, filename: string): Promise<void> {
     // Create the URL that contains the file data.
-    const url = URL.createObjectURL(new Blob([buffer], {
-        type: "application/octet-stream"
-    }));
+    const url = URL.createObjectURL(data);
 
     // Create a fake hyperlink to simulate an attempt to download a file.
     const element = document.createElement("a");
@@ -45,7 +36,7 @@ export async function downloadWorkbook(workbook: Workbook, title: string, format
     element.style.top = "-100px";
     element.style.left = "0";
     element.href = url;
-    element.download = `${title.replace(/[^a-zA-Z0-9\-_]/g, "")}.${format}`;
+    element.download = filename;
     document.body.appendChild(element);
     element.click();
     document.body.removeChild(element);
@@ -84,4 +75,84 @@ export async function isImage(filename: string): Promise<boolean> {
     const imageExtensions = await getImageFileExtensions();
     const extension = filename.split(".").pop();
     return !!extension && (imageExtensions?.includes(extension.toLowerCase()) ?? false);
+}
+
+/**
+ * Creates a file processor function that resizes images to fit within a specified maximum width and/or height,
+ * while maintaining the original aspect ratio.
+ *
+ * If the input file is not an image, it is returned unchanged. If `maxWidth` or `maxHeight` is provided,
+ * the image will be resized accordingly.
+ *
+ * @param {object} [options] - The resizing options (optional).
+ * @param {number} [options.maxWidth] - The maximum allowed width for the image (optional).
+ * @param {number} [options.maxHeight] - The maximum allowed height for the image (optional).
+ * @returns {(file: File) => File | Promise<File>} A function that processes the given file and returns either the original file or a resized version.
+ *
+ * @example
+ * const processor = resizeImageFileProcessor({ maxWidth: 800 }); // Resize only by width
+ * const resizedFile = await processor(imageFile);
+ */
+export function resizeImageFileProcessor({
+    maxWidth,
+    maxHeight
+}: { maxWidth?: number; maxHeight?: number } = {}): (file: File) => File | Promise<File> {
+    return (file: File): File | Promise<File> => {
+        if (!file.type.startsWith("image/")) {
+            // File is not an image.
+            return file;
+        }
+
+        return new Promise<File>((resolve, reject) => {
+            const img = new Image();
+            img.src = URL.createObjectURL(file);
+            img.onload = () => {
+                const { width, height } = img;
+
+                if (!maxWidth && !maxHeight) {
+                    // No constraints provided, return original file.
+                    resolve(file);
+                    return;
+                }
+
+                // Determine scaling factor to maintain aspect ratio
+                const widthScale = maxWidth ? maxWidth / width : 1;
+                const heightScale = maxHeight ? maxHeight / height : 1;
+                const scaleFactor = Math.min(widthScale, heightScale, 1); // Never upscale
+
+                if (scaleFactor === 1) {
+                    // No resizing needed
+                    resolve(file);
+                    return;
+                }
+
+                const newWidth = Math.round(width * scaleFactor);
+                const newHeight = Math.round(height * scaleFactor);
+
+                const canvas = document.createElement("canvas");
+                canvas.width = newWidth;
+                canvas.height = newHeight;
+
+                const ctx = canvas.getContext("2d");
+                if (!ctx) {
+                    reject(new Error("Failed to get canvas context"));
+                    return;
+                }
+
+                ctx.drawImage(img, 0, 0, newWidth, newHeight);
+                canvas.toBlob(blob => {
+                    if (!blob) {
+                        reject(new Error("Failed to resize image"));
+                        return;
+                    }
+
+                    // Create a new File object from the resized blob.
+                    const resizedFile = new File([blob], file.name, { type: file.type });
+                    resolve(resizedFile);
+                }, file.type);
+            };
+
+            img.onerror = () => reject(new Error("Failed to load image"));
+        });
+    };
 }

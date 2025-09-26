@@ -38,8 +38,8 @@ namespace Rock.Blocks.Core
     [DisplayName( "Rest Controller List" )]
     [Category( "Core" )]
     [Description( "Displays a list of rest controllers." )]
-    [IconCssClass( "fa fa-list" )]
-    // [SupportedSiteTypes( Model.SiteType.Web )]
+    [IconCssClass( "ti ti-list" )]
+    [SupportedSiteTypes( Model.SiteType.Web )]
 
     [LinkedPage( "Detail Page",
         Description = "The page that will show the rest controller details.",
@@ -110,9 +110,19 @@ namespace Rock.Blocks.Core
         {
             var service = new RestControllerService( rockContext );
 
-            var qry = service.Queryable().OrderBy( c => c.Name ).AsNoTracking();
+            var qry = service.Queryable().Include( r => r.Actions ).OrderBy( c => c.Name ).AsNoTracking();
 
             return qry;
+        }
+
+        /// <inheritdoc/>
+        protected override IQueryable<RestController> GetOrderedListQueryable( IQueryable<RestController> queryable, RockContext rockContext )
+        {
+            return queryable.AsNoTracking()
+                .ToList()
+                .OrderBy( c => c.Name )
+                .ThenBy( c => c.GetMetadata()?.Version ?? 1 )
+                .AsQueryable();
         }
 
         /// <inheritdoc/>
@@ -123,10 +133,13 @@ namespace Rock.Blocks.Core
                 .AddTextField( "idKey", a => a.IdKey )
                 .AddTextField( "name", a => a.Name )
                 .AddTextField( "className", a => a.ClassName )
+                .AddTextField( "routePrefix", a => a.GetMetadata()?.RoutePrefix )
+                .AddField( "version", a => a.GetMetadata()?.Version ?? 1 )
                 .AddField( "actions", a => a.Actions.Count() )
-                .AddField( "actionsWithPublicCachingHeaders", a => a.Actions.Count( x => x.CacheControlHeaderSettings != null
-                                                                                        && x.CacheControlHeaderSettings != ""
-                                                                                        && x.CacheControlHeaderSettings.Contains( "\"RockCacheablityType\":0" ) ) )
+                .AddField( "actionsWithPublicCachingHeaders", a => a
+                    .Actions.Count( x => x.CacheControlHeaderSettings != null
+                        && x.CacheControlHeaderSettings != ""
+                        && x.CacheControlHeaderSettings.Contains( "\"RockCacheablityType\":0" ) ) )
                 .AddField( "isSecurityDisabled", a => !a.IsAuthorized( Authorization.ADMINISTRATE, RequestContext.CurrentPerson ) )
                 .AddAttributeFields( GetGridAttributes() );
         }

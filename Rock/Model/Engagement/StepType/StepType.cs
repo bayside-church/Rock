@@ -21,6 +21,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 using System.Data.Entity.ModelConfiguration;
 using System.Runtime.Serialization;
 using Rock.Data;
+using Rock.Enums.Engagement;
 using Rock.Security;
 using Rock.Web.Cache;
 
@@ -32,6 +33,7 @@ namespace Rock.Model
     [RockDomain( "Engagement" )]
     [Table( "StepType" )]
     [DataContract]
+    [CodeGenerateRest]
     [Rock.SystemGuid.EntityTypeGuid( "5E795620-9F16-49D2-9030-947C0E348A8E")]
     public partial class StepType : Model<StepType>, IOrdered, IHasActiveFlag, ICacheable
     {
@@ -43,9 +45,9 @@ namespace Rock.Model
 </div>
 <div class=""card-middle"">
     {% if StepType.HighlightColor == '' or IsComplete == false %}
-        <i class=""{{ StepType.IconCssClass }} fa-4x""></i>
+        <i class=""{{ StepType.IconCssClass }} ti-4x""></i>
     {% else %}
-        <i class=""{{ StepType.IconCssClass }} fa-4x"" style=""color: {{ StepType.HighlightColor }};""></i>
+        <i class=""{{ StepType.IconCssClass }} ti-4x"" style=""color: {{ StepType.HighlightColor }};""></i>
     {% endif %}
 </div>
 <div class=""card-bottom"">
@@ -58,7 +60,7 @@ namespace Rock.Model
         {% endif %}
         {% if LatestStep and LatestStep.CompletedDateTime != '' %}
             <br />
-            <small>{{ LatestStep.CompletedDateTime | Date:'M/d/yyyy' }}</small>
+            <small>{{ LatestStep.CompletedDateTime | Date:'sd' }}</small>
         {% endif %}
     </p>
     {% if StepCount > 1 %}
@@ -76,6 +78,7 @@ namespace Rock.Model
         /// </summary>
         [Required]
         [DataMember( IsRequired = true )]
+        [EnableAttributeQualification]
         public int StepProgramId { get; set; }
 
         /// <summary>
@@ -186,6 +189,54 @@ namespace Rock.Model
             }
         }
 
+        /// <summary>
+        /// Gets or sets a flag indicating if this Step Type is part of the Rock core system/framework. This property is required.
+        /// </summary>
+        /// <value>
+        /// A <see cref="System.Boolean"/> value that is <c>true</c> if this Step Type is part of the Rock core system/framework; otherwise <c>false</c>.
+        /// </value>
+        [Required]
+        [DataMember( IsRequired = true )]
+        public bool IsSystem { get; set; }
+
+        /// <summary>
+        /// Gets or sets the engagement type for this step type.
+        /// </summary>
+        [DataMember]
+        public EngagementType? EngagementType { get; set; }
+
+        /// <summary>
+        /// Gets or sets the impact weight for this step type (1-5).
+        /// </summary>
+        [DataMember]
+        [Range( 1, 5 )]
+        public int? ImpactWeight { get; set; }
+
+        /// <summary>
+        /// Gets or sets the label for the call to action button.
+        /// </summary>
+        [DataMember]
+        public string CallToActionLabel { get; set; }
+
+        /// <summary>
+        /// Gets or sets the URL link for the call to action button.
+        /// </summary>
+        [DataMember]
+        public string CallToActionLink { get; set; }
+
+        /// <summary>
+        /// Gets or sets the description displayed with the call to action button.
+        /// </summary>
+        [DataMember]
+        public string CallToActionDescription { get; set; }
+
+        /// <summary>
+        /// Gets or sets the organizational objective for this step type.
+        /// </summary>
+        [DataMember]
+        [DefinedValue( SystemGuid.DefinedType.ORGANIZATIONAL_OBJECTIVE_TYPE )]
+        public int? OrganizationalObjectiveValueId { get; set; }
+
         #endregion Entity Properties
 
         #region IHasActiveFlag
@@ -277,6 +328,12 @@ namespace Rock.Model
         public virtual MergeTemplate MergeTemplate { get; set; }
 
         /// <summary>
+        /// Gets or sets the <see cref="Rock.Model.DefinedValue"/> for the organizational objective.
+        /// </summary>
+        [DataMember]
+        public virtual DefinedValue OrganizationalObjectiveValue { get; set; }
+
+        /// <summary>
         /// Gets or sets a collection containing the <see cref="StepWorkflowTrigger">StepWorkflowTriggers</see> that are of this step type.
         /// </summary>
         [DataMember]
@@ -356,6 +413,7 @@ namespace Rock.Model
                 HasOptional( st => st.AudienceDataView ).WithMany().HasForeignKey( st => st.AudienceDataViewId ).WillCascadeOnDelete( false );
                 HasOptional( st => st.AutoCompleteDataView ).WithMany().HasForeignKey( st => st.AutoCompleteDataViewId ).WillCascadeOnDelete( false );
                 HasOptional( st => st.MergeTemplate ).WithMany().HasForeignKey( st => st.MergeTemplateId ).WillCascadeOnDelete( false );
+                HasOptional( st => st.OrganizationalObjectiveValue ).WithMany().HasForeignKey( st => st.OrganizationalObjectiveValueId ).WillCascadeOnDelete( false );
             }
         }
 

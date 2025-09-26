@@ -20,8 +20,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
-
-using DotLiquid;
+using System.Web.Hosting;
 
 using Rock.Attribute;
 using Rock.Constants;
@@ -44,7 +43,7 @@ namespace Rock.Blocks.Cms
     [DisplayName( "Site Detail" )]
     [Category( "CMS" )]
     [Description( "Displays the details of a particular site." )]
-    [IconCssClass( "fa fa-question" )]
+    [IconCssClass( "ti ti-question-mark" )]
     // [SupportedSiteTypes( Model.SiteType.Web )]
 
     #region Block Attributes
@@ -241,7 +240,7 @@ namespace Rock.Blocks.Cms
             var attributes = GetSiteAttributes( RockContext, entity.Id.ToString() );
 
             bag.SiteAttributes = new List<PublicEditableAttributeBag>();
-            bag.SiteAttributes.AddRange( attributes.Select( attribute => PublicAttributeHelper.GetPublicEditableAttributeViewModel( attribute ) ) );
+            bag.SiteAttributes.AddRange( attributes.Select( attribute => PublicAttributeHelper.GetPublicEditableAttribute( attribute ) ) );
             bag.BinaryFileTypeGuid = GetAttributeValue( AttributeKey.DefaultFileType ).AsGuid();
 
 
@@ -258,7 +257,7 @@ namespace Rock.Blocks.Cms
 
             var bag = GetCommonEntityBag( entity );
             bag.AllowsCompile = new Rock.Web.UI.RockTheme( entity.Theme ).AllowsCompile;
-            bag.LoadAttributesAndValuesForPublicView( entity, RequestContext.CurrentPerson );
+            bag.LoadAttributesAndValuesForPublicView( entity, RequestContext.CurrentPerson, enforceSecurity: true );
 
             return bag;
         }
@@ -273,7 +272,7 @@ namespace Rock.Blocks.Cms
 
             var bag = GetCommonEntityBag( entity );
 
-            bag.LoadAttributesAndValuesForPublicEdit( entity, RequestContext.CurrentPerson );
+            bag.LoadAttributesAndValuesForPublicEdit( entity, RequestContext.CurrentPerson, enforceSecurity: true );
 
             return bag;
         }
@@ -408,7 +407,7 @@ namespace Rock.Blocks.Cms
                 {
                     entity.LoadAttributes( RockContext );
 
-                    entity.SetPublicAttributeValues( box.Bag.AttributeValues, RequestContext.CurrentPerson );
+                    entity.SetPublicAttributeValues( box.Bag.AttributeValues, RequestContext.CurrentPerson, enforceSecurity: true );
                 } );
 
             return true;
@@ -589,7 +588,6 @@ namespace Rock.Blocks.Cms
 
             entity.LoadAttributes( RockContext );
 
-            var id = IdHasher.Instance.GetId( key );
             var box = new DetailBlockBox<SiteBag, SiteDetailOptionsBag>
             {
                 Entity = GetEntityBagForEdit( entity ),
@@ -637,11 +635,7 @@ namespace Rock.Blocks.Cms
                 RockContext.SaveChanges();
                 entity.SaveAttributeValues( RockContext );
 
-                if ( box.Bag.SiteAttributes.Count > 0 )
-                {
-
-                    SaveAttributes( new Page().TypeId, "SiteId", entity.Id.ToString(), box.Bag.SiteAttributes, RockContext );
-                }
+                SaveAttributes( new Page().TypeId, "SiteId", entity.Id.ToString(), box.Bag.SiteAttributes, RockContext );
 
                 if ( existingIconId.HasValue && existingIconId.Value != entity.FavIconBinaryFileId )
                 {
@@ -702,7 +696,8 @@ namespace Rock.Blocks.Cms
                 var pageService = new PageService( RockContext );
 
                 // Create the layouts for the site, and find the first one
-                // LayoutService.RegisterLayouts( HttpRequest.MapPath( "~" ), siteCache );
+                string applicationRootPath = HostingEnvironment.MapPath( "~" );
+                LayoutService.RegisterLayouts( applicationRootPath, siteCache );
 
                 var layoutService = new LayoutService( RockContext );
                 var layouts = layoutService.GetBySiteId( siteCache.Id );
@@ -772,32 +767,40 @@ namespace Rock.Blocks.Cms
                 return actionError;
             }
 
-            var sitePages = new List<int> {
-                    entity.DefaultPageId ?? -1,
-                    entity.LoginPageId ?? -1,
-                    entity.RegistrationPageId ?? -1,
-                    entity.PageNotFoundPageId ?? -1
-                };
-
-            var pageService = new PageService( RockContext );
-            foreach ( var page in pageService.Queryable( "Layout" )
-                .Where( t => !t.IsSystem && ( t.Layout.SiteId == entity.Id || sitePages.Contains( t.Id ) ) ) )
+            if ( entity.IsSystem )
             {
-                if ( pageService.CanDelete( page, out string deletePageErrorMessage ) )
-                {
-                    pageService.Delete( page );
-                }
+                return ActionBadRequest( "System sites cannot be deleted." );
             }
 
+            var pageService = new PageService( RockContext );
             var layoutService = new LayoutService( RockContext );
+
+            var sitePages = new List<int> {
+                entity.DefaultPageId ?? -1,
+                entity.LoginPageId ?? -1,
+                entity.RegistrationPageId ?? -1,
+                entity.PageNotFoundPageId ?? -1
+            };
+
+            var otherSitesQry = entityService.Queryable().Where( s => s.Id != entity.Id );
+
+            var pageQry = pageService.Queryable( "Layout" )
+                .Where( t =>
+                    !t.IsSystem &&
+                    ( t.Layout.SiteId == entity.Id ||
+                    sitePages.Contains( t.Id ) ) );
+
+            pageQry = pageQry.Where( p => !otherSitesQry.Any( s => s.DefaultPageId == p.Id || s.LoginPageId == p.Id || s.RegistrationPageId == p.Id || s.PageNotFoundPageId == p.Id ) );
+            pageService.DeleteRange( pageQry );
+
             var layoutQry = layoutService.Queryable()
                 .Where( l =>
-                l.SiteId == entity.Id );
+                    !l.IsSystem &&
+                    l.SiteId == entity.Id );
             layoutService.DeleteRange( layoutQry );
-
             RockContext.SaveChanges( true );
 
-            if ( !entityService.CanDelete( entity, out var errorMessage ) )
+            if ( !entityService.CanDelete( entity, out var errorMessage, includeSecondLvl: true ) )
             {
                 return ActionBadRequest( errorMessage );
             }
@@ -811,7 +814,7 @@ namespace Rock.Blocks.Cms
         /// <summary>
         /// Gets the attribute.
         /// </summary>
-        /// <param name="attributeId">The attribute identifier.</param>
+        /// <param name="attributeGuid">The attribute identifier.</param>
         /// <returns></returns>
         [BlockAction]
         public BlockActionResult GetAttribute( Guid? attributeGuid )
@@ -834,7 +837,7 @@ namespace Rock.Blocks.Cms
             else
             {
                 var attribute = attributes.FirstOrDefault( a => a.Guid == attributeGuid );
-                editableAttribute = PublicAttributeHelper.GetPublicEditableAttributeViewModel( attribute );
+                editableAttribute = PublicAttributeHelper.GetPublicEditableAttribute( attribute );
                 modalTitle = ActionTitle.Edit( "attribute for pages of site " + entity.Name );
             }
 
@@ -845,10 +848,8 @@ namespace Rock.Blocks.Cms
         }
 
         /// <summary>
-        /// Handles the Click event of the btnCompileTheme control.
+        /// Handles the Click event of the CompileTheme button.
         /// </summary>
-        /// <param name="sender">The source of the event.</param>
-        /// <param name="e">The <see cref="EventArgs"/> instance containing the event data.</param>
         [BlockAction]
         public BlockActionResult CompileTheme( string idKey )
         {

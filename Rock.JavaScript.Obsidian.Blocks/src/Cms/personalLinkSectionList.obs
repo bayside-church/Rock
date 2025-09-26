@@ -47,8 +47,7 @@
     import { PersonalLinkSectionListOptionsBag } from "@Obsidian/ViewModels/Blocks/Cms/PersonalLinkSectionList/personalLinkSectionListOptionsBag";
     import { GridDataBag } from "@Obsidian/ViewModels/Core/Grid/gridDataBag";
     import { NavigationUrlKey, GridSettingsOptions, PreferenceKey } from "./PersonalLinkSectionList/types.partial";
-    import { computed, reactive, ref, watch } from "vue";
-    import { ColumnFilter } from "@Obsidian/Types/Controls/grid";
+    import { reactive, ref, watch } from "vue";
     import GridSettingsModal from "./PersonalLinkSectionList/gridSettingsModal.partial.obs";
 
     const config = useConfigurationValues<ListBlockBox<PersonalLinkSectionListOptionsBag>>();
@@ -138,6 +137,8 @@
         });
 
         if (result.isSuccess) {
+            flushPersonalLinksData();
+
             if (gridData && gridData.rows) {
                 const index = gridData.rows.findIndex(r => r["idKey"] === key);
 
@@ -174,7 +175,20 @@
             beforeKey: beforeItem?.["idKey"] ?? null
         });
 
+        if (result.isSuccess) {
+            flushPersonalLinksData();
+        }
+
         return result.isSuccess;
+    }
+
+    /*
+    * This is a quick fix for issue #6242. The Webforms logic uses session storage to keep track of the personal links data which does not work with ASP.NET Core.
+    * This fix clears the cached personalLinksData when an update is made so that the personal links are reloaded on the next page reload.
+    * Once PersonalLinks.ascx.cs is converted to Obsidian, this can be refactored (likely use the JavaScript Bus to communicate to the Block that personal links have been updated and page reload is not required).
+    */
+    function flushPersonalLinksData(): void {
+        localStorage.removeItem("personalLinksData");
     }
 
     // #endregion

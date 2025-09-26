@@ -233,6 +233,8 @@ namespace Rock.Rest
         [Authenticate, Secured]
         [ActionName( "GetByCampus" )]
         [EnableQuery]
+        [RockObsolete( "17.0" )]
+        [Obsolete( "The EntityCampusFilter feature is no longer used and will be removed in the future." )]
         public virtual IQueryable<T> GetByCampus( [FromUri] int campusId )
         {
             /*
@@ -616,7 +618,13 @@ namespace Rock.Rest
             }
 
             // since DataViews can be secured at the DataView or Category level, specifically check for CanView
-            CheckCanView( dataView, GetPerson() );
+            // Note: We can't use CheckCanView because that will end up loading
+            // an instance of T with the Id of the DataView. Meaning, it might load
+            // a Group with the same Id number and then check security on that.
+            if ( !dataView.IsAuthorized( Rock.Security.Authorization.VIEW, GetPerson() ) )
+            {
+                throw new HttpResponseException( HttpStatusCode.Unauthorized );
+            }
         }
 
         /// <summary>
@@ -862,7 +870,7 @@ namespace Rock.Rest
             }
 
             // Set a sitewide context cookie.
-            var cookieName = RockRequestContext.GetContextCookieName( false );
+            var cookieName = RockRequestContext.GetContextCookieName( null );
             var typeName = typeof( T ).FullName;
 
             var identifier =

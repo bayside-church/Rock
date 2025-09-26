@@ -41,7 +41,7 @@ namespace Rock.Blocks.Group.Scheduling
     [DisplayName( "Group Scheduler" )]
     [Category( "Group Scheduling" )]
     [Description( "Allows group schedules for groups and locations to be managed by a scheduler." )]
-    [IconCssClass( "fa fa-calendar-alt" )]
+    [IconCssClass( "ti ti-calendar-month" )]
     [SupportedSiteTypes( Model.SiteType.Web )]
 
     #region Block Attributes
@@ -80,6 +80,20 @@ namespace Rock.Blocks.Group.Scheduling
         Order = 4,
         IsRequired = false )]
 
+    [BooleanField( "Hide Clone Schedules",
+        Key = AttributeKey.HideCloneSchedules,
+        Description = @"When enabled, will hide the ""Clone Schedules"" button and disable this functionality.",
+        DefaultBooleanValue = false,
+        Order = 5,
+        IsRequired = false )]
+
+    [BooleanField( "Hide Auto Schedule",
+        Key = AttributeKey.HideAutoSchedule,
+        Description = @"When enabled, will hide the ""Auto Schedule"" button and disable this functionality.",
+        DefaultBooleanValue = false,
+        Order = 6,
+        IsRequired = false )]
+
     #endregion
 
     [Rock.SystemGuid.EntityTypeGuid( "7ADCE833-A785-4A54-9805-7335809C5367" )]
@@ -95,6 +109,8 @@ namespace Rock.Blocks.Group.Scheduling
             public const string EnableDataViewIndividualSelection = "EnableDataViewIndividualSelection";
             public const string RosterPage = "RosterPage";
             public const string DisallowGroupSelectionIfSpecified = "DisallowGroupSelectionIfSpecified";
+            public const string HideCloneSchedules = "HideCloneSchedules";
+            public const string HideAutoSchedule = "HideAutoSchedule";
         }
 
         private static class NavigationUrlKey
@@ -201,6 +217,10 @@ namespace Rock.Blocks.Group.Scheduling
             }
         }
 
+        private bool IsCloneSchedulesEnabled => !GetAttributeValue( AttributeKey.HideCloneSchedules ).AsBoolean();
+
+        private bool IsAutoScheduleEnabled => !GetAttributeValue( AttributeKey.HideAutoSchedule ).AsBoolean();
+
         #endregion
 
         #region Methods
@@ -240,6 +260,8 @@ namespace Rock.Blocks.Group.Scheduling
                 NavigationUrls = GetNavigationUrls( filters )
             };
             box.DisallowGroupSelection = disallowGroupSelection;
+            box.IsCloneSchedulesEnabled = this.IsCloneSchedulesEnabled;
+            box.IsAutoScheduleEnabled = this.IsAutoScheduleEnabled;
             box.SecurityGrantToken = GetSecurityGrantToken();
         }
 
@@ -425,12 +447,6 @@ namespace Rock.Blocks.Group.Scheduling
             // selection of past dates, so the individual may choose a past week as the source when cloning schedules. The UI will be
             // responsible for preventing the scheduling/manipulation of past schedules (and we'll also double-check & prevent doing
             // so within this block's action methods).
-            // 
-            //  1) If no date range selected, default to the next 6 weeks.
-            //  2) If only a start date is selected, set end date = start date.
-            //  3) If only an end date is selected, set start date = end date.
-            //  4) If end date >= start date, set end date = start date.
-            //  5) Allow any other valid selections (knowing they might be selecting an excessively-large range).
 
             /*
                 5/31/2024 - JPH
@@ -461,74 +477,28 @@ namespace Rock.Blocks.Group.Scheduling
                 TimeValue = 6
             };
 
-            if ( filters.DateRange == null )
-            {
-                filters.DateRange = defaultDateRange;
-            }
+            var validatedDateRange = filters.DateRange.Validate( defaultDateRange );
 
-            if ( filters.DateRange.RangeType == SlidingDateRangeType.DateRange )
-            {
-                var lowerDate = filters.DateRange.LowerDate;
-                var upperDate = filters.DateRange.UpperDate;
+            var actualSlidingDateRange = validatedDateRange.SlidingDateRangeBag;
+            var actualDateRange = validatedDateRange.ActualDateRange;
 
-                if ( lowerDate.HasValue && upperDate.HasValue )
-                {
-                    if ( upperDate < lowerDate )
-                    {
-                        filters.DateRange.UpperDate = lowerDate;
-                    }
-                }
-                else if ( lowerDate.HasValue )
-                {
-                    filters.DateRange.UpperDate = lowerDate;
-                }
-                else if ( upperDate.HasValue )
-                {
-                    filters.DateRange.LowerDate = upperDate;
-                }
-                else
-                {
-                    filters.DateRange = defaultDateRange;
-                }
-            }
-
-            DateRange GetDateRange( SlidingDateRangeBag slidingDateRange )
-            {
-                var rangeType = slidingDateRange.RangeType.ToString();
-                var number = slidingDateRange.TimeValue.ToString();
-                var unitType = slidingDateRange.TimeUnit.ToString();
-                var startDate = slidingDateRange.LowerDate.ToString();
-                var endDate = slidingDateRange.UpperDate.ToString();
-
-                var delimitedValues = $"{rangeType}|{number}|{unitType}|{startDate}|{endDate}";
-
-                return RockDateTimeHelper.CalculateDateRangeFromDelimitedValues( delimitedValues );
-            }
-
-            var dateRange = GetDateRange( filters.DateRange );
-
-            // At this point, we should have validated start and end dates, but if for some reason we don't, default to the next 6 weeks.
-            if ( dateRange?.Start == null || dateRange?.End == null )
-            {
-                filters.DateRange = defaultDateRange;
-                dateRange = GetDateRange( filters.DateRange );
-            }
+            // Ensure the filters object represents the actual, validated sliding date range.
+            filters.DateRange = actualSlidingDateRange;
 
             // These fallback values should never be needed, but we'll include them just in case
             // the `CalculateDateRange...` method fails to return valid values for some reason.
-            if ( dateRange?.Start == null || dateRange?.End == null )
+            if ( actualDateRange?.Start == null || actualDateRange?.End == null )
             {
                 // These are the values we would expect from "Next 6 Weeks".
                 var defaultStartDate = RockDateTime.Today;
                 // Add 35 days to today's "end of week" date, so we'll include this current week + the following 5 weeks.
                 var defaultEndDate = RockDateTime.Today.EndOfWeek( RockDateTime.FirstDayOfWeek ).AddDays( 35 );
 
-                dateRange = new DateRange( defaultStartDate, defaultEndDate );
+                actualDateRange = new DateRange( defaultStartDate, defaultEndDate );
             }
 
-            var actualStartDate = dateRange.Start.Value;
-            var actualEndDate = dateRange.End.Value;
-            var actualSlidingDateRange = filters.DateRange;
+            var actualStartDate = actualDateRange.Start.Value;
+            var actualEndDate = actualDateRange.End.Value;
 
             string friendlyDateRange;
 
@@ -1638,7 +1608,7 @@ namespace Rock.Blocks.Group.Scheduling
                     d.GroupId == source.GroupId
                     && d.LocationId == source.LocationId
                     && d.ScheduleId == source.ScheduleId
-                    && d.OccurrenceDateTime == source.OccurrenceDateTime.AddDays( daysDifference )
+                    && d.OccurrenceDateTime.Date == source.OccurrenceDateTime.Date.AddDays( daysDifference )
                 );
 
                 if ( destination == null )
@@ -2181,6 +2151,11 @@ namespace Rock.Blocks.Group.Scheduling
         [BlockAction]
         public BlockActionResult GetCloneSettings( GroupSchedulerFiltersBag bag )
         {
+            if ( !this.IsCloneSchedulesEnabled )
+            {
+                return ActionForbidden( "You are not authorized to clone schedules." );
+            }
+
             using ( var rockContext = new RockContext() )
             {
                 var cloneSettings = GetDefaultOrPersonPreferenceCloneSettings( rockContext, ValidateClientFilters( rockContext, bag ) );
@@ -2197,6 +2172,11 @@ namespace Rock.Blocks.Group.Scheduling
         [BlockAction]
         public BlockActionResult CloneSchedules( GroupSchedulerCloneSettingsBag bag )
         {
+            if ( !this.IsCloneSchedulesEnabled )
+            {
+                return ActionForbidden( "You are not authorized to clone schedules." );
+            }
+
             using ( var rockContext = new RockContext() )
             {
                 var response = CloneSchedules( rockContext, bag ?? new GroupSchedulerCloneSettingsBag() );
@@ -2213,6 +2193,11 @@ namespace Rock.Blocks.Group.Scheduling
         [BlockAction]
         public BlockActionResult AutoSchedule( GroupSchedulerFiltersBag bag )
         {
+            if ( !this.IsAutoScheduleEnabled )
+            {
+                return ActionForbidden( "You are not authorized to perform auto scheduling." );
+            }
+
             using ( var rockContext = new RockContext() )
             {
                 var appliedFilters = AutoSchedule( rockContext, ValidateClientFilters( rockContext, bag ) );

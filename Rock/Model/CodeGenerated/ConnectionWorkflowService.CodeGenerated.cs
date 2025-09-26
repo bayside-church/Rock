@@ -21,6 +21,7 @@
 // </copyright>
 
 using System;
+using System.Collections.Generic;
 using System.Linq;
 
 using Rock.Data;
@@ -58,6 +59,24 @@ namespace Rock.Model
                 return false;
             }
             return true;
+        }
+    }
+
+    [HasQueryableAttributes( typeof( ConnectionWorkflow.ConnectionWorkflowQueryableAttributeValue ), nameof( ConnectionWorkflowAttributeValues ) )]
+    public partial class ConnectionWorkflow
+    {
+        /// <summary>
+        /// Gets the entity attribute values. This should only be used inside
+        /// LINQ statements when building a where clause for the query. This
+        /// property should only be used inside LINQ statements for filtering
+        /// or selecting values. Do <b>not</b> use it for accessing the
+        /// attributes after the entity has been loaded.
+        /// </summary>
+        public virtual ICollection<ConnectionWorkflowQueryableAttributeValue> ConnectionWorkflowAttributeValues { get; set; } 
+
+        /// <inheritdoc/>
+        public class ConnectionWorkflowQueryableAttributeValue : QueryableAttributeValue
+        {
         }
     }
 
@@ -117,10 +136,13 @@ namespace Rock.Model
         public static void CopyPropertiesFrom( this ConnectionWorkflow target, ConnectionWorkflow source )
         {
             target.Id = source.Id;
+            target.AppliesToAgeClassification = source.AppliesToAgeClassification;
             target.ConnectionOpportunityId = source.ConnectionOpportunityId;
             target.ConnectionTypeId = source.ConnectionTypeId;
+            target.ExcludeDataViewId = source.ExcludeDataViewId;
             target.ForeignGuid = source.ForeignGuid;
             target.ForeignKey = source.ForeignKey;
+            target.IncludeDataViewId = source.IncludeDataViewId;
             target.ManualTriggerFilterConnectionStatusId = source.ManualTriggerFilterConnectionStatusId;
             target.QualifierValue = source.QualifierValue;
             target.TriggerType = source.TriggerType;

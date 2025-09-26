@@ -1,4 +1,4 @@
-// <copyright>
+﻿// <copyright>
 // Copyright by the Spark Development Network
 //
 // Licensed under the Rock Community License (the "License");
@@ -43,8 +43,8 @@ namespace Rock.Blocks.Core
     [DisplayName( "Location Detail" )]
     [Category( "Core" )]
     [Description( "Displays the details of a particular location." )]
-    [IconCssClass( "fa fa-question" )]
-    // [SupportedSiteTypes( Model.SiteType.Web )]
+    [IconCssClass( "ti ti-question-mark" )]
+    [SupportedSiteTypes( Model.SiteType.Web )]
 
     #region Block Attributes
 
@@ -71,6 +71,7 @@ namespace Rock.Blocks.Core
 
     #endregion
 
+    [Rock.Cms.DefaultBlockRole( Rock.Enums.Cms.BlockRole.Primary )]
     [Rock.SystemGuid.EntityTypeGuid( "862067b0-8764-452e-9b4f-dc3e0cf5f876" )]
     [Rock.SystemGuid.BlockTypeGuid( "d0203b97-5856-437e-8700-8846309f8eed" )]
     public class LocationDetail : RockEntityDetailBlockType<Location, LocationBag>
@@ -236,6 +237,7 @@ namespace Rock.Blocks.Core
                 Name = entity.Name,
                 ParentLocation = ToListItemBag( entity.ParentLocation ),
                 PrinterDevice = entity.PrinterDevice.ToListItemBag(),
+                BeaconId = entity.BeaconId,
                 SoftRoomThreshold = entity.SoftRoomThreshold.ToString(),
                 Guid = entity.Guid,
                 AddressFields = new AddressControlBag
@@ -336,7 +338,7 @@ namespace Rock.Blocks.Core
 
             var bag = GetCommonEntityBag( entity );
 
-            bag.LoadAttributesAndValuesForPublicView( entity, RequestContext.CurrentPerson );
+            bag.LoadAttributesAndValuesForPublicView( entity, RequestContext.CurrentPerson, enforceSecurity: true );
 
             return bag;
         }
@@ -351,7 +353,7 @@ namespace Rock.Blocks.Core
 
             var bag = GetCommonEntityBag( entity );
 
-            bag.LoadAttributesAndValuesForPublicEdit( entity, RequestContext.CurrentPerson );
+            bag.LoadAttributesAndValuesForPublicEdit( entity, RequestContext.CurrentPerson, enforceSecurity: true );
             var parentLocationId = PageParameter( PageParameterKey.ParentLocationId ).AsIntegerOrNull();
 
             if ( entity.Id == 0 && parentLocationId.HasValue )
@@ -395,6 +397,9 @@ namespace Rock.Blocks.Core
             box.IfValidProperty( nameof( box.Bag.PrinterDevice ),
                 () => entity.PrinterDeviceId = box.Bag.PrinterDevice.GetEntityId<Device>( RockContext ) );
 
+            box.IfValidProperty( nameof( box.Bag.BeaconId ),
+                () => entity.BeaconId = box.Bag.BeaconId );
+
             box.IfValidProperty( nameof( box.Bag.SoftRoomThreshold ),
                 () => entity.SoftRoomThreshold = box.Bag.SoftRoomThreshold.AsIntegerOrNull() );
 
@@ -420,7 +425,7 @@ namespace Rock.Blocks.Core
                 {
                     entity.LoadAttributes( RockContext );
 
-                    entity.SetPublicAttributeValues( box.Bag.AttributeValues, RequestContext.CurrentPerson );
+                    entity.SetPublicAttributeValues( box.Bag.AttributeValues, RequestContext.CurrentPerson, enforceSecurity: true );
                 } );
 
             return true;
@@ -707,6 +712,31 @@ namespace Rock.Blocks.Core
             qryParams[PageParameterKey.ExpandedIds] = PageParameter( PageParameterKey.ExpandedIds );
 
             return ActionOk( this.GetCurrentPageUrl( qryParams ) );
+        }
+
+        /// <summary>
+        /// Generates the next available beacon identifier for a named location.
+        /// This is done by finding the max number and incrementing it by one.
+        /// </summary>
+        /// <returns>An object that contains the beacon identifier to use.</returns>
+        [BlockAction]
+        public BlockActionResult GenerateNextAvailableBeaconId()
+        {
+            var locationService = new LocationService( RockContext );
+            var lastBeaconId = locationService.Queryable()
+                .Where( l => l.BeaconId.HasValue )
+                .Max( l => l.BeaconId )
+                ?? 0;
+
+            if ( lastBeaconId >= ushort.MaxValue )
+            {
+                return ActionBadRequest( "No more beacon identifiers are available, you must manually enter one." );
+            }
+
+            return ActionOk( new
+            {
+                BeaconId = lastBeaconId + 1
+            } );
         }
 
         #endregion

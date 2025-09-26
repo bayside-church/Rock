@@ -24,15 +24,17 @@ using System.Linq;
 using Microsoft.Extensions.Logging;
 
 using Rock.Attribute;
+using Rock.Crm.RecordSource;
 using Rock.Data;
 using Rock.Enums.Blocks.Engagement.SignUp;
 using Rock.Field.Types;
-using Rock.Logging;
 using Rock.Model;
 using Rock.Tasks;
+using Rock.Utility;
 using Rock.ViewModels.Blocks.Engagement.SignUp.SignUpRegister;
 using Rock.ViewModels.Utility;
 using Rock.Web.Cache;
+using Rock.Web.UI.Controls;
 
 namespace Rock.Blocks.Engagement.SignUp
 {
@@ -44,7 +46,7 @@ namespace Rock.Blocks.Engagement.SignUp
     [DisplayName( "Sign-Up Register" )]
     [Category( "Engagement > Sign-Up" )]
     [Description( "Block used to register for a sign-up group/project occurrence date time." )]
-    [IconCssClass( "fa fa-clipboard-check" )]
+    [IconCssClass( "ti ti-clipboard-check" )]
     [SupportedSiteTypes( Model.SiteType.Web )]
 
     #region Block Attributes
@@ -91,6 +93,40 @@ namespace Rock.Blocks.Engagement.SignUp
         DefaultBooleanValue = false,
         Order = 5 )]
 
+    [DefinedValueField( "Connection Status",
+        Key = AttributeKey.ConnectionStatus,
+        DefinedTypeGuid = Rock.SystemGuid.DefinedType.PERSON_CONNECTION_STATUS,
+        Description = "The connection status to use for new individuals (default: 'Prospect').",
+        IsRequired = true,
+        AllowMultiple = false,
+        DefaultValue = Rock.SystemGuid.DefinedValue.PERSON_CONNECTION_STATUS_PROSPECT,
+        Order = 6 )]
+
+    [DefinedValueField( "Record Status",
+        Key = AttributeKey.RecordStatus,
+        DefinedTypeGuid = Rock.SystemGuid.DefinedType.PERSON_RECORD_STATUS,
+        Description = "The record status to use for new individuals (default: 'Pending').",
+        IsRequired = true,
+        AllowMultiple = false,
+        DefaultValue = Rock.SystemGuid.DefinedValue.PERSON_RECORD_STATUS_PENDING,
+        Order = 7 )]
+
+    [DefinedValueField( "Record Source",
+        Key = AttributeKey.RecordSource,
+        DefinedTypeGuid = Rock.SystemGuid.DefinedType.RECORD_SOURCE_TYPE,
+        Description = "The record source to use for new individuals (default = 'Sign-up'). Can be overridden by a record source specified on the sign-up project or its parent group type. If a 'RecordSource' page parameter is found, it will be used instead.",
+        IsRequired = true,
+        AllowMultiple = false,
+        DefaultValue = Rock.SystemGuid.DefinedValue.RECORD_SOURCE_TYPE_SIGN_UP,
+        Order = 8 )]
+
+    [BooleanField(
+        "Disable Captcha Support",
+        Key = AttributeKey.DisableCaptchaSupport,
+        Description = "If set to 'Yes' the CAPTCHA verification will be skipped. \n\nNote: If the CAPTCHA site key and/or secret key are not configured in the system settings, this option will be forced as 'Yes', even if 'No' is visually selected.",
+        DefaultBooleanValue = false,
+        Order = 9 )]
+
     #endregion
 
     [Rock.SystemGuid.EntityTypeGuid( "ED7A31F2-8D4C-469A-B2D8-7E28B8717FB8" )]
@@ -107,6 +143,10 @@ namespace Rock.Blocks.Engagement.SignUp
             public const string RegistrantConfirmationSystemCommunication = "RegistrantConfirmationSystemCommunication";
             public const string RequireEmail = "RequireEmail";
             public const string RequireMobilePhone = "RequireMobilePhone";
+            public const string ConnectionStatus = "ConnectionStatus";
+            public const string RecordStatus = "RecordStatus";
+            public const string RecordSource = "RecordSource";
+            public const string DisableCaptchaSupport = "DisableCaptchaSupport";
         }
 
         private static class PageParameterKey
@@ -140,11 +180,11 @@ namespace Rock.Blocks.Engagement.SignUp
 
         #region Properties
 
-        public bool IsAuthenticated
+        public bool IsAuthenticatedOrImpersonated
         {
             get
             {
-                return this.RequestContext.CurrentUser?.IsAuthenticated == true;
+                return this.RequestContext.CurrentPerson != null;
             }
         }
 
@@ -201,6 +241,7 @@ namespace Rock.Blocks.Engagement.SignUp
             box.Registrants = registrationData.Registrants;
             box.MemberAttributes = registrationData.MemberAttributes;
             box.MemberOpportunityAttributes = registrationData.MemberOpportunityAttributes;
+            box.DisableCaptchaSupport = Captcha.CaptchaService.ShouldDisableCaptcha( GetAttributeValue( AttributeKey.DisableCaptchaSupport ).AsBoolean() );
         }
 
         /// <summary>
@@ -220,12 +261,12 @@ namespace Rock.Blocks.Engagement.SignUp
 
             var mode = GetAttributeValue( AttributeKey.Mode ).ConvertToEnum<RegisterMode>( RegisterMode.Anonymous );
 
-            if ( mode == RegisterMode.Family && !IsAuthenticated )
+            if ( mode == RegisterMode.Family && !IsAuthenticatedOrImpersonated )
             {
                 mode = RegisterMode.Anonymous;
             }
 
-            if ( !IsAuthenticated && mode != RegisterMode.Anonymous )
+            if ( !IsAuthenticatedOrImpersonated && mode != RegisterMode.Anonymous )
             {
                 registrationData.ErrorMessage = MustBeLoggedInMessage;
                 return registrationData;
@@ -281,7 +322,7 @@ namespace Rock.Blocks.Engagement.SignUp
                 registrationData.ProjectHasRequiredGroupRequirements = true;
 
                 // We can only determine if an Individual meets GroupRequirements if they're logged in.
-                if ( !IsAuthenticated )
+                if ( !IsAuthenticatedOrImpersonated )
                 {
                     registrationData.ErrorMessage = MustBeLoggedInMessage;
                     return registrationData;
@@ -708,7 +749,7 @@ namespace Rock.Blocks.Engagement.SignUp
             var personGroupRequirementStatuses = group.PersonMeetsGroupRequirements( rockContext, personId, groupRoleId );
             foreach ( var personGroupRequirementStatus in personGroupRequirementStatuses
                                                                 .Where( s => s.GroupRequirement.MustMeetRequirementToAddMember
-                                                                            && s.MeetsGroupRequirement != MeetsGroupRequirement.Meets ) )
+                                                                            && s.MeetsGroupRequirement != MeetsGroupRequirement.Meets && s.MeetsGroupRequirement != MeetsGroupRequirement.NotApplicable ) )
             {
                 var groupRequirementType = personGroupRequirementStatus.GroupRequirement.GroupRequirementType;
                 if ( groupRequirementType == null )
@@ -741,12 +782,12 @@ namespace Rock.Blocks.Engagement.SignUp
             // Load all member attributes for this project.
             var groupMember = new GroupMember { GroupId = registrationData.Project.Id };
             groupMember.LoadAttributes( rockContext );
-            registrationData.MemberAttributes = groupMember.GetPublicAttributesForEdit( this.CurrentPerson, attributeFilter: IsPublicAttribute );
+            registrationData.MemberAttributes = groupMember.GetPublicAttributesForEdit( this.CurrentPerson, enforceSecurity: false, attributeFilter: IsPublicAttribute );
 
             // Load all member opportunity attributes for this project.
             var groupMemberAssignment = new GroupMemberAssignment { GroupId = registrationData.Project.Id };
             groupMemberAssignment.LoadAttributes( rockContext );
-            registrationData.MemberOpportunityAttributes = groupMemberAssignment.GetPublicAttributesForEdit( this.CurrentPerson, attributeFilter: IsPublicAttribute );
+            registrationData.MemberOpportunityAttributes = groupMemberAssignment.GetPublicAttributesForEdit( this.CurrentPerson, enforceSecurity: false, attributeFilter: IsPublicAttribute );
         }
 
         /// <summary>
@@ -768,7 +809,7 @@ namespace Rock.Blocks.Engagement.SignUp
                 }
 
                 existingProjectGroupMember.LoadAttributes( rockContext );
-                registrant.MemberAttributeValues = existingProjectGroupMember.GetPublicAttributeValuesForEdit( this.CurrentPerson, attributeFilter: IsPublicAttribute );
+                registrant.MemberAttributeValues = existingProjectGroupMember.GetPublicAttributeValuesForEdit( this.CurrentPerson, enforceSecurity: false, attributeFilter: IsPublicAttribute );
 
                 var existingRegistration = registrationData.ExistingRegistrations
                         .FirstOrDefault( gma => gma.GroupMember.Id == existingProjectGroupMember.Id );
@@ -776,7 +817,7 @@ namespace Rock.Blocks.Engagement.SignUp
                 if ( existingRegistration != null )
                 {
                     existingRegistration.LoadAttributes( rockContext );
-                    registrant.MemberOpportunityAttributeValues = existingRegistration.GetPublicAttributeValuesForEdit( this.CurrentPerson, attributeFilter: IsPublicAttribute );
+                    registrant.MemberOpportunityAttributeValues = existingRegistration.GetPublicAttributeValuesForEdit( this.CurrentPerson, enforceSecurity: false, attributeFilter: IsPublicAttribute );
                 }
             }
         }
@@ -853,7 +894,7 @@ namespace Rock.Blocks.Engagement.SignUp
             // We'll pass this Person instance to any workflow defined on the block, so we know who was responsible for registering
             // a given group of registrants.
             Person registrarPerson = null;
-            if ( IsAuthenticated )
+            if ( IsAuthenticatedOrImpersonated )
             {
                 registrarPerson = this.RequestContext.CurrentPerson;
             }
@@ -1000,7 +1041,10 @@ namespace Rock.Blocks.Engagement.SignUp
                             LastName = registrant.LastName?.Trim(),
                             Email = registrant.Email?.Trim(),
                             RecordTypeValueId = DefinedValueCache.Get( Rock.SystemGuid.DefinedValue.PERSON_RECORD_TYPE_PERSON.AsGuid() ).Id,
-                            CommunicationPreference = communicationPreference
+                            CommunicationPreference = communicationPreference,
+                            RecordStatusValueId = DefinedValueCache.Get( GetAttributeValue( AttributeKey.RecordStatus ).AsGuid() )?.Id,
+                            ConnectionStatusValueId = DefinedValueCache.Get( GetAttributeValue( AttributeKey.ConnectionStatus ).AsGuid() )?.Id,
+                            RecordSourceValueId = GetRecordSourceValueId( registrationData.Project )
                         };
 
                         if ( wasMobilePhoneProvided )
@@ -1146,7 +1190,7 @@ namespace Rock.Blocks.Engagement.SignUp
             }
             else // Family or Group mode.
             {
-                if ( !IsAuthenticated )
+                if ( !IsAuthenticatedOrImpersonated )
                 {
                     errorMessage = MustBeLoggedInMessage;
                     return null;
@@ -1573,6 +1617,20 @@ namespace Rock.Blocks.Engagement.SignUp
         }
 
         /// <summary>
+        /// Gets the record source to use for new individuals.
+        /// </summary>
+        /// <param name="project">The project the individual is signing up for.</param>
+        /// <returns>
+        /// The identifier of the Record Source Type <see cref="DefinedValue"/> to use.
+        /// </returns>
+        private int? GetRecordSourceValueId( Rock.Model.Group project )
+        {
+            return RecordSourceHelper.GetSessionRecordSourceValueId()
+                ?? project.GetGroupMemberRecordSourceValueId()
+                ?? DefinedValueCache.Get( GetAttributeValue( AttributeKey.RecordSource ).AsGuid() )?.Id;
+        }
+
+        /// <summary>
         /// Saves registrant attribute values.
         /// </summary>
         /// <param name="rockContext">The rock context.</param>
@@ -1702,6 +1760,12 @@ namespace Rock.Blocks.Engagement.SignUp
         {
             using ( var rockContext = new RockContext() )
             {
+                bool disableCaptcha = Captcha.CaptchaService.ShouldDisableCaptcha( GetAttributeValue( AttributeKey.DisableCaptchaSupport ).AsBoolean() );
+                if ( !disableCaptcha && !RequestContext.IsCaptchaValid )
+                {
+                    return ActionBadRequest( "CAPTCHA verification failed. Please try again." );
+                }
+
                 // Load block attributes, as we're going to double-check that each registrant is allowed according to the settings.
                 var block = new BlockService( rockContext ).Get( this.BlockId );
                 block.LoadAttributes();

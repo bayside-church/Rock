@@ -39,8 +39,8 @@ namespace Rock.Blocks.Core
     [DisplayName( "Scheduled Job List" )]
     [Category( "Core" )]
     [Description( "Lists all scheduled jobs." )]
-    [IconCssClass( "fa fa-list" )]
-    // [SupportedSiteTypes( Model.SiteType.Web )]
+    [IconCssClass( "ti ti-list" )]
+    [SupportedSiteTypes( Model.SiteType.Web )]
 
     [LinkedPage( "Detail Page",
         Description = "The page that will show the service job details.",
@@ -146,7 +146,7 @@ namespace Rock.Blocks.Core
         {
             return new Dictionary<string, string>
             {
-                [NavigationUrlKey.DetailPage] = this.GetLinkedPageUrl( AttributeKey.DetailPage, "ServiceJobId", "((Key))" ),
+                [NavigationUrlKey.DetailPage] = this.GetLinkedPageUrl( AttributeKey.DetailPage, new Dictionary<string, string> { ["ServiceJobId"] = "((Key))", ["autoEdit"] = "true", ["returnUrl"] = this.GetCurrentPageUrl() } ),
                 [NavigationUrlKey.HistoryPage] = this.GetLinkedPageUrl( AttributeKey.HistoryPage, new Dictionary<string, string>
                 {
                     { "ScheduledJobId", "((Key))" }
@@ -178,7 +178,11 @@ namespace Rock.Blocks.Core
         /// <inheritdoc/>
         protected override IQueryable<ServiceJob> GetOrderedListQueryable( IQueryable<ServiceJob> queryable, RockContext rockContext )
         {
-            return  queryable.OrderByDescending( a => a.LastRunDateTime ).ThenBy( a => a.Name );
+            return queryable.OrderBy( a => a.IsActive.HasValue ? ( a.IsActive.Value ? 0 : 1 ) : 2 ) // Active first
+                .ThenBy( a => a.LastStatus == null ? 1 : 0 )    // NULL LastStatus last
+                .ThenBy( a => a.LastStatus )
+                .ThenByDescending( a => a.LastRunDateTime )
+                .ThenBy( a => a.Name );
         }
 
         /// <inheritdoc/>
@@ -189,7 +193,11 @@ namespace Rock.Blocks.Core
                 .AddTextField( "idKey", a => a.IdKey )
                 .AddTextField( "name", a => a.Name )
                 .AddDateTimeField( "lastSuccessfulRun", a => a.LastSuccessfulRunDateTime )
+                .AddTextField( "lastSuccessfulRunDate", a => a.LastSuccessfulRunDateTime?.ToShortDateString() )
+                .AddTextField( "lastSuccessfulRunTime", a => a.LastSuccessfulRunDateTime?.ToShortTimeString() )
                 .AddDateTimeField( "lastRunDateTime", a => a.LastRunDateTime )
+                .AddTextField( "lastRunDate", a => a.LastRunDateTime?.ToShortDateString() )
+                .AddTextField( "lastRunTime", a => a.LastRunDateTime?.ToShortTimeString() )
                 .AddTextField( "lastRunDurationSeconds", a => FormatDuration( a.LastRunDurationSeconds ) )
                 .AddTextField( "lastStatus", a => a.LastStatus )
                 .AddTextField( "lastStatusMessage", a => a.LastStatusMessage )

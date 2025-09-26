@@ -78,19 +78,27 @@ namespace RockWeb.Blocks.Cms
         /// <param name="e">The <see cref="T:System.EventArgs" /> object that contains the event data.</param>
         protected override void OnLoad( EventArgs e )
         {
-            int pageId;
+            int? pageId;
             string zoneName;
 
             if ( !Page.IsPostBack )
             {
                 // Get the settings from the query string.
-                pageId = PageParameter( PageParameterKey.Page ).AsInteger();
+                pageId = PageParameter( PageParameterKey.Page ).AsIntegerOrNull();
+                if ( pageId == null )
+                {
+                    pageId = Rock.Utility.IdHasher.Instance.GetId( PageParameter( PageParameterKey.Page ) );
+                }
                 zoneName = PageParameter( PageParameterKey.ZoneName );
             }
             else
             {
                 // Get the settings from the current page state.
-                pageId = hfPageId.Value.AsInteger();
+                pageId = hfPageId.Value.AsIntegerOrNull();
+                if ( pageId == null )
+                {
+                    pageId = Rock.Utility.IdHasher.Instance.GetId( hfPageId.Value );
+                }
                 zoneName = ddlZones.SelectedValue;
             }
 
@@ -207,11 +215,11 @@ namespace RockWeb.Blocks.Cms
         /// </summary>
         /// <param name="pageId">The page identifier.</param>
         /// <param name="zoneName">Name of the zone.</param>
-        private void ShowDetail( int pageId, string zoneName )
+        private void ShowDetail( int? pageId, string zoneName )
         {
             // Store the page reference and determine if it is valid.
             hfPageId.Value = pageId.ToString();
-            var page = PageCache.Get( pageId );
+            var page = PageCache.Get( pageId.Value );
 
             this.Visible = page != null;
 
@@ -244,7 +252,7 @@ namespace RockWeb.Blocks.Cms
             hlInvalidZoneWarning.Visible = _invalidPageZones != null && _invalidPageZones.Contains( zoneName );
 
             lZoneTitle.Text = string.Format( "{0} Zone", zoneName );
-            lZoneIcon.Text = "<i class='fa fa-th-large'></i>";
+            lZoneIcon.Text = "<i class='ti ti-border-all'></i>";
             if ( page != null )
             {
                 // Refresh ZoneList's "Count" text
@@ -504,7 +512,7 @@ namespace RockWeb.Blocks.Cms
 
             // Block Properties
             Literal btnBlockProperties = new Literal();
-            btnBlockProperties.Text = string.Format( @"<a title='Block Properties' class='btn btn-sm btn-default btn-square properties' id='aBlockProperties' href='javascript: Rock.controls.modal.show($(this), ""/BlockProperties/{0}?t=Block Properties"")' height='500px'><i class='fa fa-cog'></i></a>", block.Id );
+            btnBlockProperties.Text = string.Format( @"<a title='Block Properties' class='btn btn-sm btn-default btn-square properties' id='aBlockProperties' href='javascript: Rock.controls.modal.show($(this), ""/BlockProperties/{0}?t=Block Properties"")' height='500px'><i class='ti ti-settings'></i></a>", block.Id );
             pnlAdminButtons.Controls.Add( btnBlockProperties );
 
             // Block Security
@@ -519,7 +527,7 @@ namespace RockWeb.Blocks.Cms
             btnMoveBlock.CommandName = "BlockId";
             btnMoveBlock.CommandArgument = block.Id.ToString();
             btnMoveBlock.CssClass = "btn btn-sm btn-default btn-square";
-            btnMoveBlock.Text = "<i class='fa fa-external-link'></i>";
+            btnMoveBlock.Text = "<i class='ti ti-external-link'></i>";
             btnMoveBlock.ToolTip = "Move Block";
             btnMoveBlock.Click += btnMoveBlock_Click;
             pnlAdminButtons.Controls.Add( btnMoveBlock );
@@ -530,7 +538,7 @@ namespace RockWeb.Blocks.Cms
             btnDeleteBlock.CommandName = "BlockId";
             btnDeleteBlock.CommandArgument = block.Id.ToString();
             btnDeleteBlock.CssClass = "btn btn-sm btn-square btn-danger";
-            btnDeleteBlock.Text = "<i class='fa fa-times'></i>";
+            btnDeleteBlock.Text = "<i class='ti ti-x'></i>";
             btnDeleteBlock.ToolTip = "Delete Block";
             btnDeleteBlock.Click += btnDeleteBlock_Click;
             btnDeleteBlock.Attributes["onclick"] = string.Format( "javascript: return Rock.dialogs.confirmDelete(event, '{0}');", Block.FriendlyTypeName );
@@ -689,7 +697,7 @@ namespace RockWeb.Blocks.Cms
 
                 lPanelHeading.Text = string.Format(
                     @"<div class='panel-heading'>
-                        <a class='btn btn-link btn-xs panel-widget-reorder js-stop-immediate-propagation'><i class='fa fa-bars'></i></a>
+                        <a class='btn btn-link btn-xs panel-widget-reorder js-stop-immediate-propagation'><i class='ti ti-menu-2'></i></a>
                         <span>{0} ({1})</span>
 
                         <div class='block-config-buttons pull-right'>
@@ -749,9 +757,8 @@ namespace RockWeb.Blocks.Cms
                     // ignore
                 }
 
-                // If the IsDebuggingEnabled happens to be true, show all the obsidian blocks. This is done for testing purposes.
-                // This flag needs to be removed once all the blocks are migrated to obsidian.
-                var blockTypes = BlockTypeService.BlockTypesToDisplay( siteType, HttpContext.Current.IsDebuggingEnabled )
+                // Show all the Web blocks and even ones with SiteTypeFlags set to None.
+                var blockTypes = BlockTypeService.BlockTypesToDisplay( siteType, true )
                     .Select( b => new
                     {
                         b.Id,

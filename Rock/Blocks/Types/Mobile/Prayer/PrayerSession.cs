@@ -37,7 +37,7 @@ namespace Rock.Blocks.Types.Mobile.Events
     [DisplayName( "Prayer Session" )]
     [Category( "Mobile > Prayer" )]
     [Description( "Allows the user to read through and pray for prayer requests." )]
-    [IconCssClass( "fa fa-pray" )]
+    [IconCssClass( "ti ti-pray" )]
     [SupportedSiteTypes( Model.SiteType.Mobile )]
 
     #region Block Attributes
@@ -80,7 +80,7 @@ namespace Rock.Blocks.Types.Mobile.Events
         Description = "The template to use when rendering prayer requests.",
         TemplateBlockValueGuid = SystemGuid.DefinedValue.BLOCK_TEMPLATE_MOBILE_PRAYER_SESSION,
         IsRequired = true,
-        DefaultValue = "",
+        DefaultValue = "C0FCA573-D341-4B33-B097-3FB7028B3816",
         Key = AttributeKeys.Template,
         Order = 5 )]
 

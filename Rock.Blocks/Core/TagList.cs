@@ -40,8 +40,8 @@ namespace Rock.Blocks.Core
     [DisplayName( "Tag List" )]
     [Category( "Core" )]
     [Description( "Block for viewing a list of tags." )]
-    [IconCssClass( "fa fa-list" )]
-    // [SupportedSiteTypes( Model.SiteType.Web )]
+    [IconCssClass( "ti ti-list" )]
+    [SupportedSiteTypes( Model.SiteType.Web )]
 
     [BooleanField( "Show Qualifier Columns",
         Description = "Should the 'Qualifier Column' and 'Qualifier Value' fields be displayed in the grid?",
@@ -190,6 +190,7 @@ namespace Rock.Blocks.Core
         {
             var queryable = new TagService( new RockContext() ).Queryable()
                 .Include( a => a.EntityType )
+                .Include( a => a.TaggedItems )
                 .Include( a => a.OwnerPersonAlias );
 
             var categoryGuid = FilterCategory.AsGuidOrNull();

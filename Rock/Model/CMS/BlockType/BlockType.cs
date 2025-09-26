@@ -37,6 +37,7 @@ namespace Rock.Model
     [RockDomain( "CMS" )]
     [Table( "BlockType" )]
     [DataContract]
+    [CodeGenerateRest( Enums.CodeGenerateRestEndpoint.ReadOnly, DisableEntitySecurity = true )]
     [Rock.SystemGuid.EntityTypeGuid( "04768EDF-C0CD-4950-B629-4D2370B57C99" )]
     public partial class BlockType : Model<BlockType>, ICacheable
     {
@@ -123,6 +124,13 @@ namespace Rock.Model
         /// </example>
         [DataMember]
         public string Description { get; set; }
+
+        /// <summary>
+        /// The default role that instances of this block type will have if
+        /// they have not been explicitly set to a different role.
+        /// </summary>
+        [DataMember]
+        public BlockRole DefaultRole { get; set; } = BlockRole.Content;
 
         /// <summary>
         /// The list of <see cref="SiteType" /> this block type could be a part of.

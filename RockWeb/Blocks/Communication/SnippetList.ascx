@@ -6,7 +6,7 @@
 
         <div class="panel panel-block">
             <div class="panel-heading">
-                <h1 class="panel-title"><i class="fa fa-sms"></i><asp:Literal ID="lTitle" Text="Snippets List" runat="server" /></h1>
+                <h1 class="panel-title"><i class="ti ti-device-mobile-message"></i><asp:Literal ID="lTitle" Text="Snippets List" runat="server" /></h1>
             </div>
             <div class="panel-body">
 
@@ -16,7 +16,7 @@
                         <Rock:RockDropDownList ID="ddlActiveFilter" runat="server" Label="Active Status" />
                         <Rock:CategoryPicker ID="cpCategory" runat="server" Label="Category" EntityTypeName="Rock.Model.Snippet" />
                     </Rock:GridFilter>
-                    <Rock:Grid ID="gSnippets" runat="server" AllowSorting="true" RowItemText="Snippets">
+                    <Rock:Grid ID="gSnippets" runat="server" AllowSorting="true" RowItemText="Snippet">
                         <Columns>
                             <Rock:RockBoundField DataField="Name" HeaderText="Name" SortExpression="Name" />
                             <Rock:RockBoundField DataField="Description" HeaderText="Description" SortExpression="Description" />

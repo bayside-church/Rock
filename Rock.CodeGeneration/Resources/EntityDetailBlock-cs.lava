@@ -122,9 +122,7 @@ namespace Rock.Blocks.{{ DomainNamespace }}
             }
 
             var isViewable = {% if UseEntitySecurity %}entity{% else %}BlockCache{% endif %}.IsAuthorized( Authorization.VIEW, RequestContext.CurrentPerson );
-            box.IsEditable = {% if UseEntitySecurity %}entity{% else %}BlockCache{% endif %}.IsAuthorized( Authorization.EDIT, RequestContext.CurrentPerson );{% if UseAttributeValues == true %}
-
-            entity.LoadAttributes( RockContext );{% endif %}
+            box.IsEditable = {% if UseEntitySecurity %}entity{% else %}BlockCache{% endif %}.IsAuthorized( Authorization.EDIT, RequestContext.CurrentPerson );
 
             if ( entity.Id != 0 )
             {
@@ -183,7 +181,12 @@ namespace Rock.Blocks.{{ DomainNamespace }}
 
             var bag = GetCommonEntityBag( entity );{% if UseAttributeValues == true %}
 
-            bag.LoadAttributesAndValuesForPublicView( entity, RequestContext.CurrentPerson );{% endif %}
+            if ( entity.Attributes == null )
+            {
+                entity.LoadAttributes( RockContext );
+            }
+
+            bag.LoadAttributesAndValuesForPublicView( entity, RequestContext.CurrentPerson, enforceSecurity: {% if UseEntitySecurity %}true{% else %}false{% endif %} );{% endif %}
 
             return bag;
         }
@@ -198,7 +201,12 @@ namespace Rock.Blocks.{{ DomainNamespace }}
 
             var bag = GetCommonEntityBag( entity );{% if UseAttributeValues == true %}
 
-            bag.LoadAttributesAndValuesForPublicEdit( entity, RequestContext.CurrentPerson );{% endif %}
+            if ( entity.Attributes == null )
+            {
+                entity.LoadAttributes( RockContext );
+            }
+
+            bag.LoadAttributesAndValuesForPublicEdit( entity, RequestContext.CurrentPerson, enforceSecurity: {% if UseEntitySecurity %}true{% else %}false{% endif %} );{% endif %}
 
             return bag;
         }
@@ -219,7 +227,7 @@ namespace Rock.Blocks.{{ DomainNamespace }}
                 {
                     entity.LoadAttributes( RockContext );
 
-                    entity.SetPublicAttributeValues( box.Bag.AttributeValues, RequestContext.CurrentPerson );
+                    entity.SetPublicAttributeValues( box.Bag.AttributeValues, RequestContext.CurrentPerson, enforceSecurity: {% if UseEntitySecurity %}true{% else %}false{% endif %} );
                 } );
 
             {% endif %}return true;

@@ -23,6 +23,8 @@ export type PageConfig = {
     pageId: number;
     pageGuid: Guid;
     pageParameters: Record<string, string>;
+    sessionGuid: Guid;
+    interactionGuid: Guid;
     currentPerson: CurrentPersonBag | null;
     isAnonymousVisitor: boolean;
     loginUrlWithReturnUrl: string;
@@ -173,7 +175,7 @@ export function addQuickReturn(title: string, section: string, sectionOrder?: nu
             addQuickReturn: (type: string, typeOrder: number, itemName: string) => void
         }
     }
-    
+
     const rock = window["Rock"] as IRock;
     if (rock && rock.personalLinks) {
         rock.personalLinks.addQuickReturn(section, sectionOrder ?? 0, title);

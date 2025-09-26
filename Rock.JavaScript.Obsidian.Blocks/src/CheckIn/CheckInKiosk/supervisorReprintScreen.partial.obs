@@ -1,10 +1,17 @@
 <template>
     <div class="supervisor-reprint-screen">
         <MainPanel title="Reprint Labels"
-                   subtitle="Tap a button below to reprint labels.">
-            <TextBox v-model="searchTerm"
-                     class="search-term"
-                     placeholder="Filter" />
+                   subtitle="Select an individual below to reprint their labels."
+                   :configuration="configuration">
+            <!--
+                The form is here to prevent iOS from causing the Return key
+                to become a Go key and triggering a WebForms postback.
+            -->
+            <RockForm>
+                <TextBox v-model="searchTerm"
+                         class="search-term"
+                         placeholder="Search" />
+            </RockForm>
 
             <div class="button-list">
                 <RockButton v-for="attendance in filteredAttendances"
@@ -38,7 +45,9 @@
     import { computed, PropType, ref, shallowRef } from "vue";
     import { SupervisorScreen, SupervisorScreenData, KioskButton } from "./types.partial";
     import { CheckInItemBag } from "@Obsidian/ViewModels/CheckIn/checkInItemBag";
-    import { printLegacyLabels } from "./utils.partial";
+    import { printLabels, printLegacyLabels } from "./utils.partial";
+    import { PrintResponseBag } from "@Obsidian/ViewModels/Blocks/CheckIn/CheckInKiosk/printResponseBag";
+    import RockForm from "@Obsidian/Controls/rockForm.obs";
 
     type ReprintAttendanceBag = {
         id?: string | null;
@@ -143,13 +152,17 @@
             attendanceId: id
         };
 
-        const response = await invokeBlockAction<{ errorMessages?: string[] | null, legacyLabels: Record<string, unknown>[] }>("PrintLabels", data);
+        const response = await invokeBlockAction<PrintResponseBag>("PrintLabels", data);
 
         if (response.isSuccess) {
             const errors: string[] = [];
 
             if (response.data?.legacyLabels) {
                 errors.push(...await printLegacyLabels(response.data.legacyLabels));
+            }
+
+            if (response.data?.labels) {
+                errors.push(...await printLabels(response.data.labels));
             }
 
             if (response.data?.errorMessages && response.data.errorMessages.length > 0) {

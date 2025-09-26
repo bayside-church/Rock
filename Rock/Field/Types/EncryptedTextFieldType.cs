@@ -31,6 +31,7 @@ namespace Rock.Field.Types
     /// Field used to save and display a text value
     /// </summary>
     [Serializable]
+    [FieldTypeUsage( FieldTypeUsage.System )]
     [RockPlatformSupport( Utility.RockPlatform.WebForms, Utility.RockPlatform.Obsidian )]
     [Rock.SystemGuid.FieldTypeGuid( Rock.SystemGuid.FieldType.ENCRYPTED_TEXT )]
     public class EncryptedTextFieldType : TextFieldType
@@ -168,7 +169,6 @@ namespace Rock.Field.Types
             cb.AutoPostBack = true;
             cb.CheckedChanged += OnQualifierUpdated;
             cb.Label = "Allow HTML";
-            cb.Text = "Yes";
             cb.Help = "Controls whether server should prevent HTML from being entered in this field or not.";
 
             return controls;

@@ -26,12 +26,17 @@ using Rock.Attribute;
 using Rock.CheckIn;
 using Rock.Constants;
 using Rock.Data;
+using Rock.Enums.Controls;
 using Rock.Model;
 using Rock.Security;
 using Rock.Web;
 using Rock.Web.Cache;
 using Rock.Web.UI;
 using Rock.Web.UI.Controls;
+
+using GradeAndAgeMatchingMode = Rock.Enums.CheckIn.GradeAndAgeMatchingMode;
+using AgeRestrictionMode = Rock.Enums.CheckIn.AgeRestrictionMode;
+using AdultsOrChildrenSelectionMode = Rock.Enums.CheckIn.AdultsOrChildrenSelectionMode;
 
 namespace RockWeb.Blocks.CheckIn.Config
 {
@@ -142,6 +147,7 @@ namespace RockWeb.Blocks.CheckIn.Config
         {
             GroupTypeService groupTypeService = new GroupTypeService( new RockContext() );
             GroupType groupType = groupTypeService.Get( int.Parse( hfGroupTypeId.Value ) );
+            var pageRef = new PageReference( CurrentPageReference.PageId, CurrentPageReference.RouteId );
             ShowEditDetails( groupType );
         }
 
@@ -229,17 +235,21 @@ namespace RockWeb.Blocks.CheckIn.Config
                 groupType.LoadAttributes( rockContext );
                 Rock.Attribute.Helper.GetEditValues( phAttributeEdits, groupType );
 
+                var templateSettings = groupType.GetAdditionalSettings<CheckInTemplateSettings>();
+
                 groupType.SetAttributeValue( "core_checkin_AgeRequired", cbAgeRequired.Checked.ToString() );
                 groupType.SetAttributeValue( "core_checkin_GradeRequired", cbGradeRequired.Checked.ToString() );
                 groupType.SetAttributeValue( "core_checkin_HidePhotos", cbHidePhotos.Checked.ToString() );
                 groupType.SetAttributeValue( "core_checkin_PreventDuplicateCheckin", cbPreventDuplicateCheckin.Checked.ToString() );
                 groupType.SetAttributeValue( "core_checkin_PreventInactivePeople", cbPreventInactivePeople.Checked.ToString() );
+                groupType.SetAttributeValue( Rock.SystemKey.GroupTypeAttributeKey.CHECKIN_GROUPTYPE_ENABLE_PROXIMITY_CHECKIN, cbEnableProximityCheckIn.Checked.ToString() );
                 groupType.SetAttributeValue( "core_checkin_CheckInType", ddlType.SelectedValue );
                 groupType.SetAttributeValue( "core_checkin_DisplayLocationCount", cbDisplayLocCount.Checked.ToString() );
                 groupType.SetAttributeValue( Rock.SystemKey.GroupTypeAttributeKey.CHECKIN_GROUPTYPE_ABILITY_LEVEL_DETERMINATION, rblAbilityLevelDetermination.SelectedValue );
                 groupType.SetAttributeValue( "core_checkin_EnableManagerOption", cbEnableManager.Checked.ToString() );
                 groupType.SetAttributeValue( "core_checkin_EnableOverride", cbEnableOverride.Checked.ToString() );
                 groupType.SetAttributeValue( Rock.SystemKey.GroupTypeAttributeKey.CHECKIN_GROUPTYPE_ACHIEVEMENT_TYPES, listboxAchievementTypes.SelectedValues.AsDelimited(",") );
+                groupType.SetAttributeValue( Rock.SystemKey.GroupTypeAttributeKey.CHECKIN_GROUPTYPE_PROMOTIONS_CONTENT_CHANNEL, ddlPromotionsContentChannel.SelectedValue );
 
                 groupType.SetAttributeValue( "core_checkin_MaximumPhoneSearchLength", nbMaxPhoneLength.Text );
                 groupType.SetAttributeValue( "core_checkin_MaxSearchResults", nbMaxResults.Text );
@@ -266,6 +276,7 @@ namespace RockWeb.Blocks.CheckIn.Config
                 groupType.SetAttributeValue( "core_checkin_SecurityCodeNumericRandom", cbCodeRandom.Checked.ToString() );
                 groupType.SetAttributeValue( Rock.SystemKey.GroupTypeAttributeKey.CHECKIN_GROUPTYPE_ALLOW_CHECKOUT_KIOSK, cbAllowCheckoutAtKiosk.Checked.ToString() );
                 groupType.SetAttributeValue( Rock.SystemKey.GroupTypeAttributeKey.CHECKIN_GROUPTYPE_ALLOW_CHECKOUT_MANAGER, cbAllowCheckoutInManager.Checked.ToString() );
+                groupType.SetAttributeValue( Rock.SystemKey.GroupTypeAttributeKey.CHECKIN_GROUPTYPE_ALLOW_REMOVE_FROM_FAMILY_KIOSK, cbAllowRemoveFromFamilyAtKiosk.Checked.ToString() );
                 groupType.SetAttributeValue( Rock.SystemKey.GroupTypeAttributeKey.CHECKIN_GROUPTYPE_ENABLE_PRESENCE, cbEnablePresence.Checked.ToString() );
                 groupType.SetAttributeValue( "core_checkin_AutoSelectDaysBack", nbAutoSelectDaysBack.Text );
                 groupType.SetAttributeValue( "core_checkin_AutoSelectOptions", ddlAutoSelectOptions.SelectedValueAsInt() );
@@ -329,6 +340,9 @@ namespace RockWeb.Blocks.CheckIn.Config
                     Rock.SystemKey.GroupTypeAttributeKey.CHECKIN_REGISTRATION_DISPLAYETHNICITYONCHILDREN,
                     ddlRegistrationDisplayEthnicityOnChildren.SelectedValue );
 
+                templateSettings.DisplayMobilePhoneOnChildren = ddlRegistrationDisplayMobilePhoneOnChildren.SelectedValueAsEnum<RequirementLevel>();
+                templateSettings.DisplaySuffix = ddlRegistrationDisplaySuffix.SelectedValueAsEnum<AdultsOrChildrenSelectionMode>();
+
                 Guid? defaultPersonConnectionStatusValueGuid = null;
                 var defaultPersonConnectionStatusValueId = dvpRegistrationDefaultPersonConnectionStatus.SelectedValue.AsIntegerOrNull();
                 if ( defaultPersonConnectionStatusValueId.HasValue )
@@ -354,9 +368,12 @@ namespace RockWeb.Blocks.CheckIn.Config
                     Rock.SystemKey.GroupTypeAttributeKey.CHECKIN_REGISTRATION_ADDPERSONWORKFLOWTYPES,
                     workflowTypeService.GetByIds( wftpRegistrationAddPersonWorkflowTypes.SelectedValuesAsInt().ToList() ).Select( a => a.Guid ).ToList().AsDelimited( "," ) );
 
+                templateSettings.GradeConfirmationAge = nbRegistrationGradeConfirmationAge.Text.AsDecimalOrNull();
+
                 groupType.SetAttributeValue( Rock.SystemKey.GroupTypeAttributeKey.CHECKIN_REGISTRATION_ENABLECHECKINAFTERREGISTRATION, cbEnableCheckInAfterRegistration.Checked.ToTrueFalse() );
 
                 groupType.SetAttributeValue( Rock.SystemKey.GroupTypeAttributeKey.CHECKIN_REGISTRATION_KNOWNRELATIONSHIPTYPES, lbKnownRelationshipTypes.SelectedValues.AsDelimited( "," ) );
+                templateSettings.ForceSelectionOfKnownRelationshipType = cbRegistrationForceSelectionOfKnownRelationshipType.Checked;
                 groupType.SetAttributeValue( Rock.SystemKey.GroupTypeAttributeKey.CHECKIN_REGISTRATION_SAMEFAMILYKNOWNRELATIONSHIPTYPES, lbSameFamilyKnownRelationshipTypes.SelectedValues.AsDelimited( "," ) );
                 groupType.SetAttributeValue( Rock.SystemKey.GroupTypeAttributeKey.CHECKIN_REGISTRATION_CANCHECKINKNOWNRELATIONSHIPTYPES, lbCanCheckInKnownRelationshipTypes.SelectedValues.AsDelimited( "," ) );
 
@@ -376,6 +393,13 @@ namespace RockWeb.Blocks.CheckIn.Config
 
                 groupType.SetAttributeValue( Rock.SystemKey.GroupTypeAttributeKey.CHECKIN_SUCCESS_LAVA_TEMPLATE_OVERRIDE_DISPLAY_MODE, ddlSuccessTemplateOverrideDisplayMode.SelectedValue );
                 groupType.SetAttributeValue( Rock.SystemKey.GroupTypeAttributeKey.CHECKIN_SUCCESS_LAVA_TEMPLATE, ceSuccessTemplate.Text );
+
+                groupType.SetAttributeValue( Rock.SystemKey.GroupTypeAttributeKey.CHECKIN_GROUPTYPE_REMOVE_SPECIAL_NEEDS_GROUPS, cblSpecialNeeds.SelectedValues.Contains( "special-needs" ).ToString() );
+                groupType.SetAttributeValue( Rock.SystemKey.GroupTypeAttributeKey.CHECKIN_GROUPTYPE_REMOVE_NON_SPECIAL_NEEDS_GROUPS, cblSpecialNeeds.SelectedValues.Contains( "non-special-needs" ).ToString() );
+                groupType.SetAttributeValue( Rock.SystemKey.GroupTypeAttributeKey.CHECKIN_GROUPTYPE_GRADE_AND_AGE_MATCHING_BEHAVIOR, ddlGradeAndAgeMatchingBehavior.SelectedValue );
+                groupType.SetAttributeValue( Rock.SystemKey.GroupTypeAttributeKey.CHECKIN_GROUPTYPE_AGE_RESTRICTION, ddlAgeRestriction.SelectedValue );
+
+                groupType.SetAdditionalSettings( templateSettings );
 
                 // Save group type and attributes
                 rockContext.WrapTransaction( () =>
@@ -397,6 +421,12 @@ namespace RockWeb.Blocks.CheckIn.Config
                 }
 
                 Rock.CheckIn.KioskDevice.Clear();
+
+                // I know, this is a terrible hack. But we need to force the
+                // kiosks to refresh and we don't want to make this public yet. -dsh
+                typeof( GroupType ).Assembly.GetType( "Rock.CheckIn.v2.CheckInDirector" )
+                    .GetMethod( "SendRefreshKioskConfiguration" )
+                    .Invoke( null, new object[0] );
             }
         }
 
@@ -529,17 +559,21 @@ namespace RockWeb.Blocks.CheckIn.Config
 
                 groupType.LoadAttributes( rockContext );
 
+                var templateSettings = groupType.GetAdditionalSettings<CheckInTemplateSettings>();
+
                 cbAgeRequired.Checked = groupType.GetAttributeValue( "core_checkin_AgeRequired" ).AsBoolean( true );
                 cbGradeRequired.Checked = groupType.GetAttributeValue( "core_checkin_GradeRequired" ).AsBoolean( true );
                 cbHidePhotos.Checked = groupType.GetAttributeValue( "core_checkin_HidePhotos" ).AsBoolean( true );
                 cbPreventDuplicateCheckin.Checked = groupType.GetAttributeValue( "core_checkin_PreventDuplicateCheckin" ).AsBoolean( true );
                 cbPreventInactivePeople.Checked = groupType.GetAttributeValue( "core_checkin_PreventInactivePeople" ).AsBoolean( true );
+                cbEnableProximityCheckIn.Checked = groupType.GetAttributeValue( Rock.SystemKey.GroupTypeAttributeKey.CHECKIN_GROUPTYPE_ENABLE_PROXIMITY_CHECKIN ).AsBoolean();
                 ddlType.SetValue( groupType.GetAttributeValue( "core_checkin_CheckInType" ) );
                 cbDisplayLocCount.Checked = groupType.GetAttributeValue( "core_checkin_DisplayLocationCount" ).AsBoolean( true );
                 rblAbilityLevelDetermination.SelectedValue = groupType.GetAttributeValue( Rock.SystemKey.GroupTypeAttributeKey.CHECKIN_GROUPTYPE_ABILITY_LEVEL_DETERMINATION );
                 cbEnableManager.Checked = groupType.GetAttributeValue( "core_checkin_EnableManagerOption" ).AsBoolean( true );
                 cbEnableOverride.Checked = groupType.GetAttributeValue( "core_checkin_EnableOverride" ).AsBoolean( true );
                 listboxAchievementTypes.SetValues( groupType.GetAttributeValue( Rock.SystemKey.GroupTypeAttributeKey.CHECKIN_GROUPTYPE_ACHIEVEMENT_TYPES ).SplitDelimitedValues() );
+                ddlPromotionsContentChannel.SetValue( groupType.GetAttributeValue( Rock.SystemKey.GroupTypeAttributeKey.CHECKIN_GROUPTYPE_PROMOTIONS_CONTENT_CHANNEL ) );
                 nbMaxPhoneLength.Text = groupType.GetAttributeValue( "core_checkin_MaximumPhoneSearchLength" );
                 nbMaxResults.Text = groupType.GetAttributeValue( "core_checkin_MaxSearchResults" );
                 nbMinPhoneLength.Text = groupType.GetAttributeValue( "core_checkin_MinimumPhoneSearchLength" );
@@ -561,6 +595,7 @@ namespace RockWeb.Blocks.CheckIn.Config
                 cbCodeRandom.Checked = groupType.GetAttributeValue( "core_checkin_SecurityCodeNumericRandom" ).AsBoolean( true );
                 cbAllowCheckoutAtKiosk.Checked = groupType.GetAttributeValue( Rock.SystemKey.GroupTypeAttributeKey.CHECKIN_GROUPTYPE_ALLOW_CHECKOUT_KIOSK ).AsBoolean();
                 cbAllowCheckoutInManager.Checked = groupType.GetAttributeValue( Rock.SystemKey.GroupTypeAttributeKey.CHECKIN_GROUPTYPE_ALLOW_CHECKOUT_MANAGER ).AsBoolean();
+                cbAllowRemoveFromFamilyAtKiosk.Checked = groupType.GetAttributeValue( Rock.SystemKey.GroupTypeAttributeKey.CHECKIN_GROUPTYPE_ALLOW_REMOVE_FROM_FAMILY_KIOSK ).AsBoolean();
                 cbEnablePresence.Checked = groupType.GetAttributeValue( Rock.SystemKey.GroupTypeAttributeKey.CHECKIN_GROUPTYPE_ENABLE_PRESENCE ).AsBoolean();
                 nbAutoSelectDaysBack.Text = groupType.GetAttributeValue( "core_checkin_AutoSelectDaysBack" );
                 ddlAutoSelectOptions.SetValue( groupType.GetAttributeValue( "core_checkin_AutoSelectOptions" ) );
@@ -590,6 +625,9 @@ namespace RockWeb.Blocks.CheckIn.Config
                 ddlRegistrationDisplayRaceOnChildren.SetValue( groupType.GetAttributeValue( Rock.SystemKey.GroupTypeAttributeKey.CHECKIN_REGISTRATION_DISPLAYRACEONCHILDREN ) );
                 ddlRegistrationDisplayEthnicityOnChildren.SetValue( groupType.GetAttributeValue( Rock.SystemKey.GroupTypeAttributeKey.CHECKIN_REGISTRATION_DISPLAYETHNICITYONCHILDREN ) );
 
+                ddlRegistrationDisplayMobilePhoneOnChildren.SetValue( templateSettings.DisplayMobilePhoneOnChildren.ToString() );
+                ddlRegistrationDisplaySuffix.SetValue( templateSettings.DisplaySuffix.ConvertToInt().ToString() );
+
                 int? defaultPersonConnectionStatusValueId = null;
                 Guid? defaultPersonConnectionStatusValueGuid = groupType.GetAttributeValue( Rock.SystemKey.GroupTypeAttributeKey.CHECKIN_REGISTRATION_DEFAULTPERSONCONNECTIONSTATUS ).AsGuidOrNull();
                 if ( defaultPersonConnectionStatusValueGuid.HasValue )
@@ -608,9 +646,12 @@ namespace RockWeb.Blocks.CheckIn.Config
                 wftpRegistrationAddFamilyWorkflowTypes.SetValues( workflowTypeService.GetByGuids( groupType.GetAttributeValue( Rock.SystemKey.GroupTypeAttributeKey.CHECKIN_REGISTRATION_ADDFAMILYWORKFLOWTYPES ).SplitDelimitedValues().AsGuidList() ) );
                 wftpRegistrationAddPersonWorkflowTypes.SetValues( workflowTypeService.GetByGuids( groupType.GetAttributeValue( Rock.SystemKey.GroupTypeAttributeKey.CHECKIN_REGISTRATION_ADDPERSONWORKFLOWTYPES ).SplitDelimitedValues().AsGuidList() ) );
 
+                nbRegistrationGradeConfirmationAge.Text = templateSettings.GradeConfirmationAge.ToStringSafe();
+
                 cbEnableCheckInAfterRegistration.Checked = groupType.GetAttributeValue( Rock.SystemKey.GroupTypeAttributeKey.CHECKIN_REGISTRATION_ENABLECHECKINAFTERREGISTRATION ).AsBoolean();
 
                 lbKnownRelationshipTypes.SetValues( groupType.GetAttributeValue( Rock.SystemKey.GroupTypeAttributeKey.CHECKIN_REGISTRATION_KNOWNRELATIONSHIPTYPES ).SplitDelimitedValues() );
+                cbRegistrationForceSelectionOfKnownRelationshipType.Checked = templateSettings.ForceSelectionOfKnownRelationshipType;
                 lbSameFamilyKnownRelationshipTypes.SetValues( groupType.GetAttributeValue( Rock.SystemKey.GroupTypeAttributeKey.CHECKIN_REGISTRATION_SAMEFAMILYKNOWNRELATIONSHIPTYPES ).SplitDelimitedValues() );
                 lbCanCheckInKnownRelationshipTypes.SetValues( groupType.GetAttributeValue( Rock.SystemKey.GroupTypeAttributeKey.CHECKIN_REGISTRATION_CANCHECKINKNOWNRELATIONSHIPTYPES ).SplitDelimitedValues() );
 
@@ -630,6 +671,20 @@ namespace RockWeb.Blocks.CheckIn.Config
 
                 ddlSuccessTemplateOverrideDisplayMode.SetValue( groupType.GetAttributeValue( Rock.SystemKey.GroupTypeAttributeKey.CHECKIN_SUCCESS_LAVA_TEMPLATE_OVERRIDE_DISPLAY_MODE ) );
                 ceSuccessTemplate.Text = groupType.GetAttributeValue( Rock.SystemKey.GroupTypeAttributeKey.CHECKIN_SUCCESS_LAVA_TEMPLATE );
+
+                var specialNeedsValues = new List<string>();
+                if ( groupType.GetAttributeValue( Rock.SystemKey.GroupTypeAttributeKey.CHECKIN_GROUPTYPE_REMOVE_SPECIAL_NEEDS_GROUPS ).AsBoolean() )
+                {
+                    specialNeedsValues.Add( "special-needs" );
+                }
+                if ( groupType.GetAttributeValue( Rock.SystemKey.GroupTypeAttributeKey.CHECKIN_GROUPTYPE_REMOVE_NON_SPECIAL_NEEDS_GROUPS ).AsBoolean() )
+                {
+                    specialNeedsValues.Add( "non-special-needs" );
+                }
+                cblSpecialNeeds.SetValues( specialNeedsValues );
+
+                ddlGradeAndAgeMatchingBehavior.SetValue( groupType.GetAttributeValue( Rock.SystemKey.GroupTypeAttributeKey.CHECKIN_GROUPTYPE_GRADE_AND_AGE_MATCHING_BEHAVIOR ) );
+                ddlAgeRestriction.SetValue( groupType.GetAttributeValue( Rock.SystemKey.GroupTypeAttributeKey.CHECKIN_GROUPTYPE_AGE_RESTRICTION ) );
 
                 // Other GroupType Attributes
                 BuildAttributeEdits( groupType, true );
@@ -673,6 +728,7 @@ namespace RockWeb.Blocks.CheckIn.Config
             excludeList.Add( Rock.SystemKey.GroupTypeAttributeKey.CHECKIN_GROUPTYPE_ALLOW_CHECKOUT_MANAGER );
             excludeList.Add( Rock.SystemKey.GroupTypeAttributeKey.CHECKIN_GROUPTYPE_ALLOW_CHECKOUT_KIOSK );
             excludeList.Add( Rock.SystemKey.GroupTypeAttributeKey.CHECKIN_GROUPTYPE_ENABLE_PRESENCE );
+            excludeList.Add( Rock.SystemKey.GroupTypeAttributeKey.CHECKIN_GROUPTYPE_ENABLE_PROXIMITY_CHECKIN );
 
             excludeList.Add( Rock.SystemKey.GroupTypeAttributeKey.CHECKIN_REGISTRATION_CANCHECKINKNOWNRELATIONSHIPTYPES );
             excludeList.Add( Rock.SystemKey.GroupTypeAttributeKey.CHECKIN_REGISTRATION_DISPLAYALTERNATEIDFIELDFORADULTS );
@@ -714,6 +770,13 @@ namespace RockWeb.Blocks.CheckIn.Config
             excludeList.Add( Rock.SystemKey.GroupTypeAttributeKey.CHECKIN_REGISTRATION_DISPLAYETHNICITYONCHILDREN );
             excludeList.Add( Rock.SystemKey.GroupTypeAttributeKey.CHECKIN_REGISTRATION_DISPLAYRACEONADULTS );
             excludeList.Add( Rock.SystemKey.GroupTypeAttributeKey.CHECKIN_REGISTRATION_DISPLAYETHNICITYONADULTS );
+
+            excludeList.Add( Rock.SystemKey.GroupTypeAttributeKey.CHECKIN_GROUPTYPE_REMOVE_SPECIAL_NEEDS_GROUPS );
+            excludeList.Add( Rock.SystemKey.GroupTypeAttributeKey.CHECKIN_GROUPTYPE_REMOVE_NON_SPECIAL_NEEDS_GROUPS );
+            excludeList.Add( Rock.SystemKey.GroupTypeAttributeKey.CHECKIN_GROUPTYPE_ALLOW_REMOVE_FROM_FAMILY_KIOSK );
+            excludeList.Add( Rock.SystemKey.GroupTypeAttributeKey.CHECKIN_GROUPTYPE_GRADE_AND_AGE_MATCHING_BEHAVIOR );
+            excludeList.Add( Rock.SystemKey.GroupTypeAttributeKey.CHECKIN_GROUPTYPE_AGE_RESTRICTION );
+            excludeList.Add( Rock.SystemKey.GroupTypeAttributeKey.CHECKIN_GROUPTYPE_PROMOTIONS_CONTENT_CHANNEL );
 
             if ( groupType.Attributes.Any( t => !excludeList.Contains( t.Value.Key ) ) )
             {
@@ -868,6 +931,14 @@ namespace RockWeb.Blocks.CheckIn.Config
                 listboxAchievementTypes.Items.Add( new ListItem( achievementType.Name, achievementType.Guid.ToString() ) );
             }
 
+            ddlPromotionsContentChannel.Items.Clear();
+            ddlPromotionsContentChannel.Items.Add( new ListItem() );
+            ContentChannelCache.All()
+                .Where( cc => cc.ContentChannelType.ShowInChannelList == true )
+                .OrderBy( cc => cc.Name )
+                .ToList()
+                .ForEach( cc => ddlPromotionsContentChannel.Items.Add( new ListItem( cc.Name, cc.Guid.ToString() ) ) );
+
             lbKnownRelationshipTypes.Items.Clear();
             lbKnownRelationshipTypes.Items.Add( new ListItem( "Child", "0" ) );
             lbSameFamilyKnownRelationshipTypes.Items.Clear();
@@ -945,6 +1016,19 @@ namespace RockWeb.Blocks.CheckIn.Config
             ddlRegistrationDisplayEthnicityOnAdults.Items.Add( ControlOptions.HIDE );
             ddlRegistrationDisplayEthnicityOnAdults.Items.Add( ControlOptions.OPTIONAL );
             ddlRegistrationDisplayEthnicityOnAdults.Items.Add( ControlOptions.REQUIRED );
+
+            ddlRegistrationDisplayMobilePhoneOnChildren.Items.Clear();
+            ddlRegistrationDisplayMobilePhoneOnChildren.Items.Add( new ListItem( ControlOptions.HIDE, RequirementLevel.Unavailable.ToString() ) );
+            ddlRegistrationDisplayMobilePhoneOnChildren.Items.Add( new ListItem( ControlOptions.OPTIONAL, RequirementLevel.Optional.ToString() ) );
+            ddlRegistrationDisplayMobilePhoneOnChildren.Items.Add( new ListItem( ControlOptions.REQUIRED, RequirementLevel.Required.ToString() ) );
+
+            ddlRegistrationDisplaySuffix.Items.Clear();
+            ddlRegistrationDisplaySuffix.BindToEnum<AdultsOrChildrenSelectionMode>();
+
+            ddlGradeAndAgeMatchingBehavior.Items.Clear();
+            ddlGradeAndAgeMatchingBehavior.BindToEnum<GradeAndAgeMatchingMode>();
+            ddlAgeRestriction.Items.Clear();
+            ddlAgeRestriction.BindToEnum<AgeRestrictionMode>();
         }
 
         #endregion

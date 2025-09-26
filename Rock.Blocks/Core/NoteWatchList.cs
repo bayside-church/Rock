@@ -39,8 +39,8 @@ namespace Rock.Blocks.Core
     [DisplayName( "Note Watch List" )]
     [Category( "Core" )]
     [Description( "Displays a list of note watches." )]
-    [IconCssClass( "fa fa-list" )]
-    // [SupportedSiteTypes( Model.SiteType.Web )]
+    [IconCssClass( "ti ti-list" )]
+    [SupportedSiteTypes( Model.SiteType.Web )]
 
     [LinkedPage( "Detail Page",
         Description = "The page that will show the note watch details.",
@@ -129,7 +129,7 @@ namespace Rock.Blocks.Core
         {
             return new Dictionary<string, string>
             {
-                [NavigationUrlKey.DetailPage] = this.GetLinkedPageUrl( AttributeKey.DetailPage, "NoteWatchId", "((Key))" )
+                [NavigationUrlKey.DetailPage] = this.GetLinkedPageUrl( AttributeKey.DetailPage, new Dictionary<string, string> { ["NoteWatchId"] = "((Key))", ["autoEdit"] = "true", ["returnUrl"] = this.GetCurrentPageUrl() } )
             };
         }
 
@@ -154,7 +154,7 @@ namespace Rock.Blocks.Core
         protected override IQueryable<NoteWatch> GetListQueryable( RockContext rockContext )
         {
             var qry = base.GetListQueryable( rockContext )
-                .Include( a => a.WatcherPersonAlias )
+                .Include( a => a.WatcherPersonAlias.Person )
                 .Include( a => a.WatcherGroup )
                 .Include( a => a.NoteType )
                 .Include( a => a.EntityType );

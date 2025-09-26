@@ -22,12 +22,19 @@
                     visiblePriority="xs"
                     width="5%" />
 
-        <TextColumn name="date"
+        <DateColumn name="date"
                     :title="nextDateColumnTitle"
                     field="date"
                     :filter="dateValueFilter"
                     visiblePriority="xs"
-                    width="5%" />
+                    headerClass="title-right"
+                    itemClass="justify-content-end text-right"
+                    width="5%">
+            <template #format="{ row }">
+                <span v-if="row.date">{{ RockDateTime.parseISO(row.date)?.toASPString("d") }}</span>
+                <span v-else>N/A</span>
+            </template>
+        </DateColumn>
 
         <TextColumn name="location"
                     title="Location"
@@ -76,7 +83,7 @@
                 :filterValue="getContentItemsColumnFilterValue"
                 :quickFilterValue="getContentItemsColumnFilterValue"
                 visiblePriority="md"
-                width="15%">
+                width="12%">
             <template #format="{ row }">
                 <div class="text">
                     <div v-for="contentItem in getContentChannelItems(row.contentItems)">
@@ -97,7 +104,7 @@
                       :filter="pickExistingValueFilter"
                       visiblePriority="md"
                       :hideAvatar="true"
-                      width="5%" />
+                      width="8%" />
 
         <TextColumn name="contactPhone"
                     title="Phone"
@@ -110,14 +117,18 @@
                     title="Email"
                     field="contactEmail"
                     :filter="textValueFilter"
+                    width="5%"
+                    itemClass="break-word"
                     visiblePriority="md" />
 
         <AttributeColumns :attributes="config.gridDefinition?.attributeFields ?? []" />
 
         <ButtonColumn name="copy"
                       title="Copy"
-                      iconClass="fa fa-clone"
+                      iconClass="ti ti-copy"
                       visiblePriority="xs"
+                      :excludeFromExport="true"
+                      width="65"
                       @click="onCopyClick" />
 
         <DeleteColumn v-if="config.isDeleteEnabled" @click="onDeleteClick" />
@@ -128,10 +139,20 @@
                        :campusItems="config.options?.campusItems ?? []" />
 </template>
 
+<style>
+.title-right .grid-column-title {
+    text-align: right;
+}
+
+.break-word {
+    word-break: break-all;
+}
+</style>
+
 <script setup lang="ts">
     import { useConfigurationValues, useInvokeBlockAction, usePersonPreferences } from "@Obsidian/Utility/block";
     import { EntityType } from "@Obsidian/SystemGuids/entityType";
-    import Grid, { PersonColumn, pickExistingValueFilter, dateValueFilter, TextColumn, textValueFilter, DeleteColumn, ButtonColumn, AttributeColumns, Column } from "@Obsidian/Controls/grid";
+    import Grid, { PersonColumn, pickExistingValueFilter, dateValueFilter, TextColumn, DateColumn, textValueFilter, DeleteColumn, ButtonColumn, AttributeColumns, Column } from "@Obsidian/Controls/grid";
     import { alert } from "@Obsidian/Utility/dialogs";
     import { ListBlockBox } from "@Obsidian/ViewModels/Blocks/listBlockBox";
     import { EventItemOccurrenceListOptionsBag } from "@Obsidian/ViewModels/Blocks/Event/EventItemOccurrenceList/eventItemOccurrenceListOptionsBag";
@@ -140,6 +161,7 @@
     import { computed, reactive, ref, watch } from "vue";
     import GridSettingsModal from "./EventItemOccurrenceList/gridSettingsModal.partial.obs";
     import { PersonFieldBag } from "@Obsidian/ViewModels/Core/Grid/personFieldBag";
+    import { RockDateTime } from "@Obsidian/Utility/rockDateTime";
 
     const config = useConfigurationValues<ListBlockBox<EventItemOccurrenceListOptionsBag>>();
     const invokeBlockAction = useInvokeBlockAction();
@@ -154,8 +176,6 @@
     const gridSettings = ref<GridSettingsOptions>({
         startDate: preferences.getValue(PreferenceKey.FilterStartDate),
         endDate: preferences.getValue(PreferenceKey.FilterEndDate),
-        contact: preferences.getValue(PreferenceKey.FilterContact),
-        campuses: JSON.parse(preferences.getValue(PreferenceKey.FilterCampus) || "[]"),
     });
 
     // #endregion
@@ -169,9 +189,7 @@
     /** `true` if the grid settings is performing any filtering. */
     const hasSettingsFilters = computed((): boolean => {
         return !!gridSettings.value.startDate
-            || !!gridSettings.value.endDate
-            || !!gridSettings.value.contact
-            || gridSettings.value.campuses.length > 0;
+            || !!gridSettings.value.endDate;
     });
 
 
@@ -201,9 +219,11 @@
     */
     function getContentItemsColumnFilterValue(row: Record<string, unknown>): string {
         let filterValue = "";
-        const contentItems = row.contentItems as string[];
+        const contentItemsString = row.contentItems as string;
+        const contentItems = getContentChannelItems(contentItemsString);
         for (const contentItem of contentItems) {
-            filterValue += contentItem;
+            filterValue += contentItem.title;
+            filterValue += ` (${contentItem.name})`;
         }
 
         return filterValue;
@@ -215,7 +235,7 @@
     * @param row The row to be filtered.
     */
     function getRegistrationColumnFilterValue(row: Record<string, unknown>): string {
-        return row.registration as string;
+        return row.registration as string ?? "";
     }
 
     /**
@@ -224,7 +244,7 @@
     * @param row The row to be filtered.
     */
     function getGroupColumnFilterValue(row: Record<string, unknown>): string {
-        return row.group as string;
+        return row.group as string ?? "";
     }
 
     /**
@@ -247,14 +267,12 @@
         if (value) {
             const formattedContentItems = value.split(",");
             for (const formattedContentItem of formattedContentItems) {
-                const contentItem = {} as Record<string, string>;
-                const contentItemDetails = formattedContentItem.split("|");
-
-                if (contentItemDetails.length > 0) {
-                    contentItem.url = contentItemDetails[0];
-                    contentItem.title = contentItemDetails[1];
-                    contentItem.name = contentItemDetails[2];
-                }
+                const [url, title, name] = formattedContentItem.split("|");
+                const contentItem = {
+                    url: url,
+                    title: title,
+                    name: name
+                } as Record<string, string>;
 
                 contentItems.push(contentItem);
             }
@@ -344,8 +362,6 @@
     watch(gridSettings, async () => {
         preferences.setValue(PreferenceKey.FilterStartDate, gridSettings.value.startDate ?? "");
         preferences.setValue(PreferenceKey.FilterEndDate, gridSettings.value.endDate ?? "");
-        preferences.setValue(PreferenceKey.FilterContact, gridSettings.value.contact ?? "");
-        preferences.setValue(PreferenceKey.FilterCampus, JSON.stringify(gridSettings.value.campuses));
 
         await preferences.save();
 

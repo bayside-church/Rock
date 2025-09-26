@@ -1,4 +1,4 @@
-// <copyright>
+﻿// <copyright>
 // Copyright by the Spark Development Network
 //
 // Licensed under the Rock Community License (the "License");
@@ -80,18 +80,17 @@ namespace Rock.Model
 
                                 if ( this.ResultFormat == PersistedDatasetDataFormat.JSON )
                                 {
-                                    var outputAsDynamic = output.FromJsonDynamicOrNull();
-
-                                    if ( outputAsDynamic == null )
+                                    try
                                     {
-                                        LogError( $"PersistedDataset (Id: {this.Id}) build script created invalid result data: {output}" );
-                                        result.IsSuccess = false;
-                                        result.WarningMessage = $"Invalid result data for dataset {this.Id}";
-                                    }
-                                    else
-                                    {
+                                        var outputAsDynamic = output.FromJsonDynamic();
                                         this.ResultData = outputAsDynamic.ToJson( true );
                                         result.IsSuccess = true;
+                                    }
+                                    catch ( Exception innerException )
+                                    {
+                                        LogError( $"PersistedDataset \"{this.Name}\" (Id: {this.Id}) build script created invalid result data:\r\n {output}", innerException );
+                                        result.IsSuccess = false;
+                                        result.WarningMessage = $"Unable to parse dataset {this.Id} JSON:\n{output}";
                                     }
                                 }
                                 else
@@ -114,7 +113,7 @@ namespace Rock.Model
                 }
                 catch ( Exception ex )
                 {
-                    LogError( $"An error occurred while updating PersistedDataset (Id: {this.Id}): {ex.Message}" );
+                    LogError( $"An error occurred while updating PersistedDataset (Id: {this.Id}): {ex.Message}", ex );
                     result.IsSuccess = false;
                     result.WarningMessage = ex.Message;
                 }
@@ -126,10 +125,15 @@ namespace Rock.Model
                 }
 
                 activity?.AddTag( "rock.persisted_dataset.build_duration", ( int ) Math.Floor( timeToBuildStopwatch.Elapsed.TotalMilliseconds ) );
-                activity?.AddTag( "rock.persisted_dataset.result_size", ResultData.Length );
+                activity?.AddTag( "rock.persisted_dataset.result_size", ResultData?.Length ?? 0 );
 
                 return result;
             }
+        }
+
+        private void LogError( string errorMessage, Exception innerException )
+        {
+            Rock.Model.ExceptionLogService.LogException( new Exception( errorMessage, innerException ) );
         }
 
         private void LogError( string errorMessage )

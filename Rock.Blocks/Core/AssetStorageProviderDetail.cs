@@ -38,7 +38,7 @@ namespace Rock.Blocks.Core
     [DisplayName( "Asset Storage Provider Detail" )]
     [Category( "Core" )]
     [Description( "Displays the details of a particular asset storage provider." )]
-    [IconCssClass( "fa fa-question" )]
+    [IconCssClass( "ti ti-question-mark" )]
     [SupportedSiteTypes( Model.SiteType.Web )]
 
     #region Block Attributes
@@ -196,7 +196,7 @@ namespace Rock.Blocks.Core
 
             var bag = GetCommonEntityBag( entity );
 
-            bag.LoadAttributesAndValuesForPublicView( entity, RequestContext.CurrentPerson, true, IsAttributeIncluded );
+            bag.LoadAttributesAndValuesForPublicView( entity, RequestContext.CurrentPerson, enforceSecurity: false, attributeFilter: IsAttributeIncluded );
 
             return bag;
         }
@@ -215,7 +215,7 @@ namespace Rock.Blocks.Core
 
             var bag = GetCommonEntityBag( entity );
 
-            bag.LoadAttributesAndValuesForPublicEdit( entity, RequestContext.CurrentPerson, true, IsAttributeIncluded );
+            bag.LoadAttributesAndValuesForPublicEdit( entity, RequestContext.CurrentPerson, enforceSecurity: false, attributeFilter: IsAttributeIncluded );
 
             return bag;
         }
@@ -250,7 +250,7 @@ namespace Rock.Blocks.Core
                 () =>
                 {
                     entity.LoadAttributes( rockContext );
-                    entity.SetPublicAttributeValues( box.Entity.AttributeValues, RequestContext.CurrentPerson, true, IsAttributeIncluded );
+                    entity.SetPublicAttributeValues( box.Entity.AttributeValues, RequestContext.CurrentPerson, enforceSecurity: false, attributeFilter: IsAttributeIncluded );
                 } );
 
             return true;

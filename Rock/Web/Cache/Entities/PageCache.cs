@@ -26,6 +26,7 @@ using System.Web;
 using System.Xml.Linq;
 
 using Rock.Attribute;
+using Rock.Cms;
 using Rock.Data;
 using Rock.Model;
 using Rock.Security;
@@ -99,6 +100,16 @@ namespace Rock.Web.Cache
         /// </value>
         [DataMember]
         public int LayoutId { get; private set; }
+
+        /// <summary>
+        /// Gets the site identifier of the Page's Layout
+        /// NOTE: This is needed so that Page Attributes qualified by SiteId work
+        /// </summary>
+        /// <value>
+        /// The site identifier.
+        /// </value>
+        [DataMember]
+        public int SiteId { get; private set; }
 
         /// <summary>
         /// Gets or sets a value indicating whether [requires encryption].
@@ -311,7 +322,6 @@ namespace Rock.Web.Cache
 
 
         /// <inheritdoc/>
-        [RockInternal( "1.16.4" )]
         [DataMember]
         public string AdditionalSettingsJson { get; private set; }
 
@@ -380,13 +390,34 @@ namespace Rock.Web.Cache
         public int? RateLimitRequestPerPeriod { get; set; }
 
         /// <summary>
-        /// Gets or sets the rate limit period.
+        /// Gets or sets the rate limit period (in seconds).
         /// </summary>
         /// <value>
-        /// The rate limit period.
+        /// The rate limit period (in seconds).
+        /// </value>
+        [Obsolete( "Use RateLimitPeriodDurationSeconds instead." )]
+        [RockObsolete( "1.16.7" )]
+        [DataMember]
+        public virtual int? RateLimitPeriod
+        {
+            get
+            {
+                return this.RateLimitPeriodDurationSeconds;
+            }
+            set
+            {
+                this.RateLimitPeriodDurationSeconds = value;
+            }
+        }
+
+        /// <summary>
+        /// Gets or sets the rate limit period (in seconds).
+        /// </summary>
+        /// <value>
+        /// The rate limit period (in seconds).
         /// </value>
         [DataMember]
-        public int? RateLimitPeriod { get; set; }
+        public int? RateLimitPeriodDurationSeconds { get; set; }
 
         /// <summary>
         /// Gets a value indicating whether this instance is rate limited.
@@ -399,7 +430,7 @@ namespace Rock.Web.Cache
         {
             get
             {
-                return RateLimitPeriod != null && RateLimitRequestPerPeriod != null;
+                return RateLimitPeriodDurationSeconds != null && RateLimitRequestPerPeriod != null;
             }
         }
 
@@ -423,27 +454,26 @@ namespace Rock.Web.Cache
         }
 
         /// <summary>
-        /// Gets the child pages.
-        /// </summary>
-        /// <value>
-        /// The child pages.
-        /// </value>
-        [DataMember]
-        public List<PageCache> Children { get; set; }
-
-        /// <summary>
         /// Gets the <see cref="Site"/> object for the page.
         /// </summary>
         public LayoutCache Layout => LayoutCache.Get( LayoutId );
 
         /// <summary>
-        /// Gets the site identifier of the Page's Layout
-        /// NOTE: This is needed so that Page Attributes qualified by SiteId work
+        /// Gets the child pages.
         /// </summary>
-        /// <value>
-        /// The site identifier.
-        /// </value>
-        public virtual int SiteId => Layout?.SiteId ?? 0;
+        public List<PageCache> ChildPages
+        {
+            get
+            {
+                if ( _childPagesCache == null )
+                {
+                    _childPagesCache = GetPages( new RockContext() );
+                }
+                return _childPagesCache;
+            }
+        }
+
+        private List<PageCache> _childPagesCache;
 
         /// <summary>
         /// Gets a List of child <see cref="PageCache" /> objects.
@@ -718,6 +748,67 @@ namespace Rock.Web.Cache
 
         private List<int> _interactionIntentValueIds;
 
+        /// <summary>
+        /// Gets the <see cref="Cms.PageAdditionalSettings"/> from <see cref="AdditionalSettingsJson"/>.
+        /// </summary>
+        private PageAdditionalSettings PageAdditionalSettings
+        {
+            get
+            {
+                if ( _pageAdditionalSettings == null )
+                {
+                    _pageAdditionalSettings = this.GetAdditionalSettings<PageAdditionalSettings>();
+                }
+
+                return _pageAdditionalSettings;
+            }
+        }
+
+        private PageAdditionalSettings _pageAdditionalSettings;
+
+        /// <summary>
+        /// Gets the list of country codes for countries whose access to this page should be restricted.
+        /// </summary>
+        /// <remarks>
+        /// This is an internal API that supports the Rock infrastructure and not
+        /// subject to the same compatibility standards as public APIs. It may be
+        /// changed or removed without notice in any release. You should only use
+        /// it directly in your code with extreme caution and knowing that doing so
+        /// can result in application failures when updating to a new Rock release.
+        /// </remarks>
+        [RockInternal( "18.0" )]
+        [DataMember]
+        public HashSet<string> RestrictedCountryCodes
+        {
+            get
+            {
+                if ( _restrictedCountryCodes == null )
+                {
+                    var pageRestrictedCountryGuids = this.PageAdditionalSettings.CountriesRestrictedFromAccessing;
+
+                    if ( pageRestrictedCountryGuids?.Any() != true )
+                    {
+                        _restrictedCountryCodes = new HashSet<string>();
+                    }
+                    else
+                    {
+                        _restrictedCountryCodes = DefinedTypeCache.Get( Rock.SystemGuid.DefinedType.LOCATION_COUNTRIES )
+                            .DefinedValues
+                            .Where( dv =>
+                                dv.Value.IsNotNullOrWhiteSpace()
+                                && pageRestrictedCountryGuids.Contains( dv.Guid )
+                            )
+                            .Select( dv => dv.Value.ToUpper() )
+                            .ToHashSet();
+                    }
+                }
+
+                return _restrictedCountryCodes;
+            }
+        }
+
+        private HashSet<string> _restrictedCountryCodes;
+
         #endregion
 
         #region Additional Properties 
@@ -772,6 +863,7 @@ namespace Rock.Web.Cache
             BrowserTitle = page.BrowserTitle;
             ParentPageId = page.ParentPageId;
             LayoutId = page.LayoutId;
+            SiteId = page.SiteId;
             IsSystem = page.IsSystem;
             RequiresEncryption = page.RequiresEncryption;
             EnableViewState = page.EnableViewState;
@@ -800,7 +892,7 @@ namespace Rock.Web.Cache
 #pragma warning restore CS0618
             AdditionalSettingsJson = page.AdditionalSettingsJson;
             MedianPageLoadTimeDurationSeconds = page.MedianPageLoadTimeDurationSeconds;
-            RateLimitPeriod = page.RateLimitPeriod;
+            RateLimitPeriodDurationSeconds = page.RateLimitPeriodDurationSeconds;
             RateLimitRequestPerPeriod = page.RateLimitRequestPerPeriod;
 
             PageContexts = new Dictionary<string, string>();

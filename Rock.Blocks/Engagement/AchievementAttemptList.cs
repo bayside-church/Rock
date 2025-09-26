@@ -40,13 +40,14 @@ namespace Rock.Blocks.Engagement
     [DisplayName( "Achievement Attempt List" )]
     [Category( "Achievements" )]
     [Description( "Lists all the people that have made an attempt at earning an achievement." )]
-    [IconCssClass( "fa fa-list" )]
-    // [SupportedSiteTypes( Model.SiteType.Web )]
+    [IconCssClass( "ti ti-list" )]
+    [SupportedSiteTypes( Model.SiteType.Web )]
 
     [LinkedPage( "Detail Page",
         Description = "The page that will show the achievement attempt details.",
         Key = AttributeKey.DetailPage )]
 
+    [Rock.Cms.DefaultBlockRole( Rock.Enums.Cms.BlockRole.Secondary )]
     [Rock.SystemGuid.EntityTypeGuid( "039c87ae-0835-4844-ac9b-a66ae1d19530" )]
     [Rock.SystemGuid.BlockTypeGuid( "b294c1b9-8368-422c-8054-9672c7f41477" )]
     [CustomizedGrid]
@@ -190,7 +191,7 @@ namespace Rock.Blocks.Engagement
 
             if ( achievementType != null )
             {
-                queryParams.Add( PageParameterKey.AchievementTypeId, achievementType.Id.ToString() );
+                queryParams.Add( PageParameterKey.AchievementTypeId, achievementType.IdKey );
             }
 
             return new Dictionary<string, string>
@@ -227,7 +228,7 @@ namespace Rock.Blocks.Engagement
 
             var queryable = subQueries.Any()
                 ? subQueries.Aggregate( ( a, b ) => a.Union( b ) )
-                : new List<AchieverAttemptItem>().AsQueryable();
+                : new List<AchieverAttemptItem>().AsQueryable().Include( a => a.AchievementAttempt.AchievementType );
 
             // Filter by Achiever Name
             if ( !FilterAchieverName.IsNullOrWhiteSpace() )
@@ -326,7 +327,8 @@ namespace Rock.Blocks.Engagement
         /// <returns><see cref="AchievementTypeCache"/></returns>
         private AchievementTypeCache GetAchievementTypeCache()
         {
-            var achievementTypeId = PageParameter( PageParameterKey.AchievementTypeId ).AsIntegerOrNull();
+            var key = PageParameter( PageParameterKey.AchievementTypeId );
+            var achievementTypeId = Rock.Utility.IdHasher.Instance.GetId( key ) ?? key.AsIntegerOrNull();
 
             if ( achievementTypeId.HasValue )
             {

@@ -18,16 +18,29 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
+using System.Threading.Tasks;
 
-using Rock.Attribute;
 using Rock.Data;
+using Rock.Logging;
+using Rock.RealTime.Topics;
+using Rock.RealTime;
 using Rock.Reporting;
 using Rock.Utility;
 using Rock.Web.Cache;
 using Z.EntityFramework.Plus;
+using Microsoft.Extensions.Logging;
+using Rock.ViewModels.Group.GroupMember;
 
 namespace Rock.Model
 {
+    /*
+    12/16/2024 - DSH
+
+    The GroupMember model participates in the the TPT (Table-Per-Type) pattern. This
+    can cause some rare unexpected results. See the engineering note above the
+    Group class for details.
+    */
+
     /// <summary>
     /// The data access/service class for <see cref="Rock.Model.GroupMember"/> entity objects. 
     /// </summary>
@@ -781,18 +794,31 @@ namespace Rock.Model
         /// <param name="relationshipRoleId">The relationship role identifier.</param>
         public void DeleteKnownRelationship( int personId, int relatedPersonId, int relationshipRoleId )
         {
+            DeleteKnownRelationships( personId, relatedPersonId, new List<int> { relationshipRoleId } );
+        }
+
+        /// <summary>
+        /// Deletes the known relationship.
+        /// </summary>
+        /// <param name="personId">The person identifier.</param>
+        /// <param name="relatedPersonId">The related person identifier.</param>
+        /// <param name="relationshipRoleIds">The relationship role identifiers.</param>
+        internal void DeleteKnownRelationships( int personId, int relatedPersonId, List<int> relationshipRoleIds )
+        {
             var groupMemberService = this;
             var rockContext = this.Context as RockContext;
 
             var knownRelationshipGroupType = GroupTypeCache.Get( Rock.SystemGuid.GroupType.GROUPTYPE_KNOWN_RELATIONSHIPS );
             var ownerRole = knownRelationshipGroupType.Roles.FirstOrDefault( r => r.Guid.Equals( Rock.SystemGuid.GroupRole.GROUPROLE_KNOWN_RELATIONSHIPS_OWNER.AsGuid() ) );
-            var relationshipRole = knownRelationshipGroupType.Roles.FirstOrDefault( r => r.Id == relationshipRoleId );
+            var validRoleIds = knownRelationshipGroupType.Roles.Select( r => r.Id ).ToList();
+            var hasInvalidRole = relationshipRoleIds.Any( roleId => !validRoleIds.Contains( roleId ) );
+
             if ( ownerRole == null )
             {
                 throw new Exception( "Unable to find known relationships owner role" );
             }
 
-            if ( relationshipRole == null )
+            if ( hasInvalidRole )
             {
                 throw new Exception( "Specified relationshipRoleId is not a known relationships role" );
             }
@@ -811,13 +837,27 @@ namespace Rock.Model
             }
 
             // lookup the relationship to delete
-            var relationshipMember = groupMemberService.Queryable( true )
-                .FirstOrDefault( m =>
+            var relationshipMemberQry = groupMemberService.Queryable( true )
+                .Where( m =>
                     m.GroupId == knownRelationshipGroup.Id &&
-                    m.PersonId == relatedPersonId &&
-                    m.GroupRoleId == relationshipRoleId );
+                    m.PersonId == relatedPersonId );
 
-            if ( relationshipMember != null )
+            if ( relationshipRoleIds.Count == 1 )
+            {
+                // We can't pass 'relationshipRoleIds[0]' into the LINQ expression
+                // because it will try to evaluate at execution time instead of
+                // compile time, meaning we get a SQL error about not knowing how
+                // to call the 'getItem(index)' method.
+                var singleRoleId = relationshipRoleIds[0];
+
+                relationshipMemberQry = relationshipMemberQry.Where( m => m.GroupRoleId == singleRoleId );
+            }
+            else
+            {
+                relationshipMemberQry = relationshipMemberQry.Where( m => relationshipRoleIds.Contains( m.GroupRoleId ) );
+            }
+
+            foreach ( var relationshipMember in relationshipMemberQry )
             {
                 var inverseGroupMember = groupMemberService.GetInverseRelationship( relationshipMember, true );
                 if ( inverseGroupMember != null )
@@ -826,8 +866,9 @@ namespace Rock.Model
                 }
 
                 groupMemberService.Delete( relationshipMember );
-                rockContext.SaveChanges();
             }
+
+            rockContext.SaveChanges();
         }
 
         /// <summary>
@@ -1002,7 +1043,6 @@ namespace Rock.Model
         /// <param name="amtOfWeeks">The amt of weeks.</param>
         /// <param name="rockContext">The rock context.</param>
         /// <returns>IQueryable&lt;GroupMember&gt;.</returns>
-        [RockInternal( "1.15" )]
         internal static IQueryable<GroupMember> WhereMembersWithNoAttendanceForNumberOfWeeks( IQueryable<GroupMember> members, int groupId, int amtOfWeeks, RockContext rockContext )
         {
             var attendanceOccurenceService = new AttendanceService( rockContext );
@@ -1029,7 +1069,6 @@ namespace Rock.Model
         /// <param name="amtOfWeeks">The amt of weeks.</param>
         /// <param name="rockContext">The rock context.</param>
         /// <returns>IQueryable&lt;GroupMember&gt;.</returns>
-        [RockInternal( "1.15" )]
         internal static IQueryable<GroupMember> WhereMembersWhoFirstAttendedWithinNumberOfWeeks( IQueryable<GroupMember> members, int groupId, int amtOfWeeks, RockContext rockContext = null )
         {
             rockContext = rockContext ?? new RockContext();
@@ -1066,7 +1105,6 @@ namespace Rock.Model
         /// <param name="amtOfWeeks">The amt of weeks.</param>
         /// <param name="rockContext">The rock context.</param>
         /// <returns>IQueryable&lt;GroupMember&gt;.</returns>
-        [RockInternal( "1.15" )]
         internal static IQueryable<GroupMember> WhereMembersWhoAttendedWithinNumberOfWeeks( IQueryable<GroupMember> members, int groupId, int amtOfWeeks, RockContext rockContext = null )
         {
             rockContext = rockContext ?? new RockContext();
@@ -1084,6 +1122,222 @@ namespace Rock.Model
 
             return members.Where( m => attendedPersonIds.Contains( m.PersonId ) );
         }
+
+        #region RealTime Related
+
+        internal class GroupMemberUpdatedState
+        {
+            /// <inheritdoc cref="IEntity.Id"/>
+            public int Id { get; }
+
+            /// <inheritdoc cref="IEntity.Guid"/>
+            public Guid Guid { get; }
+
+            public EntityContextState State { get; }
+
+            /// <inheritdoc cref="GroupMember.PersonId"/>
+            public int PersonId { get; }
+
+            public int GroupId { get; }
+
+            public int GroupRoleId { get; }
+
+            public GroupMemberUpdatedState( GroupMember groupMember, EntityContextState state )
+            {
+                if ( groupMember == null )
+                {
+                    throw new ArgumentNullException( nameof( groupMember ) );
+                }
+
+                Id = groupMember.Id;
+                Guid = groupMember.Guid;
+                State = state;
+                PersonId = groupMember.PersonId;
+                GroupId = groupMember.GroupId;
+                GroupRoleId = groupMember.GroupRoleId;
+            }
+        }
+
+        /// <summary>
+        /// Sends the group member updated real time notifications for the specified
+        /// group member records.
+        /// </summary>
+        /// <param name="items">The data that describes each group member record when it was enqueued.</param>
+        /// <returns>A task that represents this operation.</returns>
+        internal static async Task SendGroupMemberUpdatedRealTimeNotificationsAsync( IList<GroupMemberUpdatedState> items )
+        {
+            if ( !items.Any() )
+            {
+                return;
+            }
+
+            using ( var rockContext = new RockContext() )
+            {
+                try
+                {
+                    await SendGroupMemberUpdatedRealTimeNotificationsAsync( rockContext, items );
+                }
+                catch ( Exception ex )
+                {
+                    RockLogger.LoggerFactory.CreateLogger<GroupMemberService>()
+                        .LogError( ex, ex.Message );
+                }
+            }
+        }
+
+        /// <summary>
+        /// Send group member updated real time notifications for the GroupMember
+        /// records.
+        /// </summary>
+        /// <param name="rockContext">The context to use when accessing the database.</param>
+        /// <param name="items">The additional data that describes each group member record when it was enqueued.</param>
+        /// <returns>A task that represents this operation.</returns>
+        private static async Task SendGroupMemberUpdatedRealTimeNotificationsAsync( RockContext rockContext, IList<GroupMemberUpdatedState> items )
+        {
+            var bags = GetGroupMemberUpdatedMessageBags( rockContext, items );
+
+            if ( !bags.Any() )
+            {
+                return;
+            }
+
+            var topicClients = RealTimeHelper.GetTopicContext<IGroupPlacement>().Clients;
+
+            var tasks = bags
+                .Select( b =>
+                {
+                    return Task.Run( () =>
+                    {
+                        var channels = GroupPlacementTopic.GetGroupMemberChannelsForBag( b );
+
+                        return topicClients
+                            .Channels( channels )
+                            .GroupMemberUpdated( b );
+                    } );
+                } )
+                .ToArray();
+
+            try
+            {
+                await Task.WhenAll( tasks );
+
+                /*
+                    06/20/2025 - KBH
+
+                    A real-time notification will now be sent every time a Group Member is added to a Group.
+                    To assist with troubleshooting and performance monitoring, debug-level logging has been
+                    added. This will help identify any potential slowdowns this new functionality may
+                    introduce on a church’s system.
+                 */
+                RockLogger.LoggerFactory.CreateLogger<GroupMemberService>()
+                    .LogDebug( "Sent {count} add notifications.", tasks.Count() );
+            }
+            catch ( Exception ex )
+            {
+                RockLogger.LoggerFactory.CreateLogger<GroupMemberService>()
+                    .LogError( ex, ex.Message );
+            }
+        }
+
+        /// <summary>
+        /// Sends the group member deleted real time notifications for the specified
+        /// group member records.
+        /// </summary>
+        /// <param name="items">The data that describes each group member record when it was enqueued.</param>
+        /// <returns>A task that represents this operation.</returns>
+        internal static async Task SendGroupMemberDeletedRealTimeNotificationsAsync( IList<GroupMemberUpdatedState> items )
+        {
+            if ( !items.Any() )
+            {
+                return;
+            }
+
+            using ( var rockContext = new RockContext() )
+            {
+                try
+                {
+                    await SendGroupMemberDeletedRealTimeNotificationsAsync( rockContext, items );
+                }
+                catch ( Exception ex )
+                {
+                    RockLogger.LoggerFactory.CreateLogger<GroupMemberService>()
+                        .LogError( ex, ex.Message );
+                }
+            }
+        }
+
+        /// <summary>
+        /// Send group member deleted real time notifications for the GroupMember
+        /// records.
+        /// </summary>
+        /// <param name="rockContext">The context to use when accessing the database.</param>
+        /// <param name="items">The additional data that describes each group member record when it was enqueued.</param>
+        /// <returns>A task that represents this operation.</returns>
+        private static async Task SendGroupMemberDeletedRealTimeNotificationsAsync( RockContext rockContext, IList<GroupMemberUpdatedState> items )
+        {
+            var bags = GetGroupMemberUpdatedMessageBags( rockContext, items );
+            var topicClients = RealTimeHelper.GetTopicContext<IGroupPlacement>().Clients;
+            var channel = GroupPlacementTopic.GetGroupMemberDeletedChannel();
+
+            foreach ( var item in items )
+            {
+                try
+                {
+                    var bag = bags.FirstOrDefault( b => b.GroupMemberGuid == item.Guid );
+
+                    await topicClients.Channel( channel ).GroupMemberDeleted( item.Guid, bag );
+                }
+                catch ( Exception ex )
+                {
+                    RockLogger.LoggerFactory.CreateLogger<GroupMemberService>()
+                        .LogError( ex, ex.Message );
+                }
+            }
+        }
+
+        /// <summary>
+        /// Gets the group member updated message bag for the group member record.
+        /// </summary>
+        /// <param name="rockContext">The context to use when accessing the database.</param>
+        /// <param name="items">The additional data that describes each group member record when it was enqueued.</param>
+        /// <returns>A list of <see cref="GroupMemberUpdatedMessageBag"/> objects that represent the group member records.</returns>
+        private static List<GroupMemberUpdatedMessageBag> GetGroupMemberUpdatedMessageBags( RockContext rockContext, IList<GroupMemberUpdatedState> items )
+        {
+            var publicApplicationRoot = GlobalAttributesCache.Value( "PublicApplicationRoot" );
+
+            return items
+                .Select( item =>
+                {
+                    var group = GroupCache.Get( item.GroupId );
+                    var person = new PersonService( rockContext ).Get( item.PersonId );
+
+                    var bag = new GroupMemberUpdatedMessageBag
+                    {
+                        GroupIdKey = group.IdKey,
+                        GroupTypeIdKey = Rock.Utility.IdHasher.Instance.GetHash( group.GroupTypeId ),
+                        GroupGuid = group.Guid,
+                        GroupMemberId = item.Id,
+                        GroupMemberIdKey = Rock.Utility.IdHasher.Instance.GetHash( item.Id ),
+                        GroupMemberGuid = item.Guid,
+                        GroupRoleIdKey = Rock.Utility.IdHasher.Instance.GetHash( item.GroupRoleId ),
+                        Person = new ViewModels.Blocks.Group.GroupPlacement.PersonBag
+                        {
+                            PersonIdKey = person.IdKey,
+                            FirstName = person.FirstName,
+                            LastName = person.LastName,
+                            NickName = person.NickName,
+                            Gender = person.Gender,
+                            PhotoUrl = $"{publicApplicationRoot}{person.PhotoUrl.TrimStart( '~', '/' )}"
+                        },
+                    };
+
+                    return bag;
+                } )
+                .Where( bag => bag != null )
+                .ToList();
+        }
+
+        #endregion
     }
 
     /// <summary>

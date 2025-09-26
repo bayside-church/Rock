@@ -18,6 +18,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Data.Entity;
 using System.Linq;
 
 using Rock.Attribute;
@@ -38,7 +39,7 @@ namespace Rock.Blocks.CheckIn
     [DisplayName( "Attendance List" )]
     [Category( "Check-in" )]
     [Description( "Block for displaying the attendance history of a person or a group." )]
-    [IconCssClass( "fa fa-list" )]
+    [IconCssClass( "ti ti-list" )]
     [SupportedSiteTypes( Model.SiteType.Web )]
 
     [SystemGuid.EntityTypeGuid( "73fd78df-5322-4716-a478-3cd0ea07a942" )]
@@ -56,36 +57,7 @@ namespace Rock.Blocks.CheckIn
             public const string AttendanceDate = "AttendanceDate";
         }
 
-        private static class PreferenceKey
-        {
-            public const string FilterEnteredBy = "filter-entered-by";
-            public const string FilterDidAttend = "filter-did-attend";
-        }
-
         #endregion Keys
-
-        #region Properties
-
-        /// <summary>
-        /// Gets the guid of the Person whose entries should be included in the results.
-        /// </summary>
-        /// <value>
-        /// The entered by filter.
-        /// </value>
-        protected Guid? FilterEnteredBy => GetBlockPersonPreferences()
-            .GetValue( PreferenceKey.FilterEnteredBy )
-            .FromJsonOrNull<ListItemBag>()?.Value?.AsGuidOrNull();
-
-        /// <summary>
-        /// Gets the filter indicating DidAttend status of the results.
-        /// </summary>
-        /// <value>
-        /// The DidAttend filter.
-        /// </value>
-        protected string FilterDidAttend => GetBlockPersonPreferences()
-            .GetValue( PreferenceKey.FilterDidAttend );
-
-        #endregion
 
         #region Methods
 
@@ -133,24 +105,13 @@ namespace Rock.Blocks.CheckIn
                 // Check for existing attendance records.
                 //
                 var attendanceQry = attendanceService.Queryable()
+                    .Include( a => a.PersonAlias.Person )
+                    .Include( a => a.CreatedByPersonAlias.Person )
                     .Where( a =>
                         a.Occurrence.GroupId == groupId.Value &&
                         a.Occurrence.OccurrenceDate == attendanceDate.Value &&
                         a.Occurrence.LocationId == groupLocation.LocationId &&
                         a.Occurrence.ScheduleId == scheduleId );
-
-                // Filter by DidAttend
-                if ( FilterDidAttend.IsNotNullOrWhiteSpace() )
-                {
-                    var didAttend = FilterDidAttend.AsBoolean();
-                    attendanceQry = attendanceQry.Where( a => a.DidAttend == didAttend );
-                }
-
-                // Filter by Entered By
-                if ( FilterEnteredBy.HasValue )
-                {
-                    attendanceQry = attendanceQry.Where( a => a.CreatedByPersonAliasId.HasValue && a.CreatedByPersonAlias.Person.Guid == FilterEnteredBy.Value );
-                }
 
                 return attendanceQry;
             }

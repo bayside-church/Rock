@@ -20,12 +20,15 @@ using System.ComponentModel;
 using System.Linq;
 using System.Web.UI;
 using System.Web.UI.WebControls;
+
 using Newtonsoft.Json;
 
 using Rock;
 using Rock.Attribute;
+using Rock.Communication.Chat;
 using Rock.Constants;
 using Rock.Data;
+using Rock.Enums.Communication.Chat;
 using Rock.Enums.Group;
 using Rock.Model;
 using Rock.Security;
@@ -261,6 +264,8 @@ namespace RockWeb.Blocks.Groups
             gGroupTypeGroupRequirements.Actions.AddClick += gGroupTypeGroupRequirements_Add;
             gGroupTypeGroupRequirements.EmptyDataText = Server.HtmlEncode( None.Text );
             gGroupTypeGroupRequirements.GridRebind += gGroupTypeGroupRequirements_GridRebind;
+
+            rblRelationshipStrength.BindToEnum<RelationshipStrength>();
         }
 
         /// <summary>
@@ -271,7 +276,7 @@ namespace RockWeb.Blocks.Groups
         {
             if ( !Page.IsPostBack )
             {
-                ShowDetail( PageParameter( "GroupTypeId" ).AsInteger() );
+                ShowDetail( GetIdFromPageParameter( "GroupTypeId" ).ToIntSafe() );
             }
             else
             {
@@ -334,10 +339,10 @@ namespace RockWeb.Blocks.Groups
         {
             var breadCrumbs = new List<BreadCrumb>();
 
-            int? groupTypeId = PageParameter( pageReference, "GroupTypeId" ).AsIntegerOrNull();
-            if ( groupTypeId != null )
+            var groupTypeId = PageParameter( pageReference, "GroupTypeId" );
+            if ( ! string.IsNullOrEmpty( groupTypeId ) )
             {
-                GroupType groupType = new GroupTypeService( new RockContext() ).Get( groupTypeId.Value );
+                var groupType = GroupTypeCache.Get( groupTypeId, !PageCache.Layout.Site.DisablePredictableIds );
                 if ( groupType != null )
                 {
                     breadCrumbs.Add( new BreadCrumb( groupType.Name, pageReference ) );
@@ -353,6 +358,18 @@ namespace RockWeb.Blocks.Groups
             }
 
             return breadCrumbs;
+        }
+
+        private int? GetIdFromPageParameter( string pageParameterKey )
+        {
+            var id = PageParameter( pageParameterKey ).AsIntegerOrNull();
+
+            // See if it's an IdKey...
+            if ( id == null )
+            {
+                id = Rock.Utility.IdHasher.Instance.GetId( PageParameter( pageParameterKey ) );
+            }
+            return id;
         }
 
         #endregion
@@ -518,6 +535,8 @@ namespace RockWeb.Blocks.Groups
             groupType.EnableGroupTag = cbEnableGroupTag.Checked;
             groupType.AllowAnyChildGroupType = cbAllowAnyChildGroupType.Checked;
             groupType.ShowAdministrator = cbShowAdministrator.Checked;
+            groupType.GroupMemberRecordSourceValueId = dvpRecordSource.SelectedValueAsInt();
+            groupType.AllowGroupSpecificRecordSource = cbAllowGroupSpecificRecordSource.Checked;
             groupType.GroupAttendanceRequiresLocation = cbGroupAttendanceRequiresLocation.Checked;
             groupType.GroupAttendanceRequiresSchedule = cbGroupAttendanceRequiresSchedule.Checked;
             groupType.AttendanceCountsAsWeekendService = cbWeekendService.Checked;
@@ -545,6 +564,17 @@ namespace RockWeb.Blocks.Groups
             groupType.EnableInactiveReason = cbEnableInactiveReason.Checked;
             groupType.RequiresInactiveReason = cbRequireInactiveReason.Checked;
 
+            // Peer Network
+            groupType.IsPeerNetworkEnabled = cbEnablePeerNetwork.Checked;
+
+            groupType.RelationshipStrength = rblRelationshipStrength.SelectedValueAsInt() ?? ( int ) RelationshipStrength.None;
+            groupType.RelationshipGrowthEnabled = cbEnableRelationshipGrowth.Checked;
+
+            groupType.LeaderToLeaderRelationshipMultiplier = tbLeaderToLeaderRelationshipMultiplier.Text.AsDecimalPercentageOrNull( minPercentage: 0, maxPercentage: 100 ) ?? 1m;
+            groupType.LeaderToNonLeaderRelationshipMultiplier = tbLeaderToNonLeaderRelationshipMultiplier.Text.AsDecimalPercentageOrNull( minPercentage: 0, maxPercentage: 100 ) ?? 1m;
+            groupType.NonLeaderToLeaderRelationshipMultiplier = tbNonLeaderToLeaderRelationshipMultiplier.Text.AsDecimalPercentageOrNull( minPercentage: 0, maxPercentage: 100 ) ?? 1m;
+            groupType.NonLeaderToNonLeaderRelationshipMultiplier = tbNonLeaderToNonLeaderRelationshipMultiplier.Text.AsDecimalPercentageOrNull( minPercentage: 0, maxPercentage: 100 ) ?? 1m;
+
             // RSVP
             groupType.EnableRSVP = cbGroupRSVPEnabled.Checked;
             groupType.RSVPReminderSystemCommunicationId = ddlRsvpReminderSystemCommunication.SelectedValueAsInt();
@@ -566,6 +596,20 @@ namespace RockWeb.Blocks.Groups
             groupType.ScheduleReminderSystemCommunicationId = ddlScheduleReminderSystemCommunication.SelectedValue.AsIntegerOrNull();
             groupType.ScheduleReminderEmailOffsetDays = nbScheduleReminderOffsetDays.Text.AsIntegerOrNull();
             groupType.ScheduleConfirmationLogic = ddlScheduleConfirmationLogic.SelectedValueAsEnum<ScheduleConfirmationLogic>();
+
+            ScheduleCoordinatorNotificationType? notificationTypes = null;
+            foreach ( var li in cblScheduleCoordinatorNotificationTypes.Items.Cast<ListItem>() )
+            {
+                if ( li.Selected )
+                {
+                    var selectedType = ( ScheduleCoordinatorNotificationType ) li.Value.AsInteger();
+                    notificationTypes = notificationTypes.HasValue
+                        ? notificationTypes | selectedType
+                        : selectedType;
+                }
+            }
+
+            groupType.ScheduleCoordinatorNotificationTypes = notificationTypes;
 
             // if GroupHistory is turned off, we'll delete group and group member history for this group type
             bool deleteGroupHistory = false;
@@ -622,6 +666,17 @@ namespace RockWeb.Blocks.Groups
             }
 
             avcEditAttributes.GetEditValues( groupType );
+
+            // Chat
+            if ( ChatHelper.IsChatEnabled )
+            {
+                groupType.IsChatAllowed = cbIsChatAllowed.Checked;
+                groupType.IsChatEnabledForAllGroups = cbIsChatEnabledForAllGroups.Checked;
+                groupType.IsLeavingChatChannelAllowed = cbIsLeavingChatChannelAllowed.Checked;
+                groupType.IsChatChannelPublic = cbIsChatChannelPublic.Checked;
+                groupType.IsChatChannelAlwaysShown = cbIsChatChannelAlwaysShown.Checked;
+                groupType.ChatPushNotificationMode = ddlChatPushNotificationMode.SelectedValueAsEnum<ChatNotificationMode>();
+            }
 
             if ( !groupType.IsValid )
             {
@@ -910,6 +965,27 @@ namespace RockWeb.Blocks.Groups
             cbGroupsRequireCampus.Checked = groupType.GroupsRequireCampus;
             cbShowAdministrator.Checked = groupType.ShowAdministrator;
 
+            dvpRecordSource.DefinedTypeId = DefinedTypeCache.Get( Rock.SystemGuid.DefinedType.RECORD_SOURCE_TYPE.AsGuid() )?.Id;
+            dvpRecordSource.SetValue( groupType.GroupMemberRecordSourceValueId );
+
+            cbAllowGroupSpecificRecordSource.Checked = groupType.AllowGroupSpecificRecordSource;
+
+            // Peer Network
+            cbEnablePeerNetwork.Checked = groupType.IsPeerNetworkEnabled;
+            pnlPeerNetwork.Visible = groupType.IsPeerNetworkEnabled;
+
+            rblRelationshipStrength.SetValue( groupType.RelationshipStrength );
+            cbEnableRelationshipGrowth.Checked = groupType.RelationshipGrowthEnabled;
+
+            var showPeerNetworkAdvancedSettings = groupType.AreAnyRelationshipMultipliersCustomized;
+            swShowPeerNetworkAdvancedSettings.Checked = showPeerNetworkAdvancedSettings;
+            pnlPeerNetworkAdvanced.Visible = showPeerNetworkAdvancedSettings;
+
+            tbLeaderToLeaderRelationshipMultiplier.Text = groupType.LeaderToLeaderRelationshipMultiplier.FormatAsPercent();
+            tbLeaderToNonLeaderRelationshipMultiplier.Text = groupType.LeaderToNonLeaderRelationshipMultiplier.FormatAsPercent();
+            tbNonLeaderToLeaderRelationshipMultiplier.Text = groupType.NonLeaderToLeaderRelationshipMultiplier.FormatAsPercent();
+            tbNonLeaderToNonLeaderRelationshipMultiplier.Text = groupType.NonLeaderToNonLeaderRelationshipMultiplier.FormatAsPercent();
+
             // Display
             cbShowInGroupList.Checked = groupType.ShowInGroupList;
             cbShowInNavigation.Checked = groupType.ShowInNavigation;
@@ -998,6 +1074,12 @@ namespace RockWeb.Blocks.Groups
             ddlScheduleReminderSystemCommunication.SetValue( groupType.ScheduleReminderSystemCommunicationId );
             nbScheduleReminderOffsetDays.Text = groupType.ScheduleReminderEmailOffsetDays.ToString();
 
+            foreach ( var li in cblScheduleCoordinatorNotificationTypes.Items.Cast<ListItem>() )
+            {
+                var notificationType = ( ScheduleCoordinatorNotificationType ) li.Value.AsInteger();
+                li.Selected = ( groupType.ScheduleCoordinatorNotificationTypes & notificationType ) == notificationType;
+            }
+
             // Attributes
             gtpInheritedGroupType.Enabled = !groupType.IsSystem;
             gtpInheritedGroupType.SelectedGroupTypeId = groupType.InheritedGroupTypeId;
@@ -1020,6 +1102,37 @@ namespace RockWeb.Blocks.Groups
             {
                 role.LoadAttributes();
                 GroupTypeRolesState.Add( role );
+            }
+
+            // Chat
+            if ( ChatHelper.IsChatEnabled )
+            {
+                cbIsChatAllowed.Checked = groupType.IsChatAllowed;
+                cbIsChatEnabledForAllGroups.Checked = groupType.IsChatEnabledForAllGroups;
+                cbIsLeavingChatChannelAllowed.Checked = groupType.IsLeavingChatChannelAllowed;
+                cbIsChatChannelPublic.Checked = groupType.IsChatChannelPublic;
+                cbIsChatChannelAlwaysShown.Checked = groupType.IsChatChannelAlwaysShown;
+                ddlChatPushNotificationMode.SetValue( ( int ) groupType.ChatPushNotificationMode );
+
+                SetChatControlsVisibility( groupType.IsChatAllowed );
+
+                if ( groupType.IsSystem )
+                {
+                    cbIsChatAllowed.Enabled = false;
+                    cbIsChatEnabledForAllGroups.Enabled = false;
+                    cbIsLeavingChatChannelAllowed.Enabled = false;
+                    cbIsChatChannelPublic.Enabled = false;
+                    cbIsChatChannelAlwaysShown.Enabled = false;
+                    ddlChatPushNotificationMode.Enabled = false;
+
+                    nbChatRunSyncJob.Visible = false;
+                }
+
+                wpChat.Visible = true;
+            }
+            else
+            {
+                wpChat.Visible = false;
             }
 
             BindGroupTypeRolesGrid();
@@ -1622,6 +1735,10 @@ namespace RockWeb.Blocks.Groups
             cbCanView.Checked = groupTypeRole.CanView;
             cbCanEdit.Checked = groupTypeRole.CanEdit;
             cbCanManageMembers.Checked = groupTypeRole.CanManageMembers;
+            cbIsCheckInAllowed.Checked = groupTypeRole.IsCheckInAllowed;
+            cbIsExcludedFromPeerNetwork.Checked = groupTypeRole.IsExcludedFromPeerNetwork;
+            cbCanTakeAttendance.Checked = groupTypeRole.CanTakeAttendance;
+            cbRoleIsPublic.Checked = groupTypeRole.IsPublic;
 
             nbMinimumRequired.Text = groupTypeRole.MinCount.HasValue ? groupTypeRole.MinCount.ToString() : string.Empty;
             nbMinimumRequired.Help = string.Format(
@@ -1634,6 +1751,9 @@ namespace RockWeb.Blocks.Groups
                 "The maximum number of {0} in this {1} that are allowed to have this role.",
                 memberTerm.Pluralize(),
                 groupTerm );
+
+            ddlChatRole.SetValue( groupTypeRole.ChatRole.ConvertToInt() );
+            ddlChatRole.Visible = ChatHelper.IsChatEnabled && cbIsChatAllowed.Checked;
 
             ShowDialog( "GroupTypeRoles", true );
         }
@@ -1709,8 +1829,13 @@ namespace RockWeb.Blocks.Groups
             groupTypeRole.CanView = cbCanView.Checked;
             groupTypeRole.CanEdit = cbCanEdit.Checked;
             groupTypeRole.CanManageMembers = cbCanManageMembers.Checked;
+            groupTypeRole.IsCheckInAllowed = cbIsCheckInAllowed.Checked;
+            groupTypeRole.IsExcludedFromPeerNetwork = cbIsExcludedFromPeerNetwork.Checked;
+            groupTypeRole.CanTakeAttendance = cbCanTakeAttendance.Checked;
+            groupTypeRole.IsPublic = cbRoleIsPublic.Checked;
             groupTypeRole.MinCount = nbMinimumRequired.Text.AsIntegerOrNull();
             groupTypeRole.MaxCount = nbMaximumAllowed.Text.AsIntegerOrNull();
+            groupTypeRole.ChatRole = ddlChatRole.SelectedValueAsEnum<ChatRole>();
             groupTypeRole.LoadAttributes();
 
             Helper.GetEditValues( phGroupTypeRoleAttributes, groupTypeRole );
@@ -2634,7 +2759,7 @@ namespace RockWeb.Blocks.Groups
             GroupRequirement requirement = e.Row.DataItem as GroupRequirement;
             if ( requirement != null )
             {
-                lAppliesToDataViewId.Text = requirement.AppliesToDataViewId.HasValue ? "<i class=\"fa fa-check\"></i>" : string.Empty;
+                lAppliesToDataViewId.Text = requirement.AppliesToDataViewId.HasValue ? "<i class=\"ti ti-check\"></i>" : string.Empty;
             }
         }
 
@@ -2750,7 +2875,7 @@ namespace RockWeb.Blocks.Groups
             var dataViewId = dataViewValue.ToString().AsIntegerOrNull();
             if ( dataViewId.HasValue )
             {
-                return "<i class=\"fa fa-check\"></i>";
+                return "<i class=\"ti ti-check\"></i>";
             }
 
             return string.Empty;
@@ -3202,6 +3327,78 @@ namespace RockWeb.Blocks.Groups
         }
 
         #endregion
+
+        #region Peer Network Controls
+
+        /// <summary>
+        /// Handles the CheckedChanged event of the cbEnablePeerNetwork control.
+        /// </summary>
+        /// <param name="sender">The source of the event.</param>
+        /// <param name="e">The <see cref="EventArgs" /> instance containing the event data.</param>
+        protected void cbEnablePeerNetwork_CheckedChanged( object sender, EventArgs e )
+        {
+            pnlPeerNetwork.Visible = cbEnablePeerNetwork.Checked;
+        }
+
+        /// <summary>
+        /// Handles the CheckedChanged event of the swShowPeerNetworkAdvancedSettings control.
+        /// </summary>
+        /// <param name="sender">The source of the event.</param>
+        /// <param name="e">The <see cref="EventArgs" /> instance containing the event data.</param>
+        protected void swShowPeerNetworkAdvancedSettings_CheckedChanged( object sender, EventArgs e )
+        {
+            pnlPeerNetworkAdvanced.Visible = swShowPeerNetworkAdvancedSettings.Checked;
+        }
+
+        #endregion Peer Network Controls
+
+        #region Chat Controls
+
+        /// <summary>
+        /// Handles the CheckedChanged event of the cbIsChatAllowed control.
+        /// </summary>
+        /// <param name="sender">The source of the event.</param>
+        /// <param name="e">The <see cref="EventArgs"/> instance containing the event data.</param>
+        protected void cbIsChatAllowed_CheckedChanged( object sender, EventArgs e )
+        {
+            nbDisableChatChannels.Visible = false;
+
+            var isChatAllowed = cbIsChatAllowed.Checked;
+
+            SetChatControlsVisibility( isChatAllowed );
+
+            if ( isChatAllowed )
+            {
+                return;
+            }
+
+            using ( var rockContext = new RockContext() )
+            {
+                var count = new GroupTypeService( rockContext )
+                    .GetChatEnabledGroupCount( hfGroupTypeId.Value.AsInteger() );
+
+                if ( count > 0 )
+                {
+                    nbDisableChatChannels.Text = $"{count:N0} chat {"channel".PluralizeIf( count > 1 )} will be immediately disabled if you disable chat for this group type.";
+                    nbDisableChatChannels.Visible = true;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Sets the visibility for the chat controls.
+        /// </summary>
+        /// <param name="isChatAllowed">Whether chat is currently allowed for this <see cref="GroupType"/>.</param>
+        private void SetChatControlsVisibility( bool isChatAllowed )
+        {
+            cbIsChatEnabledForAllGroups.Visible = isChatAllowed;
+            cbIsLeavingChatChannelAllowed.Visible = isChatAllowed;
+            cbIsChatChannelPublic.Visible = isChatAllowed;
+            cbIsChatChannelAlwaysShown.Visible = isChatAllowed;
+            ddlChatPushNotificationMode.Visible = isChatAllowed;
+        }
+
+        #endregion Chat Controls
 
         protected void ddlGroupRequirementType_SelectedIndexChanged( object sender, EventArgs e )
         {

@@ -559,7 +559,7 @@ namespace Rock.Web.UI.Controls
             _aSecurity.ID = "_aSecurity";
             _aSecurity.Attributes["class"] = "btn btn-security btn-xs btn-square security js-notesecurity";
             _aSecurity.Attributes["data-entitytype-id"] = EntityTypeCache.Get( typeof( Rock.Model.Note ) ).Id.ToString();
-            _aSecurity.InnerHtml = "<i class='fa fa-lock'></i>";
+            _aSecurity.InnerHtml = "<i class='ti ti-lock'></i>";
             Controls.Add( _aSecurity );
 
             _dtCreateDate.ID = this.ID + "_tbCreateDate";
@@ -922,11 +922,6 @@ $@"Rock.controls.noteEditor.initialize({{
             note.EditedByPersonAliasId = currentPerson?.PrimaryAliasId;
             note.EditedDateTime = RockDateTime.Now;
             note.NoteUrl = this.RockBlock()?.CurrentPageReference?.BuildUrl();
-#pragma warning disable CS0618 // Type or member is obsolete
-            // Set this so anything doing direct SQL queries will still find
-            // the right set of notes.
-            note.ApprovalStatus = NoteApprovalStatus.Approved;
-#pragma warning restore CS0618 // Type or member is obsolete
 
             rockContext.SaveChanges();
             Rock.Attribute.Helper.SaveAttributeValues( note );

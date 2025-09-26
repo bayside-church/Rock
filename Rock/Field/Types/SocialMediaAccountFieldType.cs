@@ -32,7 +32,7 @@ namespace Rock.Field.Types
     /// Field used to configure and display the social Network accounts
     /// </summary>
     [Serializable]
-    [FieldTypeUsage( FieldTypeUsage.System )]
+    [FieldTypeUsage( FieldTypeUsage.Administrative )]
     [RockPlatformSupport( Utility.RockPlatform.WebForms, Utility.RockPlatform.Obsidian )]
     [Rock.SystemGuid.FieldTypeGuid( Rock.SystemGuid.FieldType.SOCIAL_MEDIA_ACCOUNT )]
     public class SocialMediaAccountFieldType : FieldType
@@ -77,9 +77,9 @@ namespace Rock.Field.Types
                     {
 
                         string iconCssClass = privateConfigurationValues[ICONCSSCLASS_KEY];
-                        if ( !iconCssClass.Contains( "fa-fw" ) )
+                        if ( !iconCssClass.Contains( "ti-fw" ) )
                         {
-                            iconCssClass = iconCssClass + " fa-fw";
+                            iconCssClass = iconCssClass + " ti-fw";
                         }
                         mergeFields.Add( ICONCSSCLASS_KEY, iconCssClass );
                     }

@@ -83,7 +83,12 @@ namespace Rock.ViewModels.Blocks.Lms.LearningProgramDetail
         /// <summary>
         /// Gets or sets the configuration mode of the LearningProgram.
         /// </summary>
-        public ConfigurationMode ConfigurationMode { get; set; }
+        public ConfigurationMode? ConfigurationMode { get; set; }
+
+        /// <summary>
+        /// Gets or sets the default LearningGradingSystem for the program.
+        /// </summary>
+        public ListItemBag DefaultGradingSystem { get; set; }
 
         /// <summary>
         /// Gets or sets the Description of the LearningProgram.
@@ -126,6 +131,11 @@ namespace Rock.ViewModels.Blocks.Lms.LearningProgramDetail
         /// be displayed in public contexts (e.g. on a public site).
         /// </summary>
         public bool IsPublic { get; set; }
+
+        /// <summary>
+        /// Gets or sets a value indicating whether public security should be enforced for this program.
+        /// </summary>
+        public bool EnforcePublicSecurity { get; set; }
 
         /// <summary>
         /// Gets or sets the name of the LearningProgram.

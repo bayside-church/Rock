@@ -33,7 +33,7 @@ namespace Rock.Field.Types
     /// <summary>
     /// Field Type to select a <see cref="CommunicationTemplate" />. Stored as the CommunicationTemplate's Guid.
     /// </summary>
-    [FieldTypeUsage( FieldTypeUsage.System )]
+    [FieldTypeUsage( FieldTypeUsage.Administrative )]
     [RockPlatformSupport( Utility.RockPlatform.WebForms, Utility.RockPlatform.Obsidian )]
     [Rock.SystemGuid.FieldTypeGuid( Rock.SystemGuid.FieldType.COMMUNICATION_TEMPLATE )]
     public class CommunicationTemplateFieldType : FieldType, IEntityFieldType, IEntityReferenceFieldType
@@ -67,11 +67,17 @@ namespace Rock.Field.Types
             {
                 bool includeInactive = configuration.ContainsKey( INCLUDE_INACTIVE_KEY ) && configuration[INCLUDE_INACTIVE_KEY].AsBoolean();
 
-                var templates = new CommunicationTemplateService( rockContext ).Queryable().Where( c => ( c.IsActive || includeInactive ) ).OrderBy( t => t.Name ).Select( a => new ListItemBag()
-                {
-                    Value = a.Guid.ToString(),
-                    Text = a.Name
-                } ).ToList();
+                var templates = new CommunicationTemplateService( rockContext )
+                    .Queryable()
+                    .Where( c => ( c.IsActive || includeInactive ) && c.UsageType == null ) // By default, exclude templates with a specified usage type (e.g., Communication Flows)
+                    .Select( a => new ListItemBag()
+                    {
+                        Value = a.Guid.ToString(),
+                        Text = a.Name
+                    } )
+                    .ToList()
+                    .OrderBy( t => t.Text )
+                    .ToList();
 
                 if ( templates.Any() )
                 {
@@ -212,7 +218,6 @@ namespace Rock.Field.Types
             cbIncludeInactive.AutoPostBack = true;
             cbIncludeInactive.CheckedChanged += OnQualifierUpdated;
             cbIncludeInactive.Label = "Include Inactive";
-            cbIncludeInactive.Text = "Yes";
             cbIncludeInactive.Help = "When set, inactive campuses will be included in the list.";
 
             var controls = base.ConfigurationControls();
@@ -275,11 +280,17 @@ namespace Rock.Field.Types
             editControl.Items.Add( new ListItem() );
             var includeInactive = configurationValues.ContainsKey( INCLUDE_INACTIVE_KEY ) && configurationValues[INCLUDE_INACTIVE_KEY].Value.AsBoolean();
 
-            var templates = new CommunicationTemplateService( new RockContext() ).Queryable().Where( v => includeInactive || v.IsActive ).OrderBy( t => t.Name ).Select( a => new
-            {
-                a.Guid,
-                a.Name
-            } );
+            var templates = new CommunicationTemplateService( new RockContext() )
+                .Queryable()
+                .Where( v => ( includeInactive || v.IsActive ) && v.UsageType == null ) // By default, exclude templates with a specified usage type (e.g., Communication Flows)
+                .Select( a => new
+                {
+                    a.Guid,
+                    a.Name
+                } )
+                .ToList()
+                .OrderBy( t => t.Name )
+                .ToList();
 
             if ( templates.Any() )
             {
@@ -322,17 +333,20 @@ namespace Rock.Field.Types
             var editControl = control as ListControl;
             if ( editControl != null )
             {
-                var includeInactive = configurationValues.ContainsKey( INCLUDE_INACTIVE_KEY ) && configurationValues[INCLUDE_INACTIVE_KEY].Value.AsBoolean();
-                if ( !includeInactive )
+                if ( configurationValues != null )
                 {
-                    var listItem = editControl.Items.FindByValue( value );
-                    if ( listItem == null )
+                    var includeInactive = configurationValues.ContainsKey( INCLUDE_INACTIVE_KEY ) && configurationValues[INCLUDE_INACTIVE_KEY].Value.AsBoolean();
+                    if ( !includeInactive )
                     {
-                        var valueGuid = value.AsGuid();
-                        var template = new CommunicationTemplateService( new RockContext() ).Queryable().Where( v => v.Guid == valueGuid ).FirstOrDefault();
-                        if ( template != null )
+                        var listItem = editControl.Items.FindByValue( value );
+                        if ( listItem == null )
                         {
-                            editControl.Items.Add( new ListItem( template.Name, template.Guid.ToString() ) );
+                            var valueGuid = value.AsGuid();
+                            var template = new CommunicationTemplateService( new RockContext() ).Queryable().Where( v => v.Guid == valueGuid ).FirstOrDefault();
+                            if ( template != null )
+                            {
+                                editControl.Items.Add( new ListItem( template.Name, template.Guid.ToString() ) );
+                            }
                         }
                     }
                 }

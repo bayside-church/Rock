@@ -23,6 +23,16 @@
 
 /** Static Guids used by the Rock application */
 export const DefinedValue = {
+    /** The attendance record came from a kiosk. */
+    AttendanceSourceKiosk: "9A21D7EB-BCB5-4466-B62F-70EC5008B6B9",
+    /** The attendance record came from a legacy kiosk. */
+    AttendanceSourceLegacyKiosk: "0B25A627-679B-4B73-AA84-305DEF24815A",
+    /** The attendance record came from a mobile check-in. */
+    AttendanceSourceMobile: "972E8841-A3C9-4DDD-BD24-A414C0290331",
+    /** The attendance record from from a proximity (bluetooth low energy) check-in. */
+    AttendanceSourceProximity: "799e6fa9-33d8-44aa-93dc-3dbaf25fe9f1",
+    /** The attendance record came from a physical token, such as NFC or QR Code scan. */
+    AttendanceSourceToken: "8059cc0a-bd93-4d35-9458-6e6dff2fa3e3",
     /** Benevolence Approved */
     BenevolenceApproved: "18D3A2DA-F2BA-49AE-83EB-7E60DCD18A3B",
     /** Benevolence Denied */
@@ -53,6 +63,8 @@ export const DefinedValue = {
     BlockTemplateMobileDailyChallengeEntry: "30ECA4B6-0869-4656-A4CD-B8729CB29E76",
     /** The block template mobile event item occurrence list by audience */
     BlockTemplateMobileEventItemOccurrenceListByAudience: "26944B71-7B69-4943-8EC2-3506F728D943",
+    /** The block template for ScheduledTransactionList block. */
+    BlockTemplateMobileFinanceScheduledTransactionList: "4FB77C19-3D70-4051-9FED-DF254B3FB310",
     /** The block template for the mobile group member list. */
     BlockTemplateMobileGroupMemberList: "E5618730-9E50-4BDA-9E13-D27697F83980",
     /** The block template for the mobile group member view. */
@@ -73,6 +85,8 @@ export const DefinedValue = {
     BlockTemplateMobileGroupView: "559346FB-C684-42CF-8F4C-CF4A1C278AD6",
     /** The block template for the mobile group finder. */
     BlockTemplateMobileGroupsGroupFinder: "1B6D540A-2E40-44F6-8AE9-2857DE913459",
+    /** The block template for the mobile my notes block. */
+    BlockTemplateMobileMyNotes: "652A4E12-6C15-407D-9620-ED39190899A5",
     /** The block template for mobile my prayer requests. */
     BlockTemplateMobileMyPrayerRequests: "198F3006-5F0F-48AB-9EA0-2FA56F633753",
     /** The block template for the mobile notes block. */
@@ -115,6 +129,16 @@ export const DefinedValue = {
     ChartStyleFlot: "B45DA8E1-B9A6-46FD-9A2B-E8440D7D6AAC",
     /** Rock Chart Style */
     ChartStyleRock: "2ABB2EA0-B551-476C-8F6B-478CD08C2227",
+    /** The default 'Haha' reaction for chat messages. */
+    ChatReactionHaha: "A71E5E19-BF17-4424-BCC0-9CE87544DAA5",
+    /** The default 'Like' reaction for chat messages. */
+    ChatReactionLike: "DEE11D1A-4AC2-4264-8E33-235C0D177626",
+    /** The default 'Love' reaction for chat messages. */
+    ChatReactionLove: "BC0D5463-93F6-4087-9D94-C8F393B969E6",
+    /** The default 'Sad' reaction for chat messages. */
+    ChatReactionSad: "94214A68-A5E0-4B44-8194-E0B91F00CF9E",
+    /** The default 'Wow' reaction for chat messages. */
+    ChatReactionWow: "304DF5A2-142E-494D-8EEE-D4DBE81B1579",
     /** The check in attendance type physical */
     CheckInAttendanceTypePhysical: "290CE89F-7DA0-41ED-82C1-1249A4A42BA4",
     /** The check in attendance type virtual */
@@ -177,10 +201,14 @@ export const DefinedValue = {
     DefaultRssChannel: "D6149581-9EFC-40D8-BD38-E92C0717BEDA",
     /** Check-in Kiosk device type */
     DeviceTypeCheckinKiosk: "BC809626-1389-4543-B8BB-6FAC79C27AFD",
+    /** Cloud Print Proxy device type */
+    DeviceTypeCloudPrintProxy: "EF5BF148-C9E0-4F96-8152-BB23CD85D845",
     /** Giving Kiosk device type */
     DeviceTypeGivingKiosk: "64A1DBE5-10AD-42F1-A9BA-646A781D4112",
     /** Printer device type */
     DeviceTypePrinter: "8284B128-E73B-4863-9FC2-43E6827B65E6",
+    /** Proxy device type */
+    DeviceTypeProxy: "EF5BF148-C9E0-4F96-8152-BB23CD85D845",
     /** Entity Set for the purpose of doing a Person Merge request */
     EntitySetPurposePersonMergeRequest: "214EB26F-5493-4540-B2EF-F0887C8FBB9E",
     /** Amazon External Link Type */
@@ -234,6 +262,8 @@ export const DefinedValue = {
     InteractionchanneltypeChallengeProgress: "6AA529BD-9FA5-43AD-A98E-B8DF5F997146",
     /** Interaction Channel Type: Challenges */
     InteractionchanneltypeChallenges: "593607DC-4537-46E4-939F-60E0F74A1518",
+    /** Interaction Channel Type: Chat */
+    InteractionchanneltypeChat: "0E2EAE2C-957B-4CCB-8826-AA5627C27BBD",
     /** Interaction Channel Type: Communication */
     InteractionchanneltypeCommunication: "55004F5C-A8ED-7CB7-47EE-5988E9F8E0A8",
     /** Interaction Channel Type: Content Channel */
@@ -382,6 +412,12 @@ export const DefinedValue = {
     NoncashAssetStocksandbonds: "B29D7D89-357F-47F9-BE7B-52AFF3892007",
     /** Non-Cash Asset Type: Vehicles. */
     NoncashAssetVehicles: "C1DCBE74-88FE-4876-8943-5783499CBBE0",
+    /** The activation organizational objective. */
+    OrganizationalObjectiveTypeActivation: "283BC4AC-CCCD-4FCF-8C94-9848B6B5E734",
+    /** The discipleship organizational objective. */
+    OrganizationalObjectiveTypeDiscipleship: "9DFD8F1E-922E-420D-AE00-F640A2EFF405",
+    /** The outreach organizational objective. */
+    OrganizationalObjectiveTypeOutreach: "396B3980-EB66-446F-86B4-6C6E95FC74A7",
     /** The PBX CDR medium value */
     PbxCdrMediumValue: "B3904B57-62A2-57AC-43EA-94D4DEBA3D51",
     /** Person Connection Status - Attendee */
@@ -466,6 +502,32 @@ export const DefinedValue = {
     ProjectTypeInPerson: "FF3F0C5C-9775-4A09-9CCF-94902DB99BF6",
     /** Project Type = Project Due */
     ProjectTypeProjectDue: "C999D489-5B8F-4892-BCC3-90DFFBC524F5",
+    /** The Apple TV app record source. */
+    RecordSourceTypeAppleTvApp: "96884743-3C6B-41D9-A8FD-5DDEE65A7983",
+    /** The check-in record source. */
+    RecordSourceTypeCheckIn: "12A138E7-6D93-4D84-B99A-545395694553",
+    /** The event registration record source. */
+    RecordSourceTypeEventRegistration: "8C461A53-160D-4693-A394-154673E83D17",
+    /** The external website record source. */
+    RecordSourceTypeExternalWebsite: "8F2394AE-AFF1-4773-8BF8-E4B9C9D5E978",
+    /** The family registration record source. */
+    RecordSourceTypeFamilyRegistration: "264C0969-55EA-4DF2-8FFD-2E3AAB311601",
+    /** The giving record source. */
+    RecordSourceTypeGiving: "A6677492-5AA5-4A09-9854-D9C54705C67D",
+    /** The group registration record source. */
+    RecordSourceTypeGroupRegistration: "A0F69572-B5C3-4195-8FD1-6FC72BB84FC8",
+    /** The mobile app record source. */
+    RecordSourceTypeMobileApp: "D465F0B7-4519-46B8-A4FF-11A207F9D86F",
+    /** The pledge record source. */
+    RecordSourceTypePledge: "59EAB321-27D7-4D57-A1EE-38287416E840",
+    /** The prayer record source. */
+    RecordSourceTypePrayer: "2B8DF7D7-FA3A-4A56-A72B-DB4CAAB2DF32",
+    /** The Roku TV app record source. */
+    RecordSourceTypeRokuTvApp: "1849A5FB-1434-45AA-AD78-D403A3C7685A",
+    /** The sign-up record source. */
+    RecordSourceTypeSignUp: "D0163E35-4065-4097-B018-D7D8092C86F7",
+    /** The workflow record source. */
+    RecordSourceTypeWorkflow: "42BA3F0C-00B5-4104-A9F8-C4C092BA2E0C",
     /** Schedule Type:  Weekend Service */
     ScheduleTypeWeekendService: "033FC160-2650-4C97-8075-0C0114FA7A8D",
     /** Spiritual Gifts: Administration */

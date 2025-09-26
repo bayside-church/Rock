@@ -176,7 +176,7 @@ namespace Rock.Model
                         var result = personWithRequirementsList.Select( a =>
                         {
                             GroupMemberRequirementService groupMemberRequirementService = new GroupMemberRequirementService( rockContext );
-                            
+
                             // Get the nullable group member requirement ID based on the PersonId, GroupRequirementId, GroupId, and GroupRoleId.
                             int? groupMemberRequirementId = groupMemberRequirementService.GetIdByPersonIdRequirementIdGroupIdGroupRoleId( a.PersonId, this.Id, groupId, groupRoleId );
                             var personGroupRequirementStatus = new PersonGroupRequirementStatus
@@ -288,6 +288,7 @@ namespace Rock.Model
                                 warningPersonIds = warningTableResult.Rows.OfType<System.Data.DataRow>().Select( r => Convert.ToInt32( r[0] ) );
                             }
                         }
+                        GroupMemberRequirementService groupMemberRequirementService = new GroupMemberRequirementService( rockContext );
 
                         var result = personQryIdList.Select( a =>
                         {
@@ -302,12 +303,13 @@ namespace Rock.Model
                             {
                                 PersonId = a,
                                 GroupRequirement = this,
+                                GroupMemberRequirementId = groupMemberRequirementService.GetIdByPersonIdRequirementIdGroupIdGroupRoleId( a, this.Id, groupId, groupRoleId ),
                                 MeetsGroupRequirement = personIds.Contains( a )
-                                      ? ( ( warningPersonIds != null && warningPersonIds.Contains( a ) )
+                                    ? ( ( warningPersonIds != null && warningPersonIds.Contains( a ) )
                                           ? MeetsGroupRequirement.MeetsWithWarning
                                           : MeetsGroupRequirement.Meets
-                                          )
-                                      : isRequirementDue ? MeetsGroupRequirement.NotMet : MeetsGroupRequirement.MeetsWithWarning,
+                                      )
+                                    : isRequirementDue ? MeetsGroupRequirement.NotMet : MeetsGroupRequirement.MeetsWithWarning,
                             };
                             return personGroupRequirementStatus;
                         } );
@@ -909,7 +911,9 @@ namespace Rock.Model
 
             if ( personId > 0 && groupId > 0 )
             {
-                var metRequirement = new GroupMemberRequirementService( rockContext )
+                // Check first for a manually-completed or overridden group member requirement, as there's no need to go
+                // all the way through the standard calculation process for these scenarios.
+                var manuallyMetRequirement = new GroupMemberRequirementService( rockContext )
                     .Queryable()
                     .AsNoTracking()
                     .FirstOrDefault( gmr =>
@@ -917,8 +921,7 @@ namespace Rock.Model
                         && gmr.GroupMember.GroupId == groupId
                         && gmr.GroupMember.PersonId == personId
                         && (
-                            gmr.RequirementMetDateTime.HasValue
-                            || gmr.WasManuallyCompleted
+                            gmr.WasManuallyCompleted
                             || gmr.WasOverridden
                         )
                         && (
@@ -930,13 +933,13 @@ namespace Rock.Model
                         )
                     );
 
-                if ( metRequirement != null )
+                if ( manuallyMetRequirement != null )
                 {
                     return new PersonGroupRequirementStatus
                     {
                         GroupRequirement = this,
                         MeetsGroupRequirement = MeetsGroupRequirement.Meets,
-                        GroupMemberRequirementId = metRequirement.Id,
+                        GroupMemberRequirementId = manuallyMetRequirement.Id,
                         PersonId = personId
                     };
                 }
@@ -1027,8 +1030,12 @@ namespace Rock.Model
 
                 if ( meetsGroupRequirement == MeetsGroupRequirement.Meets )
                 {
-                    // They meet the requirement so update the Requirement Met Date/Time.
-                    groupMemberRequirement.RequirementMetDateTime = currentDateTime;
+                    if ( !groupMemberRequirement.RequirementMetDateTime.HasValue )
+                    {
+                        // Only set this met date/time if not already set (so we can manage expiring requirements).
+                        groupMemberRequirement.RequirementMetDateTime = currentDateTime;
+                    }
+
                     groupMemberRequirement.RequirementFailDateTime = null;
                     groupMemberRequirement.RequirementWarningDateTime = null;
                 }

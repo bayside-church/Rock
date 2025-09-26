@@ -22,10 +22,13 @@ using System.Linq;
 using System.Net.Http;
 using System.Web.UI;
 using System.Web.UI.WebControls;
+
 using Newtonsoft.Json;
+
 using Rock;
 using Rock.Attribute;
 using Rock.Communication;
+using Rock.Communication.Chat;
 using Rock.Constants;
 using Rock.Data;
 using Rock.Model;
@@ -118,6 +121,7 @@ namespace RockWeb.Blocks.Groups
         DefaultValue = "1",
         Order = 11 )]
 
+    [Rock.Cms.DefaultBlockRole( Rock.Enums.Cms.BlockRole.Primary )]
     [Rock.SystemGuid.BlockTypeGuid( Rock.SystemGuid.BlockType.GROUPS_GROUP_MEMBER_DETAIL )]
     public partial class GroupMemberDetail : RockBlock
     {
@@ -357,9 +361,12 @@ namespace RockWeb.Blocks.Groups
                     // This should be replaced with a block setting when converted to Obsidian. -dsh
                     var pageReferenceHistory = ( Dictionary<int, (BreadCrumb pageBreadCrumb, List<BreadCrumb> blockBreadCrumbs)> ) System.Web.HttpContext.Current.Session["RockPageReferenceHistory"];
 
-                    var queryString = pageReferenceHistory.Values
+                    var currentBreadCrumbs = pageReferenceHistory.Values
                         .SelectMany( h => new List<BreadCrumb> { h.pageBreadCrumb }.Union( h.blockBreadCrumbs ) )
                         .Where( bc => bc != null && bc.Url.IsNotNullOrWhiteSpace() && bc.Url.StartsWith( "/" ) )
+                        .ToList();
+
+                    var queryString = currentBreadCrumbs
                         .Select( bc => Uri.TryCreate( "http://ignored" + bc.Url, UriKind.Absolute, out var uri ) ? uri : null )
                         .Where( u => u != null && u.Query.IsNotNullOrWhiteSpace() && u.Query != "?" )
                         .Select( u => u.ParseQueryString() )
@@ -369,7 +376,10 @@ namespace RockWeb.Blocks.Groups
                     if ( !this.IsSignUpMode && !groupIdParam.HasValue || groupIdParam.Value != groupMember.GroupId )
                     {
                         // if the GroupMember's Group isn't included in the breadcrumbs, make sure to add the Group to the breadcrumbs so we know which group the group member is in
-                        breadCrumbs.Add( new BreadCrumb( groupMember.Group.Name, true ) );
+                        if ( !currentBreadCrumbs.Exists( bc => bc.Name == groupMember.Group.Name ) )
+                        {
+                            breadCrumbs.Add( new BreadCrumb( groupMember.Group.Name, true ) );
+                        }
                     }
 
                     breadCrumbs.Add( new BreadCrumb( groupMember.Person.FullName, pageReference ) );
@@ -595,7 +605,7 @@ namespace RockWeb.Blocks.Groups
             }
             else
             {
-                lGroupIconHtml.Text = "<i class='fa fa-user' ></i>";
+                lGroupIconHtml.Text = "<i class='ti ti-user' ></i>";
             }
 
             if ( groupMember.Id.Equals( 0 ) )
@@ -681,6 +691,17 @@ namespace RockWeb.Blocks.Groups
 
             rblCommunicationPreference.SetValue( ( ( int ) groupMember.CommunicationPreference ).ToString() );
             rblCommunicationPreference.Enabled = !readOnly;
+
+            if ( ChatHelper.IsChatEnabled && group.GetIsChatEnabled() )
+            {
+                cbIsChatMuted.Checked = groupMember.IsChatMuted;
+                cbIsChatBanned.Checked = groupMember.IsChatBanned;
+                pnlChatPreferences.Visible = true;
+            }
+            else
+            {
+                pnlChatPreferences.Visible = false;
+            }
 
             var registrations = new RegistrationRegistrantService( rockContext )
                 .Queryable().AsNoTracking()
@@ -1661,6 +1682,12 @@ namespace RockWeb.Blocks.Groups
                 groupMember.Note = tbNote.Text;
                 groupMember.GroupMemberStatus = rblStatus.SelectedValueAsEnum<GroupMemberStatus>();
                 groupMember.CommunicationPreference = rblCommunicationPreference.SelectedValueAsEnum<CommunicationType>();
+
+                if ( ChatHelper.IsChatEnabled && group.GetIsChatEnabled() )
+                {
+                    groupMember.IsChatMuted = cbIsChatMuted.Checked;
+                    groupMember.IsChatBanned = cbIsChatBanned.Checked;
+                }
 
                 if ( cbIsNotified.Visible )
                 {

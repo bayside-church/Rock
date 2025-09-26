@@ -126,7 +126,7 @@ namespace Rock.Web.UI.Controls
             }
             
 
-            html.Append( @"<a href=""#"" class=""btn btn-sm btn-danger key-value-remove""><i class=""fa fa-times""></i></a></div>" );
+            html.Append( @"<a href=""#"" class=""btn btn-sm btn-danger key-value-remove""><i class=""ti ti-x""></i></a></div>" );
 
             var hfValueHtml = new HtmlInputHidden();
             hfValueHtml.AddCssClass( "js-value-html" );
@@ -162,7 +162,7 @@ namespace Rock.Web.UI.Controls
                 writer.AddAttribute( HtmlTextWriterAttribute.Href, "#" );
                 writer.AddAttribute( HtmlTextWriterAttribute.Class, "btn btn-sm btn-danger key-value-remove" );
                 writer.RenderBeginTag( HtmlTextWriterTag.A );
-                writer.AddAttribute( HtmlTextWriterAttribute.Class, "fa fa-times" );
+                writer.AddAttribute( HtmlTextWriterAttribute.Class, "ti ti-x" );
                 writer.RenderBeginTag( HtmlTextWriterTag.I );
                 writer.RenderEndTag();
                 writer.RenderEndTag();
@@ -187,7 +187,7 @@ namespace Rock.Web.UI.Controls
             writer.AddAttribute( HtmlTextWriterAttribute.Class, addButtonCssClass );
             writer.AddAttribute( HtmlTextWriterAttribute.Href, "#" );
             writer.RenderBeginTag( HtmlTextWriterTag.A );
-            writer.AddAttribute(HtmlTextWriterAttribute.Class, "fa fa-plus-circle");
+            writer.AddAttribute(HtmlTextWriterAttribute.Class, "ti ti-circle-plus");
             writer.RenderBeginTag( HtmlTextWriterTag.I );
             
             writer.RenderEndTag();
@@ -301,7 +301,7 @@ namespace Rock.Web.UI.Controls
             }
             else
             {
-                html.AppendFormat( @"<input class=""key-value-key form-control input-width-md js-key-value-input"" type=""text"" placeholder=""{0}""></input> ", KeyPrompt );
+                html.AppendFormat( @"<input class=""key-value-key form-control js-key-value-input"" type=""text"" placeholder=""{0}""></input> ", KeyPrompt );
             }
         }
 
@@ -323,7 +323,7 @@ namespace Rock.Web.UI.Controls
             }
             else
             {
-                html.AppendFormat( @"<input class=""key-value-value input-width-md form-control js-key-value-input"" type=""text"" placeholder=""{0}""></input>", ValuePrompt );
+                html.AppendFormat( @"<input class=""key-value-value form-control js-key-value-input"" type=""text"" placeholder=""{0}""></input>", ValuePrompt );
             }
         }
 

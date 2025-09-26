@@ -22,12 +22,14 @@ using System.Diagnostics;
 using System.Linq;
 using System.Text;
 
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 using Rock.Attribute;
 using Rock.Data;
 using Rock.Logging;
 using Rock.Model;
+using Rock.Observability;
 using Rock.SystemKey;
 
 namespace Rock.Jobs
@@ -40,10 +42,18 @@ namespace Rock.Jobs
 
     [IntegerField(
         "Command Timeout",
-        AttributeKey.CommandTimeout,
         Description = "Maximum amount of time (in seconds) to wait for each SQL command to complete. On a large database with lots of Interactions, this could take several hours or more.",
         IsRequired = false,
-        DefaultIntegerValue = AttributeDefaultValue.CommandTimeout )]
+        DefaultIntegerValue = AttributeDefaultValue.CommandTimeout,
+        Order = 0,
+        Key = AttributeKey.CommandTimeout )]
+    [IntegerField(
+        "Lookback Maximum for Related (days)",
+        Description = "The number of days into the past the job should look for unmatched related entities that reference the Interaction table. (default 1 day)",
+        IsRequired = false,
+        DefaultIntegerValue = 1,
+        Order = 1,
+        Key = AttributeKey.LookbackMaximumForRelated )]
 
     [RockLoggingCategory]
     public class PopulateInteractionSessionData : RockJob
@@ -58,21 +68,28 @@ namespace Rock.Jobs
             /// <summary>
             /// IP Address GeoCoding Component
             /// </summary>
-            [RockObsolete( "1.17" )]
+            [RockObsolete( "17.0" )]
             [Obsolete]
             public const string IPAddressGeoCodingComponent = "IPAddressGeoCodingComponent";
 
             /// <summary>
             /// Lookback Maximum in Days
             /// </summary>
-            [RockObsolete( "1.17" )]
+            [RockObsolete( "17.0" )]
             [Obsolete]
             public const string LookbackMaximumInDays = "LookbackMaximumInDays";
 
             /// <summary>
+            /// The number of days into the past the job should look for
+            /// unmatched <see cref="InteractionEntity"/> records that
+            /// reference the <see cref="Interaction"/> table.
+            /// </summary>
+            public const string LookbackMaximumForRelated = "LookbackMaximumForRelated";
+
+            /// <summary>
             /// How Many Records
             /// </summary>
-            [RockObsolete( "1.17" )]
+            [RockObsolete( "17.0" )]
             [Obsolete]
             public const string MaxRecordsToProcessPerRun = "HowManyRecords";
 
@@ -141,17 +158,32 @@ namespace Rock.Jobs
 
             var jobResult = new RockJobResult();
 
-            // Update Interaction Counts and Durations for Session
-            var result = ProcessInteractionCountAndDuration( settings );
-            if ( result.IsNotNullOrWhiteSpace() )
+            // STEP 1: Update Interaction Counts and Durations for Session
+            using ( ObservabilityHelper.StartActivity( "Interaction Counts and Duration" ) )
             {
-                jobResult.OutputMessages.Add( result );
+                // Update Interaction Counts and Durations for Session
+               var result = ProcessInteractionCountAndDuration( settings );
+                if ( result.IsNotNullOrWhiteSpace() )
+                {
+                    jobResult.OutputMessages.Add( result );
+                }
+            }
+
+            // STEP 2: Update InteractionEntity references.
+            using ( ObservabilityHelper.StartActivity( "Interaction Entity References" ) )
+            {
+                var result = ProcessMissingInteractionEntityReferences( settings );
+
+                if ( result.IsNotNullOrWhiteSpace() )
+                {
+                    jobResult.OutputMessages.Add( result );
+                }
             }
 
             // Print error messages
             foreach ( var error in _errors )
             {
-                jobResult.OutputMessages.Add( $"<i class='fa fa-circle text-danger'></i> {error}" );
+                jobResult.OutputMessages.Add( $"<i class='ti ti-circle-filled text-danger'></i> {error}" );
             }
 
             // Log caught exceptions
@@ -212,7 +244,7 @@ namespace Rock.Jobs
             {
                 using ( var rockContext = new RockContext() )
                 {
-                    rockContext.Database.CommandTimeout = _commandTimeout;
+                    rockContext.Database.SetCommandTimeout( _commandTimeout );
 
                     var interactionSessions = GetInteractionSessionsForActivityUpdate( rockContext, startDate, cutoffStartDateTime, batchSize );
 
@@ -238,12 +270,16 @@ namespace Rock.Jobs
                             // Special Query to only get what we need to know.
                             // This could cause a lot of database calls, but it is consistently just a few milliseconds.
                             // This seems to increase overall performance vs Eager loading all the interactions of the session
-                            var interactionStats = new InteractionSessionService( rockContext ).Queryable().Where( a => a.Id == interactionSession.Id ).Select( s => new
+                            var interactionStats = new InteractionSessionService( rockContext ).Queryable()
+                                .Where( a => a.Id == interactionSession.Id )
+                                .Select( s => new
                             {
                                 Count = s.Interactions.Count(),
                                 MaxDateTime = s.Interactions.Max( i => ( DateTime? ) i.InteractionDateTime ),
                                 MinDateTime = s.Interactions.Min( i => ( DateTime? ) i.InteractionDateTime ),
-                                InteractionChannelId = s.Interactions.FirstOrDefault().InteractionComponent.InteractionChannelId
+                                InteractionChannelId = s.Interactions.FirstOrDefault().InteractionComponent.InteractionChannelId,
+                                PersonAliasId = s.Interactions.FirstOrDefault( i => i.PersonAliasId != null ).PersonAliasId,
+                                NullPersonAliasInteractionIds = s.Interactions.Where( i => i.PersonAliasId == null ).Select( i => i.Id ).ToList()
                             } ).FirstOrDefault();
 
                             interactionSession.InteractionCount = interactionStats?.Count ?? 0;
@@ -276,6 +312,15 @@ namespace Rock.Jobs
 
                             interactionSession.DurationLastCalculatedDateTime = interactionCalculationDateTime;
 
+                            // If there are any interactions that have a null PersonAliasId
+                            // and another interaction in the same series has a non-null PersonAliasId
+                            // update the null PersonAliasId to use the non-null PersonAliasId value.
+                            if ( interactionStats.NullPersonAliasInteractionIds.Any() )
+                            {
+                                var interactionsForUpdate = new InteractionService( rockContext ).GetByIds( interactionStats.NullPersonAliasInteractionIds );
+                                rockContext.BulkUpdate( interactionsForUpdate, i => new Interaction { PersonAliasId = interactionStats.PersonAliasId } );
+                            }
+
                             totalRecordsProcessed += 1;
                         }
 
@@ -298,7 +343,7 @@ namespace Rock.Jobs
 
             Rock.Web.SystemSettings.SetValue( SystemSetting.POPULATE_INTERACTION_SESSION_DATA_JOB_SETTINGS, settings.ToJson() );
 
-            return $"<i class='fa fa-circle text-success'></i> Updated Interaction Count And Session Duration for {totalRecordsProcessed} {"interaction session".PluralizeIf( totalRecordsProcessed != 1 )} in {Math.Round( stopwatch.Elapsed.TotalSeconds, 2 )} secs.";
+            return $"<i class='ti ti-circle-filled text-success'></i> Updated Interaction Count And Session Duration for {totalRecordsProcessed} {"interaction session".PluralizeIf( totalRecordsProcessed != 1 )} in {Math.Round( stopwatch.Elapsed.TotalSeconds, 2 )} secs.";
         }
 
         /// <summary>
@@ -374,6 +419,34 @@ namespace Rock.Jobs
             var interactionSessions = interactionSessionsWithNullDurationLastCalculatedDateTime.Union( interactionSessionsWithOutOfDate ).ToList();
 
             return interactionSessions;
+        }
+
+        /// <summary>
+        /// Processes any <see cref="InteractionEntity"/> records that have a
+        /// <c>null</c> <see cref="InteractionEntity.InteractionId"/>.
+        /// </summary>
+        /// <param name="settings">The settings this job is configured with.</param>
+        /// <returns>An HTML message that describes the result.</returns>
+        private string ProcessMissingInteractionEntityReferences( PopulateInteractionSessionDataJobSettings settings )
+        {
+            try
+            {
+                var sw = Stopwatch.StartNew();
+                var daysBack = GetAttributeValue( AttributeKey.LookbackMaximumForRelated ).AsIntegerOrNull() ?? 1;
+                var cutoff = RockDateTime.Now.AddDays( -daysBack );
+
+                var recordCount = InteractionEntityService.UpdateMissingInteractionIds( cutoff, null, _commandTimeout );
+
+                sw.Stop();
+
+                return $"<i class='ti ti-circle-filled text-success'></i> Updated Missing Interaction Entity References for {recordCount} {"record".PluralizeIf( recordCount != 1 )} in {Math.Round( sw.Elapsed.TotalSeconds, 2 )} secs.";
+            }
+            catch ( Exception ex )
+            {
+                ExceptionLogService.LogException( ex );
+
+                return $"<i class='ti ti-circle-filled text-danger'></i> Error in Updating Missing Interaction Entity References: {ex.Message.EncodeHtml()}";
+            }
         }
 
         private void LogDebugInfo( string taskName, string message )

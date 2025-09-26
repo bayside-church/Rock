@@ -26,6 +26,15 @@ import { ListItemBag } from "@Obsidian/ViewModels/Utility/listItemBag";
 
 /** The additional configuration options for the Learning Class Detail block. */
 export type LearningClassDetailOptionsBag = {
+    /** Gets or sets the number of active classes using the default grading system. */
+    activeClassesUsingDefaultGradingSystem: number;
+
+    /** Gets or sets whether the current person is authorized to view grades. */
+    canViewGrades: boolean;
+
+    /** Gets or sets whether the course has announcements enabled. */
+    courseAllowsAnnouncements: boolean;
+
     /** Gets or sets the available grading systems. */
     gradingSystems?: ListItemBag[] | null;
 
@@ -34,4 +43,7 @@ export type LearningClassDetailOptionsBag = {
 
     /** Gets or sets the available semesters for this course. */
     semesters?: ListItemBag[] | null;
+
+    /** Gets or sets the character limit of the SMS medium. */
+    smsMediumCharacterLimit: number;
 };

@@ -27,6 +27,7 @@ using Rock.Security;
 using Rock.ViewModels.Blocks;
 using Rock.ViewModels.Blocks.Lms.LearningGradingSystemScaleDetail;
 using Rock.ViewModels.Utility;
+using Rock.Web;
 using Rock.Web.Cache;
 
 namespace Rock.Blocks.Lms
@@ -38,8 +39,8 @@ namespace Rock.Blocks.Lms
     [DisplayName( "Learning Grading System Scale Detail" )]
     [Category( "LMS" )]
     [Description( "Displays the details of a particular learning grading system scale." )]
-    [IconCssClass( "fa fa-question" )]
-    // [SupportedSiteTypes( Model.SiteType.Web )]
+    [IconCssClass( "ti ti-question-mark" )]
+    [SupportedSiteTypes( Model.SiteType.Web )]
 
     #region Block Attributes
 
@@ -47,7 +48,7 @@ namespace Rock.Blocks.Lms
 
     [Rock.SystemGuid.EntityTypeGuid( "b14cb1a6-b60b-45b0-8f7d-457a869a25f2" )]
     [Rock.SystemGuid.BlockTypeGuid( "332ab5bc-7e34-4710-a5dd-c50749ff11b5" )]
-    public class LearningGradingSystemScaleDetail : RockEntityDetailBlockType<LearningGradingSystemScale, LearningGradingSystemScaleBag>
+    public class LearningGradingSystemScaleDetail : RockEntityDetailBlockType<LearningGradingSystemScale, LearningGradingSystemScaleBag>, IBreadCrumbBlock
     {
         #region Keys
 
@@ -121,8 +122,8 @@ namespace Rock.Blocks.Lms
                 return;
             }
 
-            var isViewable = entity.IsAuthorized( Authorization.VIEW, RequestContext.CurrentPerson );
-            box.IsEditable = entity.IsAuthorized( Authorization.EDIT, RequestContext.CurrentPerson );
+            var isViewable = BlockCache.IsAuthorized( Authorization.VIEW, RequestContext.CurrentPerson );
+            box.IsEditable = BlockCache.IsAuthorized( Authorization.EDIT, RequestContext.CurrentPerson );
 
             entity.LoadAttributes( RockContext );
 
@@ -170,6 +171,7 @@ namespace Rock.Blocks.Lms
             {
                 IdKey = entity.IdKey,
                 Description = entity.Description,
+                HighlightColor = entity.HighlightColor,
                 IsPassing = entity.IsPassing,
                 ThresholdPercentage = entity.ThresholdPercentage ?? 0,
                 Name = entity.Name
@@ -186,7 +188,7 @@ namespace Rock.Blocks.Lms
 
             var bag = GetCommonEntityBag( entity );
 
-            bag.LoadAttributesAndValuesForPublicView( entity, RequestContext.CurrentPerson );
+            bag.LoadAttributesAndValuesForPublicView( entity, RequestContext.CurrentPerson, enforceSecurity: false );
 
             return bag;
         }
@@ -201,7 +203,7 @@ namespace Rock.Blocks.Lms
 
             var bag = GetCommonEntityBag( entity );
 
-            bag.LoadAttributesAndValuesForPublicEdit( entity, RequestContext.CurrentPerson );
+            bag.LoadAttributesAndValuesForPublicEdit( entity, RequestContext.CurrentPerson, enforceSecurity: false );
 
             return bag;
         }
@@ -220,6 +222,9 @@ namespace Rock.Blocks.Lms
             box.IfValidProperty( nameof( box.Bag.IsPassing ),
                 () => entity.IsPassing = box.Bag.IsPassing );
 
+            box.IfValidProperty( nameof( box.Bag.HighlightColor ),
+                () => entity.HighlightColor = box.Bag.HighlightColor );
+
             box.IfValidProperty( nameof( box.Bag.Name ),
                 () => entity.Name = box.Bag.Name );
 
@@ -231,7 +236,7 @@ namespace Rock.Blocks.Lms
                 {
                     entity.LoadAttributes( RockContext );
 
-                    entity.SetPublicAttributeValues( box.Bag.AttributeValues, RequestContext.CurrentPerson );
+                    entity.SetPublicAttributeValues( box.Bag.AttributeValues, RequestContext.CurrentPerson, enforceSecurity: false );
                 } );
 
             return true;
@@ -276,7 +281,7 @@ namespace Rock.Blocks.Lms
             else
             {
                 // Create a new entity.
-                entity = new LearningGradingSystemScale();
+                entity = new LearningGradingSystemScale { LearningGradingSystemId = RequestContext.PageParameterAsId( PageParameterKey.LearningGradingSystemId ) };
                 entityService.Add( entity );
             }
 
@@ -286,9 +291,9 @@ namespace Rock.Blocks.Lms
                 return false;
             }
 
-            if ( !entity.IsAuthorized( Authorization.EDIT, RequestContext.CurrentPerson ) )
+            if ( !BlockCache.IsAuthorized( Authorization.EDIT, RequestContext.CurrentPerson ) )
             {
-                error = ActionBadRequest( $"Not authorized to edit ${LearningGradingSystemScale.FriendlyTypeName}." );
+                error = ActionBadRequest( $"Not authorized to edit {LearningGradingSystemScale.FriendlyTypeName}." );
                 return false;
             }
 
@@ -332,8 +337,6 @@ namespace Rock.Blocks.Lms
         [BlockAction]
         public BlockActionResult Save( ValidPropertiesBox<LearningGradingSystemScaleBag> box )
         {
-            var entityService = new LearningGradingSystemScaleService( RockContext );
-
             if ( !TryGetEntityForEditAction( box.Bag.IdKey, out var entity, out var actionError ) )
             {
                 return actionError;
@@ -355,50 +358,51 @@ namespace Rock.Blocks.Lms
 
             RockContext.SaveChanges();
 
+            var parentPageUrl = this.GetParentPageUrl( new Dictionary<string, string>
+            {
+                [PageParameterKey.LearningGradingSystemId] = PageParameter( PageParameterKey.LearningGradingSystemId )
+            } );
+
             if ( isNew )
             {
-                return ActionContent( System.Net.HttpStatusCode.Created, this.GetCurrentPageUrl( new Dictionary<string, string>
-                {
-                    [PageParameterKey.LearningGradingSystemScaleId] = entity.IdKey
-                } ) );
+                return ActionContent( System.Net.HttpStatusCode.Created, parentPageUrl );
             }
-
-            // Ensure navigation properties will work now.
-            entity = entityService.Get( entity.Id );
 
             // This block doesn't contain a view mode so return to the parent page instead.
-            return ActionOk( this.GetCurrentPageUrl( new Dictionary<string, string>
-            {
-                [PageParameterKey.LearningGradingSystemScaleId] = entity.IdKey
-            } ) );
-        }
-
-        /// <summary>
-        /// Deletes the specified entity.
-        /// </summary>
-        /// <param name="key">The identifier of the entity to be deleted.</param>
-        /// <returns>A string that contains the URL to be redirected to on success.</returns>
-        [BlockAction]
-        public BlockActionResult Delete( string key )
-        {
-            var entityService = new LearningGradingSystemScaleService( RockContext );
-
-            if ( !TryGetEntityForEditAction( key, out var entity, out var actionError ) )
-            {
-                return actionError;
-            }
-
-            if ( !entityService.CanDelete( entity, out var errorMessage ) )
-            {
-                return ActionBadRequest( errorMessage );
-            }
-
-            entityService.Delete( entity );
-            RockContext.SaveChanges();
-
-            return ActionOk( this.GetParentPageUrl() );
+            return ActionOk( parentPageUrl );
         }
 
         #endregion
+
+        public BreadCrumbResult GetBreadCrumbs( PageReference pageReference )
+        {
+            using ( var rockContext = new RockContext() )
+            {
+                var learningGradingSystemScaleId = pageReference.GetPageParameter( PageParameterKey.LearningGradingSystemScaleId );
+                var learningGradingSystemScaleName = new LearningGradingSystemScaleService( rockContext )
+                    .GetSelect( learningGradingSystemScaleId, b => b.Name );
+                if ( learningGradingSystemScaleName == null )
+                {
+                    // If the LearningGradingSystemScaleId is not found, we are creating a new grading scale.
+                    learningGradingSystemScaleName = "New Grading Scale";
+                }
+                else if ( learningGradingSystemScaleName == string.Empty )
+                {
+                    // If the name is empty, we will use a default name.
+                    learningGradingSystemScaleName = "Grading Scale";
+                }
+
+                var breadCrumbPageRef = new PageReference( pageReference.PageId, pageReference.RouteId, pageReference.Parameters );
+                var breadCrumb = new BreadCrumbLink( learningGradingSystemScaleName, breadCrumbPageRef );
+
+                return new BreadCrumbResult
+                {
+                    BreadCrumbs = new List<IBreadCrumb>
+                   {
+                       breadCrumb
+                   }
+                };
+            }
+        }
     }
 }

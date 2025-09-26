@@ -4,7 +4,7 @@
     <ContentTemplate>
         <div class="panel panel-block">
             <div class="panel-heading">
-                <h1 class="panel-title"><i class="fa fa-copy"></i>&nbsp;Merge Records</h1>
+                <h1 class="panel-title"><i class="ti ti-copy"></i>&nbsp;Merge Records</h1>
             </div>
             <div class="panel-body">
 
@@ -39,6 +39,8 @@
 
                     <asp:HiddenField ID="hfSelectedColumnPersonId" runat="server" />
 
+                    <asp:HiddenField ID="hfSwitchState" runat="server" />
+
                     <Rock:NotificationBox runat="server"
                         ID="nbSecurityAlert"
                         NotificationBoxType="danger"
@@ -55,6 +57,8 @@
 
                     <Rock:NotificationBox ID="nbGroupMemberAttributeConflict" Heading="Conflicting Group Member Attribute Values:" runat="server" NotificationBoxType="Warning" Visible="false" />
 
+                    <Rock:Switch ID="swShowMatchingData" runat="server" Text="Show Matching Data" />
+
                     <div class="grid">
                         <Rock:Grid ID="gValues" TableStriped="false" CssClass="sticky-headers js-sticky-headers js-person-merge-table" RowStyle-CssClass="js-merge-field-row" runat="server" EnableResponsiveTable="false" AllowSorting="false" EmptyDataText="No Results" />
                     </div>
@@ -68,7 +72,7 @@
 
         <script>
             function syncPersonSelection() {
-                var $selectedCheckbox = $('.js-person-merge-table').find('.js-header-checkbox-icon.fa-check-square-o');
+                var $selectedCheckbox = $('.js-person-merge-table').find('.js-header-checkbox-icon.ti-square-check');
                 var hasMultipleFamilies = $selectedCheckbox.parent().find('.js-person-header').hasClass('js-person-has-multiple-families');
 
                 $('.js-multiple-family-target-enable').each(function (index) {
@@ -85,9 +89,9 @@
                 // If a primary person was selected before postback, set the checkbox icon.
                 var selectedPersonId = $('#<%=hfSelectedColumnPersonId.ClientID%>').val();
                 if (selectedPersonId != '') {
-                    jQuery('.js-header-checkbox-icon').removeClass('fa-check-square-o').addClass('fa-square-o');
+                    jQuery('.js-header-checkbox-icon').removeClass('ti-square-check').addClass('ti-square');
                     jQuery("div").find('[data-person-id=' + selectedPersonId + ']').children('.js-header-checkbox-icon')
-                        .removeClass('fa-square-o').addClass('fa-check-square-o');
+                        .removeClass('ti-square').addClass('ti-square-check');
                 }
 
                 syncPersonSelection();
@@ -96,9 +100,9 @@
                     // The checkbox in the header was clicked, so we want to set the checkbox/radiobuttons as checked for all the person's selection controls
                     var $checkboxIcon = $(this).children('.js-header-checkbox-icon');
 
-                    if ($checkboxIcon.hasClass('fa-square-o')) {
-                        $checkboxIcon.removeClass('fa-square-o').addClass('fa-check-square-o');
-                        $('.js-header-checkbox-icon').not($checkboxIcon).removeClass('fa-check-square-o').addClass('fa-square-o');
+                    if ($checkboxIcon.hasClass('ti-square')) {
+                        $checkboxIcon.removeClass('ti-square').addClass('ti-square-check');
+                        $('.js-header-checkbox-icon').not($checkboxIcon).removeClass('ti-square-check').addClass('ti-square');
                         var personId = $(this).attr('data-person-id');
                         $('#<%=hfSelectedColumnPersonId.ClientID%>').val(personId);
 
@@ -117,8 +121,40 @@
                     $(this).closest('.js-merge-field-row').find('.js-selection-control[type=radio]').not($(this)).closest('.js-merge-field-cell').removeClass('selected')
                     $(this).closest('.js-merge-field-cell').addClass('selected')
                 });
+
+                $switchControl = $('#<%=swShowMatchingData.ClientID%>').closest('.custom-control');
+                $(".show-matching-data-switch").append($switchControl);
+
+                $('#<%= swShowMatchingData.ClientID %>').on('change', function () {
+                    var isChecked = $(this).is(':checked');
+                    if (isChecked) {
+                        $('#<%= gValues.ClientID %>').addClass('show-matching-data');
+                    }
+                    else {
+                        $('#<%= gValues.ClientID %>').removeClass('show-matching-data');
+                    }
+                    // Update the hidden field switch state
+                    $('#<%= hfSwitchState.ClientID %>').val(isChecked);
+                });
+
             });
+
         </script>
+
+        <style>
+            .show-matching-data-switch {
+                vertical-align: bottom !important;
+            }
+
+            .show-matching-data .matching-data {
+                visibility: visible;
+            }
+
+            .matching-data {
+                visibility: collapse;
+                background-color: var(--color-interface-softer);
+            }
+        </style>
 
     </ContentTemplate>
 </asp:UpdatePanel>

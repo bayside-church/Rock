@@ -8,7 +8,7 @@
             <div class="panel panel-block panel-analytics">
                 <div class="panel-heading panel-follow">
                     <h1 class="panel-title">
-                        <i class="fa fa-list"></i>
+                        <i class="ti ti-list"></i>
                         Pledge Analytics
                     </h1>
 
@@ -21,7 +21,7 @@
                     <div class="row row-eq-height-md">
 
                         <div class="col-md-3 filter-options">
-                            <Rock:AccountPicker ID="apAccount" runat="server" Label="Account" Required="true" />
+                            <Rock:AccountPicker ID="apAccounts" runat="server" Label="Account" Required="true" AllowMultiSelect="true" />
 
                             <Rock:SlidingDateRangePicker ID="drpSlidingDateRange" runat="server" Label="Date Range" EnabledSlidingDateRangeTypes="Previous, Last, Current, DateRange"/>
 
@@ -43,7 +43,7 @@
                                 <asp:ValidationSummary ID="vsSummary" runat="server" HeaderText="Please correct the following:" CssClass="alert alert-validation" />
                                 <div class="col-md-12">
                                     <div class="panel-actions text-right">
-                                        <asp:LinkButton ID="btnApply" runat="server" OnClick="btnApply_Click" CssClass="btn btn-primary pull-right" ToolTip="Update the chart"><i class="fa fa-refresh"></i> Update</asp:LinkButton>
+                                        <asp:LinkButton ID="btnApply" runat="server" OnClick="btnApply_Click" CssClass="btn btn-primary pull-right" ToolTip="Update the chart"><i class="ti ti-refresh"></i> Update</asp:LinkButton>
                                     </div>
                                 </div>
                             </div>

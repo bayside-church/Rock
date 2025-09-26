@@ -19,6 +19,7 @@ using System.Collections.Generic;
 using System.Data.Entity;
 using System.Diagnostics;
 using System.Linq;
+
 using Rock;
 using Rock.Data;
 using Rock.Model;
@@ -26,7 +27,7 @@ using Rock.Tests.Integration.TestFramework;
 using Rock.Tests.Shared;
 using Rock.Web.Cache;
 
-namespace Rock.Tests.Integration.Crm.Steps
+namespace Rock.Tests.Integration.TestData.Engagement
 {
     public enum StepsFeatureTestDataSetSpecifier
     {
@@ -278,7 +279,7 @@ namespace Rock.Tests.Integration.Crm.Steps
             // Add Step Program "Sacraments"
             LogHelper.Log( "Adding Step Program: Sacraments..." );
 
-            var programSacraments = CreateStepProgram( Constants.ProgramSacramentsGuid, Constants.CategoryAdultsGuid, "Sacraments", "The sacraments represent significant milestones in the Christian faith journey.", "fa fa-bible", 1 );
+            var programSacraments = CreateStepProgram( Constants.ProgramSacramentsGuid, Constants.CategoryAdultsGuid, "Sacraments", "The sacraments represent significant milestones in the Christian faith journey.", "ti ti-bible", 1 );
 
             stepProgramService.Add( programSacraments );
 
@@ -286,16 +287,16 @@ namespace Rock.Tests.Integration.Crm.Steps
             AddStepStatusToStepProgram( programSacraments, Constants.StatusSacramentsPendingGuid, "Pending", false, Constants.ColorCodeBlue, 2 );
             AddStepStatusToStepProgram( programSacraments, Constants.StatusSacramentsIncompleteGuid, "Incomplete", false, Constants.ColorCodeRed, 3 );
 
-            AddStepTypeToStepProgram( programSacraments, Constants.StepTypeBaptismGuid, "Baptism", "fa fa-tint", 1 );
+            AddStepTypeToStepProgram( programSacraments, Constants.StepTypeBaptismGuid, "Baptism", "ti ti-droplet", 1 );
 
-            var confirmationStepType = AddStepTypeToStepProgram( programSacraments, Constants.StepTypeConfirmationGuid, "Confirmation", "fa fa-bible", 2 );
+            var confirmationStepType = AddStepTypeToStepProgram( programSacraments, Constants.StepTypeConfirmationGuid, "Confirmation", "ti ti-bible", 2 );
 
-            AddStepTypeToStepProgram( programSacraments, Constants.StepTypeEucharistGuid, "Eucharist", "fa fa-cookie", 3 );
-            AddStepTypeToStepProgram( programSacraments, Constants.StepTypeConfessionGuid, "Confession", "fa fa-praying-hands", 4 );
-            AddStepTypeToStepProgram( programSacraments, Constants.StepTypeAnnointingGuid, "Annointing of the Sick", "fa fa-comment-medical", 5 );
-            AddStepTypeToStepProgram( programSacraments, Constants.StepTypeMarriageGuid, "Marriage", "fa fa-ring", 6 );
+            AddStepTypeToStepProgram( programSacraments, Constants.StepTypeEucharistGuid, "Eucharist", "ti ti-cookie", 3 );
+            AddStepTypeToStepProgram( programSacraments, Constants.StepTypeConfessionGuid, "Confession", "ti ti-pray", 4 );
+            AddStepTypeToStepProgram( programSacraments, Constants.StepTypeAnnointingGuid, "Annointing of the Sick", "ti ti-message-plus", 5 );
+            AddStepTypeToStepProgram( programSacraments, Constants.StepTypeMarriageGuid, "Marriage", "ti ti-diamond", 6 );
 
-            var holyOrdersStepType = AddStepTypeToStepProgram( programSacraments, Constants.StepTypeHolyOrdersGuid, "Holy Orders", "fa fa-cross", 7 );
+            var holyOrdersStepType = AddStepTypeToStepProgram( programSacraments, Constants.StepTypeHolyOrdersGuid, "Holy Orders", "ti ti-cross", 7 );
 
             dataContext.SaveChanges();
 
@@ -315,16 +316,16 @@ namespace Rock.Tests.Integration.Crm.Steps
             // Add Step Program "Alpha"
             LogHelper.Log( "Adding Step Program: Alpha..." );
 
-            var programAlpha = CreateStepProgram( Constants.ProgramAlphaGuid, Constants.CategoryAdultsGuid, "Alpha", "Alpha is a series of interactive sessions that freely explore the basics of the Christian faith.", "fa fa-question", 2 );
+            var programAlpha = CreateStepProgram( Constants.ProgramAlphaGuid, Constants.CategoryAdultsGuid, "Alpha", "Alpha is a series of interactive sessions that freely explore the basics of the Christian faith.", "ti ti-question-mark", 2 );
 
             stepProgramService.Add( programAlpha );
 
             AddStepStatusToStepProgram( programAlpha, Constants.StatusAlphaCompletedGuid, "Completed", true, Constants.ColorCodeGreen, 1 );
             AddStepStatusToStepProgram( programAlpha, Constants.StatusAlphaStartedGuid, "Started", false, Constants.ColorCodeBlue, 2 );
 
-            AddStepTypeToStepProgram( programAlpha, Constants.StepTypeAttenderGuid, "Attender", "fa fa-user", 1, hasEndDate: true );
-            AddStepTypeToStepProgram( programAlpha, Constants.StepTypeVolunteerGuid, "Volunteer", "fa fa-hand-paper", 2, hasEndDate: true );
-            AddStepTypeToStepProgram( programAlpha, Constants.StepTypeLeaderGuid, "Leader", "fa fa-user-graduate", 3, hasEndDate: true );
+            AddStepTypeToStepProgram( programAlpha, Constants.StepTypeAttenderGuid, "Attender", "ti ti-user", 1, hasEndDate: true );
+            AddStepTypeToStepProgram( programAlpha, Constants.StepTypeVolunteerGuid, "Volunteer", "ti ti-hand-stop", 2, hasEndDate: true );
+            AddStepTypeToStepProgram( programAlpha, Constants.StepTypeLeaderGuid, "Leader", "ti ti-user-screen", 3, hasEndDate: true );
 
             dataContext.SaveChanges();
 

@@ -54,12 +54,13 @@ namespace Rock.Badge.Component
                 return;
             }
 
-            var signalCount = person.Signals.Where( s => !s.ExpirationDate.HasValue || s.ExpirationDate >= RockDateTime.Now ).Count();
+            var validSignals = person.Signals.Where( s => !s.ExpirationDate.HasValue || s.ExpirationDate >= RockDateTime.Now );
+            var signalCount = validSignals.Count();
             if ( !string.IsNullOrWhiteSpace( person.TopSignalColor ) && signalCount > 0 )
             {
                 writer.Write( string.Format( @"
 <div class='rockbadge rockbadge-overlay rockbadge-overlay-invert rockbadge-signal rockbadge-id-{0}' data-toggle='tooltip' title='{3} has the following {4}: {5}' style='color: {1};'>
-        <i class='badge-icon fa fa-flag'></i>
+        <i class='badge-icon ti ti-flag-filled'></i>
         <span class='metric-value'>{2}</span>
 </div>",
                     badge.Id,
@@ -67,7 +68,7 @@ namespace Rock.Badge.Component
                     signalCount,
                     person.NickName,
                     "signal".PluralizeIf( person.Signals.Count != 1 ),
-                    string.Join( ", ", person.Signals.Select( s => s.SignalType.Name.EncodeHtml() ) ) ) );
+                    string.Join( ", ", validSignals.Select( s => s.SignalType.Name.EncodeHtml() ) ) ) );
             }
         }
     }

@@ -37,13 +37,14 @@ namespace Rock.Blocks.Lms
     [DisplayName( "Learning Semester List" )]
     [Category( "LMS" )]
     [Description( "Displays a list of learning semesters." )]
-    [IconCssClass( "fa fa-list" )]
+    [IconCssClass( "ti ti-list" )]
     [SupportedSiteTypes( Model.SiteType.Web )]
 
     [LinkedPage( "Detail Page",
         Description = "The page that will show the learning semester details.",
         Key = AttributeKey.DetailPage )]
 
+    [Rock.Cms.DefaultBlockRole( Rock.Enums.Cms.BlockRole.Secondary )]
     [Rock.SystemGuid.EntityTypeGuid( "928978c0-9695-454d-9e17-33f12f278f78" )]
     [Rock.SystemGuid.BlockTypeGuid( "c89c7f15-fb8a-43d4-9afb-5e40e397f246" )]
     [CustomizedGrid]
@@ -76,9 +77,8 @@ namespace Rock.Blocks.Lms
             var box = new ListBlockBox<LearningSemesterListOptionsBag>();
             var builder = GetGridBuilder();
 
-            var isAddOrEditEnabled = GetIsAddOrEditEnabled();
-            box.IsAddEnabled = isAddOrEditEnabled;
-            box.IsDeleteEnabled = isAddOrEditEnabled;
+            box.IsAddEnabled = GetIsAddEnabled();
+            box.IsDeleteEnabled = true;
             box.ExpectedRowCount = 5;
             box.NavigationUrls = GetBoxNavigationUrls();
             box.Options = GetBoxOptions();
@@ -95,14 +95,14 @@ namespace Rock.Blocks.Lms
         {
             var options = new LearningSemesterListOptionsBag();
 
-            var progamInfo = new LearningProgramService(RockContext).GetSelect(PageParameter(PageParameterKey.LearningProgramId), p => new
-            {
-                p.IdKey,
-                p.Name
-            } );
+            var progam = new LearningProgramService( RockContext ).Get( PageParameter( PageParameterKey.LearningProgramId ), !PageCache.Layout.Site.DisablePredictableIds );
 
-            options.LearningProgramIdKey = progamInfo?.IdKey;
-            options.LearningProgramName = progamInfo?.Name;
+            if ( progam != null )
+            {
+                options.CanEditProgram = progam.IsAuthorized( Authorization.EDIT, GetCurrentPerson() );
+                options.LearningProgramIdKey = Rock.Utility.IdHasher.Instance.GetHash( progam.Id );
+                options.LearningProgramName = progam.Name;
+            }
 
             return options;
         }
@@ -111,9 +111,14 @@ namespace Rock.Blocks.Lms
         /// Determines if the add button should be enabled in the grid.
         /// <summary>
         /// <returns>A boolean value that indicates if the add button should be enabled.</returns>
-        private bool GetIsAddOrEditEnabled()
+        private bool GetIsAddEnabled()
         {
-            return BlockCache.IsAuthorized( Authorization.EDIT, RequestContext.CurrentPerson );
+            var entity = new LearningSemester
+            {
+                LearningProgramId = RequestContext.PageParameterAsId( PageParameterKey.LearningProgramId )
+            };
+
+            return entity.IsAuthorized( Authorization.EDIT, RequestContext.CurrentPerson );
         }
 
         /// <summary>
@@ -136,26 +141,25 @@ namespace Rock.Blocks.Lms
         /// <inheritdoc/>
         protected override IQueryable<LearningSemester> GetListQueryable( RockContext rockContext )
         {
-            var entityId = RequestContext.PageParameterAsId( PageParameterKey.LearningProgramId );
+            var learningProgramId = RequestContext.PageParameterAsId( PageParameterKey.LearningProgramId );
 
-            // If the PageParameter has a value then use that
-            // otherwise try to get the Id for filtering from the ContextEntity.
-            if ( entityId > 0 )
-            {
-                return base.GetListQueryable( rockContext )
+            return new LearningSemesterService( rockContext ).Queryable()
                 .Include( a => a.LearningClasses )
-                .Where( a => a.LearningProgramId == entityId );
-            }
+                .Where( ls => ls.LearningProgramId == learningProgramId );
+        }
 
-            var contextEntity = RequestContext.GetContextEntity<LearningProgram>();
-            if ( contextEntity != null && contextEntity.Id > 0 )
-            {
-                return base.GetListQueryable( rockContext )
-                .Include( a => a.LearningClasses )
-                .Where( a => a.LearningProgramId == contextEntity.Id );
-            }
+        /// <inheritdoc/>
+        protected override IQueryable<LearningSemester> GetOrderedListQueryable( IQueryable<LearningSemester> queryable, RockContext rockContext )
+        {
+            return queryable.OrderBy( a => a.StartDate );
+        }
 
-            return new List<LearningSemester>().AsQueryable();
+        /// <inheritdoc/>
+        protected override List<LearningSemester> GetListItems( IQueryable<LearningSemester> queryable, RockContext rockContext )
+        {
+            return queryable.ToList()
+                .Where( ls => ls.IsAuthorized( Authorization.VIEW, RequestContext.CurrentPerson ) )
+                .ToList();
         }
 
         /// <inheritdoc/>
@@ -195,7 +199,7 @@ namespace Rock.Blocks.Lms
 
                 if ( !entity.IsAuthorized( Authorization.EDIT, RequestContext.CurrentPerson ) )
                 {
-                    return ActionBadRequest( $"Not authorized to delete ${LearningSemester.FriendlyTypeName}." );
+                    return ActionBadRequest( $"Not authorized to delete {LearningSemester.FriendlyTypeName}." );
                 }
 
                 if ( !entityService.CanDelete( entity, out var errorMessage ) )

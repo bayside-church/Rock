@@ -21,7 +21,12 @@
 // </copyright>
 //
 
+import { CurrencyInfoBag } from "@Obsidian/ViewModels/Utility/currencyInfoBag";
+
 export type FinancialPledgeListOptionsBag = {
+    /** Gets or sets the currency information. */
+    currencyInfo?: CurrencyInfoBag | null;
+
     /** Determines if the amount column should be displayed. */
     hideAmount: boolean;
 
@@ -31,24 +36,12 @@ export type FinancialPledgeListOptionsBag = {
     /** Determines if the accounts column should be displayed. */
     showAccountColumn: boolean;
 
-    /** Determines if the account filter should be displayed. */
-    showAccountFilter: boolean;
-
     /** Determines if the account summary should be displayed at the bottom of the list. */
     showAccountSummary: boolean;
-
-    /** Determines if the date range filter should be displayed. */
-    showDateRangeFilter: boolean;
 
     /** Determines if the group column should be displayed. */
     showGroupColumn: boolean;
 
     /** Determines if the last modified date column should be displayed. */
     showLastModifiedDateColumn: boolean;
-
-    /** Determines if the last modified date range filter should be displayed. */
-    showLastModifiedFilter: boolean;
-
-    /** Determines if the person filter should be displayed. */
-    showPersonFilter: boolean;
 };

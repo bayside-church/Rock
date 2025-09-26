@@ -41,7 +41,7 @@ namespace Rock.Blocks.Workflow
     [DisplayName( "Workflow List" )]
     [Category( "Workflow" )]
     [Description( "Lists all the workflows." )]
-    [IconCssClass( "fa fa-list" )]
+    [IconCssClass( "ti ti-list" )]
     //[SupportedSiteTypes( Model.SiteType.Web )]
 
     [LinkedPage( "Entry Page",
@@ -59,7 +59,7 @@ namespace Rock.Blocks.Workflow
     [Rock.SystemGuid.EntityTypeGuid( "1208bfdd-18cf-4539-b36b-9744b10d7635" )]
     [Rock.SystemGuid.BlockTypeGuid( "ea76c61f-aa94-4e8b-b105-1effc0fea59a" )]
     [CustomizedGrid]
-    public class WorkflowList : RockEntityListBlockType<Rock.Model.Workflow>
+    public class WorkflowList : RockEntityListBlockType<Rock.Model.Workflow>, IBreadCrumbBlock
     {
         #region Keys
 
@@ -83,12 +83,6 @@ namespace Rock.Blocks.Workflow
 
         private static class PreferenceKey
         {
-            public const string FilterName = "filter-name";
-
-            public const string FilterInitiator = "filter-initiator";
-
-            public const string FilterStatus = "filter-status";
-
             public const string FilterActivatedDateRangeUpperValue = "filter-activated-date-range-upper-value";
 
             public const string FilterActivatedDateRangeLowerValue = "filter-activated-date-range-lower-value";
@@ -96,29 +90,15 @@ namespace Rock.Blocks.Workflow
             public const string FilterCompletedDateRangeUpperValue = "filter-completed-date-range-upper-value";
 
             public const string FilterCompletedDateRangeLowerValue = "filter-completed-date-range-lower-value";
-
-            public const string FilterState = "filter-state";
         }
 
         #endregion Keys
 
         #region Fields
 
-        private WorkflowType _workflowType;
-
         #endregion
 
         #region Properties
-
-        protected string FilterName => GetBlockPersonPreferences()
-            .GetValue( MakeKeyUniqueToWorkflowType( PreferenceKey.FilterName ) );
-
-        protected Guid? FilterInitiator => GetBlockPersonPreferences()
-            .GetValue( MakeKeyUniqueToWorkflowType( PreferenceKey.FilterInitiator ) )
-            .FromJsonOrNull<ListItemBag>()?.Value?.AsGuidOrNull();
-
-        protected string FilterStatus => GetBlockPersonPreferences()
-            .GetValue( MakeKeyUniqueToWorkflowType( PreferenceKey.FilterStatus ) );
 
         protected DateTime? FilterActivatedDateRangeUpperValue => GetBlockPersonPreferences()
             .GetValue( MakeKeyUniqueToWorkflowType( PreferenceKey.FilterActivatedDateRangeUpperValue ) )
@@ -135,10 +115,6 @@ namespace Rock.Blocks.Workflow
         protected DateTime? FilterCompletedDateRangeLowerValue => GetBlockPersonPreferences()
             .GetValue( MakeKeyUniqueToWorkflowType( PreferenceKey.FilterCompletedDateRangeLowerValue ) )
             .AsDateTime();
-
-        protected List<string> FilterState => GetBlockPersonPreferences()
-            .GetValue( MakeKeyUniqueToWorkflowType( PreferenceKey.FilterState ) )
-            .FromJsonOrNull<List<string>>() ?? new List<string>();
 
         #endregion
 
@@ -215,15 +191,16 @@ namespace Rock.Blocks.Workflow
         protected override IQueryable<Rock.Model.Workflow> GetListQueryable( RockContext rockContext )
         {
             IEnumerable<Rock.Model.Workflow> workflows = new List<Rock.Model.Workflow>().AsQueryable();
+            var workflowType = GetWorkflowType();
 
-            if ( GetCanView() && _workflowType != null )
+            if ( GetCanView() && workflowType != null )
             {
-                var workflowType = GetWorkflowType();
                 var workflowService = new WorkflowService( rockContext );
 
                 workflows = workflowService
-                    .Queryable( "Activities.ActivityType,InitiatorPersonAlias.Person" ).AsNoTracking()
-                    .Where( w => w.WorkflowTypeId.Equals( workflowType.Id ) );
+	                .Queryable( "Activities.ActivityType,Activities.AssignedGroup.Members,Activities.AssignedPersonAlias.Person,Activities.Actions.ActionType,InitiatorPersonAlias.Person,WorkflowType" )
+	                .AsNoTracking()
+	                .Where( w => w.WorkflowTypeId.Equals( workflowType.Id ) );
 
                 // Activated Date Range Filter
                 if ( FilterActivatedDateRangeLowerValue.HasValue )
@@ -236,19 +213,6 @@ namespace Rock.Blocks.Workflow
                     workflows = workflows.Where( w => w.ActivatedDateTime.Value < upperDate );
                 }
 
-                // State Filter
-                if ( FilterState.Count == 1 )    // Don't filter if none or both options are selected
-                {
-                    if ( FilterState[0] == "Active" )
-                    {
-                        workflows = workflows.Where( w => !w.CompletedDateTime.HasValue );
-                    }
-                    else
-                    {
-                        workflows = workflows.Where( w => w.CompletedDateTime.HasValue );
-                    }
-                }
-
                 // Completed Date Range Filter
                 if ( FilterCompletedDateRangeLowerValue.HasValue )
                 {
@@ -258,24 +222,6 @@ namespace Rock.Blocks.Workflow
                 {
                     DateTime upperDate = FilterCompletedDateRangeUpperValue.Value.Date.AddDays( 1 );
                     workflows = workflows.Where( w => w.CompletedDateTime.HasValue && w.CompletedDateTime.Value < upperDate );
-                }
-
-                // Name Filter
-                if ( !string.IsNullOrWhiteSpace( FilterName ) )
-                {
-                    workflows = workflows.Where( w => w.Name.StartsWith( FilterName ) );
-                }
-
-                // Initiator Filter
-                if ( FilterInitiator.HasValue )
-                {
-                    workflows = workflows.Where( w => w.InitiatorPersonAlias.Guid == FilterInitiator.Value );
-                }
-
-                // Status Filter
-                if ( !string.IsNullOrWhiteSpace( FilterStatus ) )
-                {
-                    workflows = workflows.Where( w => w.Status.StartsWith( FilterStatus ) );
                 }
             }
 
@@ -303,6 +249,7 @@ namespace Rock.Blocks.Workflow
                 .AddField( "isCompleted", a => a.CompletedDateTime.HasValue )
                 .AddField( "guid", a => a.Guid )
                 .AddField( "workflowTypeIdKey", a => a.WorkflowType.IdKey )
+                .AddField( "hasActiveEntryForm", a => a.HasActiveEntryForm( GetCurrentPerson() ) )
                 .AddAttributeFields( GetGridAttributes() );
         }
 
@@ -310,22 +257,16 @@ namespace Rock.Blocks.Workflow
         /// Gets the type of the workflow.
         /// </summary>
         /// <returns></returns>
-        private WorkflowType GetWorkflowType()
+        public WorkflowTypeCache GetWorkflowType()
         {
-            if ( _workflowType == null )
+            var workflowTypeGuid = GetAttributeValue( AttributeKey.DefaultWorkflowType ).AsGuidOrNull();
+
+            if ( workflowTypeGuid.HasValue )
             {
-                if ( !string.IsNullOrWhiteSpace( GetAttributeValue( AttributeKey.DefaultWorkflowType ) ) )
-                {
-                    Guid.TryParse( GetAttributeValue( AttributeKey.DefaultWorkflowType ), out Guid workflowTypeGuid );
-                    _workflowType = new WorkflowTypeService( RockContext ).Get( workflowTypeGuid );
-                }
-                else
-                {
-                    var workflowTypeId = PageParameter( PageParameterKey.WorkflowTypeId ).AsInteger();
-                    _workflowType = new WorkflowTypeService( RockContext ).Get( workflowTypeId );
-                }
+                return WorkflowTypeCache.Get( workflowTypeGuid.Value );
             }
-            return _workflowType;
+
+            return WorkflowTypeCache.Get( PageParameter( PageParameterKey.WorkflowTypeId ), !PageCache.Layout.Site.DisablePredictableIds );
         }
 
         /// <inheritdoc/>
@@ -375,12 +316,35 @@ namespace Rock.Blocks.Workflow
         /// <inheritdoc/>
         public BreadCrumbResult GetBreadCrumbs( PageReference pageReference )
         {
-            var workflowType = GetWorkflowType();
+            WorkflowTypeCache workflowType = null;
+
+            var defaultGuid = GetAttributeValue( AttributeKey.DefaultWorkflowType ).AsGuidOrNull();
+            if ( defaultGuid.HasValue )
+            {
+                workflowType = WorkflowTypeCache.Get( defaultGuid.Value );
+            }
+            else
+            {
+                var workflowTypeId = pageReference.GetPageParameter( PageParameterKey.WorkflowTypeId );
+                if ( !string.IsNullOrWhiteSpace( workflowTypeId ) )
+                {
+                    workflowType = WorkflowTypeCache.Get( workflowTypeId, !PageCache.Layout.Site.DisablePredictableIds );
+                }
+            }
+
             var breadCrumbs = new List<IBreadCrumb>();
 
             if ( workflowType != null )
             {
-                var breadCrumbPageRef = new PageReference( pageReference.PageId, 0, pageReference.Parameters );
+                var pageParameters = new Dictionary<string, string>();
+                var workflowTypeId = pageReference.GetPageParameter( PageParameterKey.WorkflowTypeId );
+
+                if ( !string.IsNullOrWhiteSpace( workflowTypeId ) )
+                {
+                    pageParameters.Add( PageParameterKey.WorkflowTypeId, workflowTypeId );
+                }
+
+                var breadCrumbPageRef = new PageReference( pageReference.PageId, 0, pageParameters );
                 breadCrumbs.Add( new BreadCrumbLink( workflowType.Name, breadCrumbPageRef ) );
             }
 
@@ -415,7 +379,7 @@ namespace Rock.Blocks.Workflow
                 return ActionBadRequest( $"Not authorized to delete {Rock.Model.Workflow.FriendlyTypeName}." );
             }
 
-            if ( !entityService.CanDelete( entity, out var errorMessage ) )
+            if ( !entityService.IsEligibleForDelete( entity, out var errorMessage ) )
             {
                 return ActionBadRequest( errorMessage );
             }

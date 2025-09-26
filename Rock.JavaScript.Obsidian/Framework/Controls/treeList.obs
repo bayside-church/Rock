@@ -6,14 +6,15 @@
                           :key="child.value ?? undefined"
                           :item="child"
                           v-bind="{
-                              modelValue,
-                              multiple,
-                              disableFolderSelection,
-                              autoExpand,
-                              showChildCount,
-                              provider,
-                              initiallyExpanded
-                          }"
+                            modelValue,
+                            multiple,
+                            disableFolderSelection,
+                            autoExpand,
+                            showChildCount,
+                            provider,
+                            initiallyExpanded,
+                            enableDeselect
+                        }"
                           @update:modelValue="onUpdateSelectedValues"
                           @treeitem-expanded="onItemExpanded"
                           @treeitem-collapsed="onItemCollapsed" />
@@ -82,10 +83,18 @@
         /**
          * Used as a means of tracking the open state of the dropdown picker.
          */
-         isVisible: {
+        isVisible: {
             type: Boolean as PropType<boolean>,
             default: null
         },
+
+        /**
+         * If in single selection mode, whether to allow deselection of this item by clicking on it.
+         */
+        enableDeselect: {
+            type: Boolean,
+            default: false
+        }
     });
 
     const emit = defineEmits<{
@@ -112,7 +121,7 @@
                 internalItems.value = [{
                     children: [],
                     hasChildren: false,
-                    iconCssClass: "fa fa-spinner fa-spin",
+                    iconCssClass: "ti ti-rotate-clockwise-2 ti-spin",
                     value: "",
                     isActive: false,
                     isFolder: false
@@ -165,7 +174,7 @@
                     item.children = [{
                         children: [],
                         hasChildren: false,
-                        iconCssClass: "fa fa-spinner fa-spin",
+                        iconCssClass: "ti ti-rotate-clockwise-2 ti-spin",
                         value: "",
                         isActive: false,
                         isFolder: false
@@ -195,7 +204,7 @@
         emit("treeitem-collapsed", item);
     };
 
-    const scrollToSelectedItem = ():void => {
+    const scrollToSelectedItem = (): void => {
         const selectedElement = treeListRef.value?.querySelector(".rocktree-name.selected")?.firstChild as HTMLElement;
         if (selectedElement) {
             selectedElement.scrollIntoView({ behavior: "smooth", block: "center" });

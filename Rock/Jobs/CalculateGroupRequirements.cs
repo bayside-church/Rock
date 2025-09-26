@@ -138,8 +138,8 @@ namespace Rock.Jobs
                             qryGroupMemberRequirementsAlreadyOK = qryGroupMemberRequirementsAlreadyOK.Where( a => a.RequirementMetDateTime.HasValue );
                         }
 
-                        // Only run the group requirements calculation on group members that are not inactive.
-                        var groupMemberQry = groupMemberService.Queryable().Where( gm => gm.GroupMemberStatus != GroupMemberStatus.Inactive );
+                        // Only run the group requirements calculation on group members that are not inactive or archived.
+                        var groupMemberQry = groupMemberService.Queryable().Where( gm => gm.GroupMemberStatus != GroupMemberStatus.Inactive && !gm.IsArchived );
 
                         if ( groupRequirement.GroupId.HasValue )
                         {
@@ -368,9 +368,9 @@ namespace Rock.Jobs
 
         private class JobSummary
         {
-            public const string SUCCESS_ICON = "<i class='fa fa-circle text-success'></i> ";
-            public const string WARNING_ICON = "<i class='fa fa-circle text-warning'></i> ";
-            public const string ERROR_ICON = "<i class='fa fa-circle text-error'></i> ";
+            public const string SUCCESS_ICON = "<i class='ti ti-circle-filled text-success'></i> ";
+            public const string WARNING_ICON = "<i class='ti ti-circle-filled text-warning'></i> ";
+            public const string ERROR_ICON = "<i class='ti ti-circle-filled text-error'></i> ";
 
             public JobSummary()
             {

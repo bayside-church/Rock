@@ -29,6 +29,7 @@ namespace Rock.Model
     [RockDomain( "LMS" )]
     [Table( "LearningGradingSystemScale" )]
     [DataContract]
+    [CodeGenerateRest( DisableEntitySecurity = true )]
     [Rock.SystemGuid.EntityTypeGuid( SystemGuid.EntityType.LEARNING_GRADING_SYSTEM_SCALE )]
     public partial class LearningGradingSystemScale : Model<LearningGradingSystemScale>, IOrdered
     {
@@ -40,9 +41,8 @@ namespace Rock.Model
         /// <value>
         /// A <see cref="System.String"/> representing the Name of the LearningGradingSystemScale.
         /// </value>
-        [Required]
         [MaxLength( 100 )]
-        [DataMember( IsRequired = true )]
+        [DataMember]
         public string Name { get; set; }
 
         /// <summary>
@@ -90,6 +90,16 @@ namespace Rock.Model
         [DataMember]
         public int LearningGradingSystemId { get; set; }
 
+        /// <summary>
+        /// Gets or sets the color of the highlight.
+        /// </summary>
+        /// <value>
+        /// The color of the highlight.
+        /// </value>
+        [MaxLength( 50 )]
+        [DataMember]
+        public string HighlightColor { get; set; } = "#007aff";
+
         #endregion
 
         #region Navigation Properties
@@ -135,5 +145,4 @@ namespace Rock.Model
     }
 
     #endregion
-
 }

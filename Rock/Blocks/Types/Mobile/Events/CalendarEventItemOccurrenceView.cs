@@ -36,7 +36,7 @@ namespace Rock.Blocks.Types.Mobile.Events
     [DisplayName( "Calendar Event Item Occurrence View" )]
     [Category( "Mobile > Events" )]
     [Description( "Displays a particular calendar event item occurrence." )]
-    [IconCssClass( "fa fa-calendar-day" )]
+    [IconCssClass( "ti ti-calendar-event" )]
     [SupportedSiteTypes( Model.SiteType.Mobile )]
 
     #region Block Attributes
@@ -52,7 +52,7 @@ namespace Rock.Blocks.Types.Mobile.Events
         Description = "The template to use when rendering the event.",
         TemplateBlockValueGuid = SystemGuid.DefinedValue.BLOCK_TEMPLATE_MOBILE_CALENDAR_EVENT_ITEM_OCCURRENCE_VIEW,
         IsRequired = true,
-        DefaultValue = "6593D4EB-2B7A-4C24-8D30-A02991D26BC0",
+        DefaultValue = "5114DB6E-40CC-4455-99B8-C109B7BB52D1",
         Key = AttributeKeys.Template,
         Order = 1 )]
 

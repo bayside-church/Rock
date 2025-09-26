@@ -1,3 +1,5 @@
+import { Alert } from "./alert";
+import { Attachment } from "./attachment";
 import Header from "@editorjs/header";
 import InlineCode from "@editorjs/inline-code";
 import Checklist from "@editorjs/checklist";
@@ -15,6 +17,8 @@ import { RockImage } from "./rockimage";
 import { Raw } from "./raw";
 
 export const EditorTools = {
+    Alert,
+    Attachment,
     Header,
     InlineCode,
     NestedList,

@@ -40,7 +40,7 @@ namespace Rock.Blocks.Communication
     [DisplayName( "System Communication List" )]
     [Category( "Communication" )]
     [Description( "Lists the system communications that can be configured for use by the system and other automated (non-user) tasks." )]
-    [IconCssClass( "fa fa-list" )]
+    [IconCssClass( "ti ti-list" )]
     // [SupportedSiteTypes( Model.SiteType.Web )]
 
     [LinkedPage( "Detail Page",
@@ -154,7 +154,7 @@ namespace Rock.Blocks.Communication
         {
             return new Dictionary<string, string>
             {
-                [NavigationUrlKey.DetailPage] = this.GetLinkedPageUrl( AttributeKey.DetailPage, "SystemCommunicationId", "((Key))" )
+                [NavigationUrlKey.DetailPage] = this.GetLinkedPageUrl( AttributeKey.DetailPage, new Dictionary<string, string> { ["SystemCommunicationId"] = "((Key))", ["autoEdit"] = "true", ["returnUrl"] = this.GetCurrentPageUrl() } )
             };
         }
 
@@ -222,8 +222,8 @@ namespace Rock.Blocks.Communication
                 .AddTextField( "idKey", a => a.IdKey )
                 .AddTextField( "title", a => a.Title )
                 .AddTextField( "subject", a => a.Subject )
-                .AddTextField( "category", a => a.Category?.Name )
-                .AddTextField( "from", a => a.From )
+                .AddTextField( "category", a => a.Category?.Name ?? "" )
+                .AddTextField( "from", a => a.From ?? "" )
                 .AddTextField( "smsMessage", a => a.SMSMessage )
                 .AddTextField( "pushMessage", a => a.PushMessage )
                 .AddField( "isActive", a => a.IsActive )

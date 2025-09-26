@@ -79,8 +79,51 @@ export const EditComponent = defineComponent({
     },
 
     template: `
-    <CheckBoxList v-if="!enhancedSelection" v-model="internalValue" :items="options" :horizontal="true" :repeatColumns="numberOfColumns" />
-    <DropDownList v-else v-model="internalValue" :items="options" :showBlankItem="true" enhanceForLongLists multiple />
+    <CheckBoxList v-if="!enhancedSelection" v-model="internalValue" :items="options" horizontal :repeatColumns="numberOfColumns" />
+    <DropDownList v-else v-model="internalValue" :items="options" showBlankItem enhanceForLongLists multiple />
+`
+});
+
+export const FilterComponent = defineComponent({
+    name: "BadgesField.Filter",
+
+    components: {
+        CheckBoxList,
+        DropDownList
+    },
+
+    props: getFieldEditorProps(),
+
+    setup(props, { emit }) {
+        // The internal value used by the text editor.
+        const internalValue = ref<string>("");
+
+        // The options to choose from.
+        const options = computed((): ListItemBag[] => {
+            const selectedBadges = JSON.parse(props.configurationValues[ConfigurationValueKey.ClientValues] || "[]") as ListItemBag[];
+            return selectedBadges;
+        });
+
+        // Watch for changes from the parent component and update the text editor.
+        watch(() => props.modelValue, () => {
+            updateRefValue(internalValue, props.modelValue ?? "");
+        }, {
+            immediate: true
+        });
+
+        // Watch for changes from the text editor and update the parent component.
+        watch(internalValue, () => {
+            emit("update:modelValue", internalValue.value);
+        });
+
+        return {
+            internalValue,
+            options
+        };
+    },
+
+    template: `
+    <DropDownList v-model="internalValue" :items="options" :showBlankItem="false" enhanceForLongLists />
 `
 });
 
@@ -174,7 +217,7 @@ export const ConfigurationComponent = defineComponent({
     },
 
     template: `
-<CheckBox v-model="enhancedSelection" label="Enhance For Long Lists" text="Yes" help="When set, will render a searchable selection of options." />
+<CheckBox v-model="enhancedSelection" label="Enhance For Long Lists" help="When set, will render a searchable selection of options." />
 <NumberBox v-if="!enhancedSelection" label="Number of Columns" v-model="numberOfColumns" help="Select how many columns the list should use before going to the next row. If blank or 0 then 4 columns will be displayed. There is no upper limit enforced here however the block this is used in might add contraints due to available space." />
 `
 });

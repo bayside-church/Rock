@@ -201,7 +201,7 @@ namespace Rock.Jobs
                                         // Check if there are any followed entities of this type 
                                         if ( entityList == null || !entityList.Any() )
                                         {
-                                            return;
+                                            continue;
                                         }
 
                                         // Get the active event types for this entity type
@@ -388,7 +388,6 @@ namespace Rock.Jobs
     /// Helper class for following event notifications
     /// </summary>
     [LavaType( "EventType", "Notices" )]
-    [DotLiquid.LiquidType( "EventType", "Notices" )]
     public class FollowingEventTypeNotices
     {
         /// <summary>

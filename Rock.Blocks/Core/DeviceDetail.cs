@@ -40,8 +40,8 @@ namespace Rock.Blocks.Core
     [DisplayName( "Device Detail" )]
     [Category( "Core" )]
     [Description( "Displays the details of the given device." )]
-    [IconCssClass( "fa fa-question" )]
-    //[SupportedSiteTypes( Model.SiteType.Web )]
+    [IconCssClass( "ti ti-question-mark" )]
+    [SupportedSiteTypes( Model.SiteType.Web )]
 
     #region Block Attributes
 
@@ -111,6 +111,10 @@ namespace Rock.Blocks.Core
             options.PrintFromOptions = typeof( PrintFrom ).ToEnumListItemBag();
             options.PrinterOptions = new DeviceService( rockContext )
                 .GetByDeviceTypeGuid( new Guid( Rock.SystemGuid.DefinedValue.DEVICE_TYPE_PRINTER ) )
+                .OrderBy( d => d.Name )
+                .ToListItemBagList();
+            options.ProxyItems = new DeviceService( rockContext )
+                .GetByDeviceTypeGuid( new Guid( Rock.SystemGuid.DefinedValue.DEVICE_TYPE_CLOUD_PRINT_PROXY ) )
                 .OrderBy( d => d.Name )
                 .ToListItemBagList();
             options.KioskTypeOptions = typeof( KioskType ).ToEnumListItemBag();
@@ -234,6 +238,7 @@ namespace Rock.Blocks.Core
                 Location = entity.Location.ToListItemBag(),
                 Name = entity.Name,
                 PrinterDevice = entity.PrinterDevice.ToListItemBag(),
+                ProxyDevice = entity.ProxyDevice.ToListItemBag(),
                 PrintFrom = entity.PrintFrom,
                 PrintToOverride = entity.PrintToOverride,
                 KioskType = entity.KioskType,
@@ -258,7 +263,7 @@ namespace Rock.Blocks.Core
 
             var bag = GetCommonEntityBag( entity );
 
-            bag.LoadAttributesAndValuesForPublicView( entity, RequestContext.CurrentPerson );
+            bag.LoadAttributesAndValuesForPublicView( entity, RequestContext.CurrentPerson, enforceSecurity: false );
 
             return bag;
         }
@@ -277,7 +282,7 @@ namespace Rock.Blocks.Core
 
             var bag = GetCommonEntityBag( entity );
 
-            bag.LoadAttributesAndValuesForPublicEdit( entity, RequestContext.CurrentPerson );
+            bag.LoadAttributesAndValuesForPublicEdit( entity, RequestContext.CurrentPerson, enforceSecurity: false );
 
             bag.Locations = GetLocations( entity );
 
@@ -335,6 +340,9 @@ namespace Rock.Blocks.Core
             box.IfValidProperty( nameof( box.Entity.PrinterDevice ),
                 () => entity.PrinterDeviceId = box.Entity.PrinterDevice.GetEntityId<Device>( rockContext ) );
 
+            box.IfValidProperty( nameof( box.Entity.ProxyDevice ),
+                () => entity.ProxyDeviceId = box.Entity.ProxyDevice.GetEntityId<Device>( rockContext ) );
+
             box.IfValidProperty( nameof( box.Entity.PrintFrom ),
                 () => entity.PrintFrom = box.Entity.PrintFrom );
 
@@ -350,6 +358,12 @@ namespace Rock.Blocks.Core
             box.IfValidProperty( nameof( box.Entity.HasCamera ),
                 () => entity.HasCamera = box.Entity.HasCamera );
 
+            box.IfValidProperty( nameof( box.Entity.GeoPoint ),
+                () => SaveGeoPoint( entity, box.Entity ) );
+
+            box.IfValidProperty( nameof( box.Entity.GeoFence ),
+                () => SaveGeoFence( entity, box.Entity ) );
+
             box.IfValidProperty( nameof( box.Entity.Locations ),
                 () => SaveLocations( box.Entity, entity, rockContext ) );
 
@@ -358,10 +372,36 @@ namespace Rock.Blocks.Core
                 {
                     entity.LoadAttributes( rockContext );
 
-                    entity.SetPublicAttributeValues( box.Entity.AttributeValues, RequestContext.CurrentPerson );
+                    entity.SetPublicAttributeValues( box.Entity.AttributeValues, RequestContext.CurrentPerson, enforceSecurity: false );
                 } );
 
             return true;
+        }
+
+        /// <summary>
+        /// Saves the geo fence.
+        /// </summary>
+        /// <param name="entity">The entity.</param>
+        /// <param name="bag">The bag.</param>
+        private void SaveGeoFence( Device entity, DeviceBag bag )
+        {
+            if ( entity.Location != null )
+            {
+                entity.Location.GeoFence = bag.GeoFence.IsNullOrWhiteSpace() ? null : DbGeography.PolygonFromText( bag.GeoFence, DbGeography.DefaultCoordinateSystemId );
+            }
+        }
+
+        /// <summary>
+        /// Saves the geo point.
+        /// </summary>
+        /// <param name="entity">The entity.</param>
+        /// <param name="bag">The bag.</param>
+        private void SaveGeoPoint( Device entity, DeviceBag bag )
+        {
+            if ( entity.Location != null )
+            {
+                entity.Location.GeoPoint = bag.GeoPoint.IsNullOrWhiteSpace() ? null : DbGeography.FromText( bag.GeoPoint );
+            }
         }
 
         /// <summary>

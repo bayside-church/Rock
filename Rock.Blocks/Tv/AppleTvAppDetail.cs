@@ -41,8 +41,8 @@ namespace Rock.Blocks.Tv
     [DisplayName( "Apple TV Application Detail" )]
     [Category( "TV > TV Apps" )]
     [Description( "Allows a person to edit an Apple TV application.." )]
-    [IconCssClass( "fa fa-question" )]
-    // [SupportedSiteTypes( Model.SiteType.Web )]
+    [IconCssClass( "ti ti-question-mark" )]
+    [SupportedSiteTypes( Model.SiteType.Web )]
 
     #region Block Attributes
 
@@ -208,7 +208,7 @@ namespace Rock.Blocks.Tv
             bag.PageViewRetentionPeriod = new InteractionChannelService( new RockContext() ).Queryable()
                     .Where( c => c.ChannelTypeMediumValueId == channelMediumWebsiteValueId && c.ChannelEntityId == entity.Id )
                     .Select( c => c.RetentionDuration )
-                    .FirstOrDefault();
+                    .FirstOrDefault()?.ToString();
 
             return bag;
         }
@@ -228,7 +228,7 @@ namespace Rock.Blocks.Tv
 
             var bag = GetCommonEntityBag( entity, rockContext );
 
-            bag.LoadAttributesAndValuesForPublicView( entity, RequestContext.CurrentPerson );
+            bag.LoadAttributesAndValuesForPublicView( entity, RequestContext.CurrentPerson, enforceSecurity: true );
 
             return bag;
         }
@@ -248,7 +248,7 @@ namespace Rock.Blocks.Tv
 
             var bag = GetCommonEntityBag( entity, rockContext );
 
-            bag.LoadAttributesAndValuesForPublicEdit( entity, RequestContext.CurrentPerson );
+            bag.LoadAttributesAndValuesForPublicEdit( entity, RequestContext.CurrentPerson, enforceSecurity: true );
 
             if ( entity.Id == 0 )
             {
@@ -260,6 +260,10 @@ namespace Rock.Blocks.Tv
                     {
                         bag.ApplicationJavascript = reader.ReadToEnd();
                     }
+                }
+                else
+                {
+                    throw new Exception( "Default TV Application JavaScript file not found." );
                 }
             }
 
@@ -304,7 +308,7 @@ namespace Rock.Blocks.Tv
                 {
                     entity.LoadAttributes( rockContext );
 
-                    entity.SetPublicAttributeValues( box.Entity.AttributeValues, RequestContext.CurrentPerson );
+                    entity.SetPublicAttributeValues( box.Entity.AttributeValues, RequestContext.CurrentPerson, enforceSecurity: true );
                 } );
 
             return true;
@@ -563,7 +567,7 @@ namespace Rock.Blocks.Tv
                 }
 
                 interactionChannelForSite.Name = entity.Name;
-                interactionChannelForSite.RetentionDuration = entity.EnablePageViews ? box.Entity.PageViewRetentionPeriod : null;
+                interactionChannelForSite.RetentionDuration = entity.EnablePageViews ? box.Entity.PageViewRetentionPeriod.AsIntegerOrNull() : null;
                 interactionChannelForSite.ComponentEntityTypeId = EntityTypeCache.Get<Page>().Id;
 
                 rockContext.SaveChanges();

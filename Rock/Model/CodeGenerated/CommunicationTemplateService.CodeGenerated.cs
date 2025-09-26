@@ -21,6 +21,7 @@
 // </copyright>
 
 using System;
+using System.Collections.Generic;
 using System.Linq;
 
 using Rock.Data;
@@ -53,7 +54,31 @@ namespace Rock.Model
             errorMessage = string.Empty;
 
             // ignoring Communication,CommunicationTemplateId
+
+            if ( new Service<CommunicationFlowCommunication>( Context ).Queryable().Any( a => a.CommunicationTemplateId == item.Id ) )
+            {
+                errorMessage = string.Format( "This {0} is assigned to a {1}.", CommunicationTemplate.FriendlyTypeName, CommunicationFlowCommunication.FriendlyTypeName );
+                return false;
+            }
             return true;
+        }
+    }
+
+    [HasQueryableAttributes( typeof( CommunicationTemplate.CommunicationTemplateQueryableAttributeValue ), nameof( CommunicationTemplateAttributeValues ) )]
+    public partial class CommunicationTemplate
+    {
+        /// <summary>
+        /// Gets the entity attribute values. This should only be used inside
+        /// LINQ statements when building a where clause for the query. This
+        /// property should only be used inside LINQ statements for filtering
+        /// or selecting values. Do <b>not</b> use it for accessing the
+        /// attributes after the entity has been loaded.
+        /// </summary>
+        public virtual ICollection<CommunicationTemplateQueryableAttributeValue> CommunicationTemplateAttributeValues { get; set; } 
+
+        /// <inheritdoc/>
+        public class CommunicationTemplateQueryableAttributeValue : QueryableAttributeValue
+        {
         }
     }
 
@@ -124,6 +149,7 @@ namespace Rock.Model
             target.FromName = source.FromName;
             target.ImageFileId = source.ImageFileId;
             target.IsActive = source.IsActive;
+            target.IsStarter = source.IsStarter;
             target.IsSystem = source.IsSystem;
             target.LavaFieldsJson = source.LavaFieldsJson;
             target.LogoBinaryFileId = source.LogoBinaryFileId;
@@ -146,6 +172,8 @@ namespace Rock.Model
             target.SmsFromSystemPhoneNumberId = source.SmsFromSystemPhoneNumberId;
             target.SMSMessage = source.SMSMessage;
             target.Subject = source.Subject;
+            target.UsageType = source.UsageType;
+            target.Version = source.Version;
             target.CreatedDateTime = source.CreatedDateTime;
             target.ModifiedDateTime = source.ModifiedDateTime;
             target.CreatedByPersonAliasId = source.CreatedByPersonAliasId;

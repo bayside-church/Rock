@@ -21,8 +21,10 @@ using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Data.Entity.ModelConfiguration;
 using System.Runtime.Serialization;
+
 using Rock.Data;
 using Rock.Lava;
+using Rock.Utility;
 
 namespace Rock.Model
 {
@@ -32,8 +34,9 @@ namespace Rock.Model
     [RockDomain( "Engagement" )]
     [Table( "ConnectionOpportunity" )]
     [DataContract]
+    [CodeGenerateRest]
     [Rock.SystemGuid.EntityTypeGuid( Rock.SystemGuid.EntityType.CONNECTION_OPPORTUNITY )]
-    public partial class ConnectionOpportunity : Model<ConnectionOpportunity>, IHasActiveFlag, IOrdered
+    public partial class ConnectionOpportunity : Model<ConnectionOpportunity>, IHasActiveFlag, IOrdered, IHasAdditionalSettings
     {
 
         #region Entity Properties
@@ -95,6 +98,7 @@ namespace Rock.Model
         /// </value>
         [Required]
         [DataMember( IsRequired = true )]
+        [EnableAttributeQualification]
         public int ConnectionTypeId { get; set; }
 
         /// <summary>
@@ -152,6 +156,12 @@ namespace Rock.Model
         /// </value>
         [DataMember]
         public bool ShowCampusOnTransfer { get; set; } = false;
+
+        /// <summary>
+        /// Gets or sets the additional settings as a JSON document.
+        /// </summary>
+        [DataMember]
+        public string AdditionalSettingsJson { get; set; }
 
         #endregion
 

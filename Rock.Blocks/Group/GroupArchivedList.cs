@@ -15,7 +15,6 @@
 // </copyright>
 //
 
-using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data.Entity;
@@ -23,14 +22,11 @@ using System.Linq;
 
 using Rock.Attribute;
 using Rock.Data;
-using Rock.Lava.RockLiquid.Blocks;
 using Rock.Model;
 using Rock.Obsidian.UI;
-using Rock.Reporting.DataFilter.Group;
 using Rock.Security;
 using Rock.ViewModels.Blocks;
 using Rock.ViewModels.Blocks.Group.GroupArchivedList;
-using Rock.ViewModels.Utility;
 using Rock.Web.Cache;
 
 namespace Rock.Blocks.Group
@@ -41,8 +37,8 @@ namespace Rock.Blocks.Group
     [DisplayName( "Group Archived List" )]
     [Category( "Utility" )]
     [Description( "Lists Groups that have been archived." )]
-    [IconCssClass( "fa fa-list" )]
-    // [SupportedSiteTypes( Model.SiteType.Web )]
+    [IconCssClass( "ti ti-list" )]
+    [SupportedSiteTypes( Model.SiteType.Web )]
 
     [Rock.SystemGuid.EntityTypeGuid( "b67a0c89-1550-4960-8aaf-baa713be3277" )]
     [Rock.SystemGuid.BlockTypeGuid( "972ad143-8294-4462-b2a7-1b36ea127374" )]
@@ -61,36 +57,7 @@ namespace Rock.Blocks.Group
             public const string DetailPage = "DetailPage";
         }
 
-        private static class PreferenceKey
-        {
-            public const string FilterGroupType = "Group Type";
-            public const string FilterGroupName = "Group Name";
-        }
-
         #endregion Keys
-
-        #region Properties
-
-        /// <summary>
-        /// Gets the group type of the groups to be included in the results.
-        /// </summary>
-        /// <value>
-        /// The type of the filter group.
-        /// </value>
-        protected Guid? FilterGroupType => GetBlockPersonPreferences()
-            .GetValue( PreferenceKey.FilterGroupType )
-            .FromJsonOrNull<ListItemBag>()?.Value?.AsGuidOrNull();
-
-        /// <summary>
-        /// Gets the name of the groups to be included in the results.
-        /// </summary>
-        /// <value>
-        /// The name of the filter group.
-        /// </value>
-        protected string FilterGroupName => GetBlockPersonPreferences()
-            .GetValue( PreferenceKey.FilterGroupName );
-
-        #endregion
 
         #region Methods
 
@@ -118,13 +85,6 @@ namespace Rock.Blocks.Group
         {
             var options = new GroupArchivedListOptionsBag();
 
-            options.GroupTypeGuids = new GroupTypeService( new RockContext() ).AsNoFilter()
-                .Where( a => a.Groups.Any( x => x.IsArchived ) )
-                .OrderBy( a => a.Name )
-                .AsNoTracking()
-                .Select( g => g.Guid )
-                .ToList();
-
             return options;
         }
 
@@ -144,17 +104,8 @@ namespace Rock.Blocks.Group
         protected override IQueryable<Rock.Model.Group> GetListQueryable( RockContext rockContext )
         {
             var queryable = new GroupService( rockContext ).GetArchived()
-                .Include( a => a.ArchivedByPersonAlias );
-
-            if ( FilterGroupType.HasValue )
-            {
-                queryable = queryable.Where( a => a.GroupType.Guid == FilterGroupType.Value );
-            }
-
-            if ( !string.IsNullOrWhiteSpace( FilterGroupName ) )
-            {
-                queryable = queryable.Where( a => a.Name.Contains( FilterGroupName ) );
-            }
+                .Include( a => a.GroupType )
+                .Include( a => a.ArchivedByPersonAlias.Person );
 
             return queryable;
         }

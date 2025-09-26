@@ -41,13 +41,7 @@ namespace RockWeb.Blocks.Event
         DefaultValue = Rock.SystemGuid.Page.REGISTRATION_INSTANCE_WAIT_LIST,
         Order = 0 )]
 
-    [LinkedPage( "Group Placement Tool Page",
-        "The Page that shows Group Placements for the selected placement type",
-        Key = AttributeKey.GroupPlacementToolPage,
-        IsRequired = false,
-        DefaultValue = Rock.SystemGuid.Page.REGISTRATION_INSTANCE_PLACEMENT_GROUPS,
-        Order = 1 )]
-
+    [Rock.Cms.DefaultBlockRole( Rock.Enums.Cms.BlockRole.Navigation )]
     [Rock.SystemGuid.BlockTypeGuid( "AF0740C9-BC60-434B-A360-EB70A7CEA108" )]
     public partial class RegistrationInstanceNavigation : RegistrationInstanceBlock, ISecondaryBlock
     {
@@ -59,7 +53,6 @@ namespace RockWeb.Blocks.Event
         private static class AttributeKey
         {
             public const string WaitListPage = "WaitListPage";
-            public const string GroupPlacementToolPage = "GroupPlacementToolPage";
         }
 
         #endregion Attribute Keys
@@ -115,21 +108,17 @@ namespace RockWeb.Blocks.Event
             }
 
             var waitListPageGuid = this.GetAttributeValue( AttributeKey.WaitListPage ).SplitDelimitedValues().FirstOrDefault().AsGuidOrNull();
-            var groupPlacementToolPageGuid = this.GetAttributeValue( AttributeKey.GroupPlacementToolPage ).SplitDelimitedValues().FirstOrDefault().AsGuidOrNull();
 
             var showWaitListTab = this.RegistrationInstance.RegistrationTemplate.WaitListEnabled;
 
             var rockContext = new RockContext();
-            var pageList = this.PageCache.ParentPage.GetPages( rockContext ).OrderBy( a => a.Order ).ToList();
+            var pageList = this.PageCache.ParentPage.GetPages( rockContext )
+                .Where( page => page.DisplayInNav( CurrentPerson ) )
+                .OrderBy( a => a.Order ).ToList();
 
             if ( !showWaitListTab && waitListPageGuid.HasValue )
             {
                 pageList = pageList.Where( a => a.Guid != waitListPageGuid.Value ).ToList();
-            }
-
-            if ( groupPlacementToolPageGuid.HasValue )
-            {
-                pageList = pageList.Where( a => a.Guid != groupPlacementToolPageGuid.Value ).ToList();
             }
 
             var navigationPageInfoList = pageList
@@ -139,29 +128,6 @@ namespace RockWeb.Blocks.Event
                     TabTitle = a.PageTitle,
                     PageReference = new PageReference( a.Id )
                 } ).ToList();
-
-            if ( groupPlacementToolPageGuid.HasValue )
-            {
-                var groupPlacementToolPageId = PageCache.GetId( groupPlacementToolPageGuid.Value );
-                if ( groupPlacementToolPageId.HasValue )
-                {
-                    pageList = pageList.Where( a => a.Guid != groupPlacementToolPageGuid.Value ).ToList();
-                    var registrationTemplatePlacements = this.RegistrationInstance.RegistrationTemplate.Placements.OrderBy( a => a.Order ).ThenBy( a => a.Name ).ToList();
-                    foreach ( var registrationTemplatePlacement in registrationTemplatePlacements )
-                    {
-                        var groupPlacementPageReference = new PageReference( groupPlacementToolPageId.Value );
-                        groupPlacementPageReference.Parameters.Add( PageParameterKey.RegistrationTemplatePlacementId, registrationTemplatePlacement.Id.ToString() );
-                        var navigationPageInfo = new NavigationPageInfo
-                        {
-                            PageReference = groupPlacementPageReference,
-                            TabTitle = registrationTemplatePlacement.Name,
-                            IsGroupPlacementPage = true,
-                            RegistrationTemplatePlacementId = registrationTemplatePlacement.Id };
-
-                        navigationPageInfoList.Add( navigationPageInfo );
-                    }
-                }
-            }
 
             var currentPageParameters = this.PageParameters().Where( a =>
                 a.Key != "PageId"
@@ -197,18 +163,8 @@ namespace RockWeb.Blocks.Event
 
             var liNavigationTab = e.Item.FindControl( "liNavigationTab" ) as HtmlControl;
             if ( pageReference.PageId == this.PageCache.Id )
-            {
-                if ( navigationPageInfo.IsGroupPlacementPage )
-                {
-                    if ( navigationPageInfo.RegistrationTemplatePlacementId.HasValue && this.PageParameter( PageParameterKey.RegistrationTemplatePlacementId ).AsInteger() == navigationPageInfo.RegistrationTemplatePlacementId.Value )
-                    {
-                        liNavigationTab.AddCssClass( "active" );
-                    }
-                }
-                else
-                {
-                    liNavigationTab.AddCssClass( "active" );
-                }
+            {    
+                liNavigationTab.AddCssClass( "active" );   
             }
 
             var aPageLink = e.Item.FindControl( "aPageLink" ) as HtmlAnchor;
@@ -236,10 +192,6 @@ namespace RockWeb.Blocks.Event
             public string TabTitle { get; set; }
 
             public PageReference PageReference { get; set; }
-
-            public bool IsGroupPlacementPage { get; set; }
-
-            public int? RegistrationTemplatePlacementId { get; set; }
         }
     }
 }

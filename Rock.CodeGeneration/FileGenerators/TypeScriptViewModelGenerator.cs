@@ -9,6 +9,7 @@ using System.Text.RegularExpressions;
 using Rock;
 using Rock.CodeGeneration.Utility;
 using Rock.CodeGeneration.XmlDoc;
+using Rock.ViewModels.Utility;
 
 namespace Rock.CodeGeneration.FileGenerators
 {
@@ -112,6 +113,7 @@ namespace Rock.CodeGeneration.FileGenerators
             sb.AppendLine();
             sb.Append( GenerateViewModelForEnum( type, true ) );
             sb.AppendLine();
+            sb.Append( GenerateOrderForEnumIfRequired( type ) );
 
             AppendCommentBlock( sb, typeComment, 0, type );
 
@@ -156,13 +158,26 @@ namespace Rock.CodeGeneration.FileGenerators
                 sb.AppendLine( $"export const {typeName}Description: Record<number, string> = {{" );
             }
 
-            //var sortedFields = fields.OrderBy( f => f.GetRawConstantValue() ).ToList();
-            var sortedFields = fields.ToList();
-
             // Loop through each sorted field and emit the declaration.
-            for ( int i = 0; i < sortedFields.Count; i++ )
+            for ( int i = 0; i < fields.Count; i++ )
             {
                 var field = fields[i];
+                var obsoleteFieldAttribute = field.GetCustomAttribute<ObsoleteAttribute>();
+
+                if ( isDescription && obsoleteFieldAttribute != null )
+                {
+                    // If this enum value is obsolete and there is another
+                    // enum that is not obsolete with the same integer
+                    // value then skip this one.
+                    var hasOtherField = fields
+                        .Any( f => ( int ) f.GetRawConstantValue() == ( int ) field.GetRawConstantValue()
+                            && f.GetCustomAttribute<ObsoleteAttribute>() == null );
+
+                    if ( hasOtherField )
+                    {
+                        continue;
+                    }
+                }
 
                 if ( i > 0 )
                 {
@@ -174,24 +189,12 @@ namespace Rock.CodeGeneration.FileGenerators
                 if ( !isDescription )
                 {
                     AppendCommentBlock( sb, field, 4 );
-                }
-                else
-                {
-                    fieldName = field.GetRawConstantValue().ToString();
 
-                    if ( fieldName[0] == '-' )
+                    if ( obsoleteFieldAttribute != null )
                     {
-                        fieldName = $"[{fieldName}]";
+                        sb.AppendLine( $"    /** @deprecated {obsoleteFieldAttribute.Message ?? string.Empty} */" );
                     }
-                }
 
-                if ( field.GetCustomAttribute<ObsoleteAttribute>() is ObsoleteAttribute obsoleteFieldAttribute )
-                {
-                    sb.AppendLine( $"    /** @deprecated {obsoleteFieldAttribute.Message ?? string.Empty} */" );
-                }
-
-                if ( !isDescription )
-                {
                     if ( type.GetCustomAttribute<FlagsAttribute>() != null )
                     {
                         sb.Append( $"    {fieldName}: 0x{( int ) field.GetRawConstantValue():X4}" );
@@ -203,9 +206,16 @@ namespace Rock.CodeGeneration.FileGenerators
                 }
                 else
                 {
+                    fieldName = field.GetRawConstantValue().ToString();
+
+                    if ( fieldName[0] == '-' )
+                    {
+                        fieldName = $"[{fieldName}]";
+                    }
+
                     if ( field.GetCustomAttribute<DescriptionAttribute>() is DescriptionAttribute fieldDescriptionAttribute )
                     {
-                        sb.Append( $"    {fieldName}: \"{fieldDescriptionAttribute.Description}\"");
+                        sb.Append( $"    {fieldName}: \"{fieldDescriptionAttribute.Description}\"" );
                     }
                     else
                     {
@@ -213,7 +223,7 @@ namespace Rock.CodeGeneration.FileGenerators
                     }
                 }
 
-                if ( i + 1 < sortedFields.Count )
+                if ( i + 1 < fields.Count )
                 {
                     sb.AppendLine( "," );
                 }
@@ -231,6 +241,40 @@ namespace Rock.CodeGeneration.FileGenerators
             {
                 sb.AppendLine( "} as const;" );
             }
+
+            return sb.ToString();
+        }
+
+        private string GenerateOrderForEnumIfRequired( Type type )
+        {
+            var typeName = GetClassNameForType( type );
+            var fields = type.GetFields( BindingFlags.Static | BindingFlags.Public )
+                .Where( f => f.GetCustomAttribute<ObsoleteAttribute>() == null )
+                .Select( f => new
+                {
+                    f.GetCustomAttribute<Rock.Enums.EnumOrderAttribute>()?.Order,
+                    Value = f.GetRawConstantValue()
+                } )
+                .ToList();
+
+            // If no fields have an EnumOrderAttribute, then we don't need to
+            // generate anything.
+            if ( !fields.Any( f => f.Order.HasValue ) )
+            {
+                return string.Empty;
+            }
+
+            var sb = new StringBuilder();
+            var orderedValues = fields.OrderBy( f => f.Order ?? 0 )
+                .ThenBy( f => f.Value )
+                .Select( f => f.Value )
+                .Distinct();
+
+            sb.AppendLine( "// Add the __order property hidden so it doesn't get enumerated." );
+            sb.AppendLine( $"Object.defineProperty({typeName}Description, \"__order\", {{" );
+            sb.AppendLine( $"    value: [{string.Join( ", ", orderedValues )}]," );
+            sb.AppendLine( "});" );
+            sb.AppendLine();
 
             return sb.ToString();
         }
@@ -514,7 +558,7 @@ namespace Rock.CodeGeneration.FileGenerators
                 tsType = "string";
                 isNullable = isNullable || !isRequired;
             }
-            else if ( type == typeof( DateTime ) || type == typeof( DateTimeOffset ) )
+            else if ( type == typeof( DateTime ) || type == typeof( DateTimeOffset ) || type == typeof ( TimeSpan ) )
             {
                 tsType = "string";
                 isNullable = isNullable || !isRequired;
@@ -562,6 +606,19 @@ namespace Rock.CodeGeneration.FileGenerators
 
                     tsType = $"{itemType}[]";
                     imports.AddRange( itemImports );
+                    isNullable = isNullable || !isRequired;
+                }
+                else if ( genericTypeDefinition == typeof( ValidPropertiesBox<> ) )
+                {
+                    var (valueType, valueImports) = GetTypeScriptType( type.GetGenericArguments()[0], true );
+
+                    tsType = $"ValidPropertiesBox<{valueType}>";
+                    imports.AddRange( valueImports );
+                    imports.Add( new TypeScriptImport
+                    {
+                        SourcePath = "@Obsidian/ViewModels/Utility/validPropertiesBox",
+                        NamedImport = "ValidPropertiesBox"
+                    } );
                     isNullable = isNullable || !isRequired;
                 }
             }

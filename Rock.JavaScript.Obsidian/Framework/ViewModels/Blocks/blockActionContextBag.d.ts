@@ -21,6 +21,8 @@
 // </copyright>
 //
 
+import { Guid } from "@Obsidian/Types";
+
 /**
  * The data structure of the __context parameter included with block
  * action requests.
@@ -30,8 +32,22 @@ export type BlockActionContextBag = {
     captcha?: string | null;
 
     /**
+     * Identifies the interaction that represented the original page load.
+     * This is used to correlate actions in this request with the
+     * original interaction.
+     */
+    interactionGuid?: Guid | null;
+
+    /**
      * Gets or sets the page parameters that the page was originally
      * loaded with.
      */
     pageParameters?: Record<string, string> | null;
+
+    /**
+     * The Interaction session that this request belongs to. This is used
+     * to group block action API requests back to the main request's
+     * session.
+     */
+    sessionGuid?: Guid | null;
 };

@@ -37,7 +37,7 @@ namespace Rock.Cms.ContentCollection.IndexDocuments
     /// Base index document for the content collection search index.
     /// </summary>
     [RockInternal( "1.14" )]
-    internal class IndexDocumentBase : DynamicObject, ILavaDataDictionary, Lava.ILiquidizable
+    internal class IndexDocumentBase : DynamicObject, ILavaDataDictionary
     {
         #region Fields
 
@@ -259,6 +259,12 @@ namespace Rock.Cms.ContentCollection.IndexDocuments
         public string IndexModelType { get; set; }
 
         /// <summary>
+        /// Gets whether or not this document is approved.
+        /// </summary>
+        [IndexField]
+        public bool IsApproved { get; set; } = true;
+
+        /// <summary>
         /// Gets the IndexModelAssembly name of the IndexModel that this was when it was stored to the Index server.
         /// </summary>
         /// <value>
@@ -381,12 +387,21 @@ namespace Rock.Cms.ContentCollection.IndexDocuments
             {
                 sourceModel.LoadAttributes();
             }
+            
+            var additionalSettings = source.AdditionalSettings.FromJsonOrNull<ContentCollectionSourceAdditionalSettingsBag>();
+            var attributeGuidsToIndex = additionalSettings?.AttributeGuids ?? new List<Guid>();
 
             foreach ( var attributeValue in sourceModel.AttributeValues )
             {
                 var key = MakeAttributeKeySafe( attributeValue.Key );
 
                 if ( !sourceModel.Attributes.TryGetValue( attributeValue.Key, out var attribute ) )
+                {
+                    continue;
+                }
+
+                // Only process attributes that are specifically selected for indexing
+                if ( !attributeGuidsToIndex.Contains( attribute.Guid ) )
                 {
                     continue;
                 }
@@ -784,36 +799,6 @@ namespace Rock.Cms.ContentCollection.IndexDocuments
         /// </value>
         [LavaHidden]
         public List<string> AvailableKeys => GetDynamicMemberNames().ToList();
-
-
-        /// <summary>
-        /// Gets the <see cref="object"/> with the specified key.
-        /// </summary>
-        /// <value>
-        /// The <see cref="object"/>.
-        /// </value>
-        /// <param name="key">The key.</param>
-        /// <returns></returns>
-        public object this[object key] => this[key.ToStringSafe()];
-
-        /// <summary>
-        /// Returns liquid for the object
-        /// </summary>
-        /// <returns></returns>
-        public object ToLiquid()
-        {
-            return this;
-        }
-
-        /// <summary>
-        /// Determines whether the specified key contains key.
-        /// </summary>
-        /// <param name="key">The key.</param>
-        /// <returns></returns>
-        public bool ContainsKey( object key )
-        {
-            return GetDynamicMemberNames().Contains( key.ToString() );
-        }
 
         #endregion
     }

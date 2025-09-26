@@ -28,6 +28,21 @@ namespace Rock.ViewModels.Blocks.Lms.LearningClassDetail
     public class LearningClassDetailOptionsBag
     {
         /// <summary>
+        /// Gets or sets the number of active classes using the default grading system.
+        /// </summary>
+        public int ActiveClassesUsingDefaultGradingSystem { get; set; }
+
+        /// <summary>
+        /// Gets or sets whether the current person is authorized to view grades.
+        /// </summary>
+        public bool CanViewGrades { get; set; }
+
+        /// <summary>
+        /// Gets or sets whether the course has announcements enabled.
+        /// </summary>
+        public bool CourseAllowsAnnouncements { get; set; }
+
+        /// <summary>
         /// Gets or sets the available grading systems.
         /// </summary>
         public List<ListItemBag> GradingSystems { get; set; }
@@ -41,5 +56,10 @@ namespace Rock.ViewModels.Blocks.Lms.LearningClassDetail
         /// Gets or sets the available semesters for this course.
         /// </summary>
         public List<ListItemBag> Semesters { get; set; }
+
+        /// <summary>
+        /// Gets or sets the character limit of the SMS medium.
+        /// </summary>
+        public int SmsMediumCharacterLimit { get; set; }
     }
 }

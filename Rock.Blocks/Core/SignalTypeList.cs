@@ -1,4 +1,4 @@
-// <copyright>
+﻿// <copyright>
 // Copyright by the Spark Development Network
 //
 // Licensed under the Rock Community License (the "License");
@@ -38,8 +38,8 @@ namespace Rock.Blocks.Core
     [DisplayName( "Signal Type List" )]
     [Category( "Core" )]
     [Description( "Displays a list of signal types." )]
-    [IconCssClass( "fa fa-list" )]
-    // [SupportedSiteTypes( Model.SiteType.Web )]
+    [IconCssClass( "ti ti-list" )]
+    [SupportedSiteTypes( Model.SiteType.Web )]
 
     [LinkedPage( "Detail Page",
         Description = "The page that will show the signal type details.",
@@ -112,7 +112,7 @@ namespace Rock.Blocks.Core
         {
             return new Dictionary<string, string>
             {
-                [NavigationUrlKey.DetailPage] = this.GetLinkedPageUrl( AttributeKey.DetailPage, "SignalTypeId", "((Key))" )
+                [NavigationUrlKey.DetailPage] = this.GetLinkedPageUrl( AttributeKey.DetailPage, new Dictionary<string, string> { ["SignalTypeId"] = "((Key))", ["autoEdit"] = "true", ["returnUrl"] = this.GetCurrentPageUrl() } )
             };
         }
 
@@ -120,6 +120,12 @@ namespace Rock.Blocks.Core
         protected override IQueryable<SignalType> GetListQueryable( RockContext rockContext )
         {
             return base.GetListQueryable( rockContext );
+        }
+
+        /// <inheritdoc/>
+        protected override IQueryable<SignalType> GetOrderedListQueryable( IQueryable<SignalType> queryable, RockContext rockContext )
+        {
+            return queryable.OrderBy( s => s.Order ).ThenBy( s => s.Name );
         }
 
         /// <inheritdoc/>

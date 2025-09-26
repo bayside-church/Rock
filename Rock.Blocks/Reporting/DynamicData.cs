@@ -106,7 +106,7 @@ namespace Rock.Blocks.Reporting
         Key = AttributeKey.ResultsDisplayMode,
         Description = "Determines how the results should be displayed.",
         Category = "CustomSetting",
-        ListSource = "Grid^grid,Lava Template^lavaTemplate",
+        ListSource = "grid^Grid,lavaTemplate^Lava Template",
         DefaultValue = "Grid",
         IsRequired = true )]
 
@@ -256,7 +256,7 @@ namespace Rock.Blocks.Reporting
     [Rock.SystemGuid.BlockTypeGuid( "E050BDD0-4B59-4E86-AF68-18B361F76650" )]
     public class DynamicData : RockBlockType, IHasCustomActions
     {
-        #region Keys & Constants
+        #region Keys
 
         private static class AttributeKey
         {
@@ -307,7 +307,7 @@ namespace Rock.Blocks.Reporting
             public const string RowSelection = "RowSelection";
         }
 
-        #endregion Keys & Constants
+        #endregion Keys
 
         #region Fields
 
@@ -360,6 +360,7 @@ namespace Rock.Blocks.Reporting
                         ColumnType.Currency,
                         ColumnType.Date,
                         ColumnType.DateTime,
+                        ColumnType.Html,
                         ColumnType.Number,
                         ColumnType.Person
                     };
@@ -400,41 +401,28 @@ namespace Rock.Blocks.Reporting
         /// <inheritdoc/>
         public override object GetObsidianBlockInitialization()
         {
-            using ( var rockContext = new RockContext() )
+            var box = new DynamicDataInitializationBox();
+
+            var dataResults = GetDataResultsForDisplay();
+            if ( dataResults.ErrorMessage.IsNotNullOrWhiteSpace() )
             {
-                var box = new DynamicDataInitializationBox();
-
-                var dataResults = GetDataResultsForDisplay( rockContext );
-                if ( dataResults.ErrorMessage.IsNotNullOrWhiteSpace() )
-                {
-                    box.ErrorMessage = dataResults.ErrorMessage;
-                    return box;
-                }
-
-                box.IsLavaTemplateDisplayMode = dataResults.Config.IsLavaTemplateDisplayMode;
-                box.GridResults = dataResults.GridResults;
-                box.LavaTemplateResults = dataResults.LavaTemplateResults;
-                box.NavigationUrls = GetBoxNavigationUrls( dataResults );
-                box.SecurityGrantToken = GetSecurityGrantToken();
-
-                SetDynamicPageTitle( dataResults );
-
-                if ( GetAttributeValue( AttributeKey.EnableQuickReturn ).AsBoolean() )
-                {
-                    box.QuickReturnPageTitle = dataResults.PageTitle;
-                }
-
+                box.ErrorMessage = dataResults.ErrorMessage;
                 return box;
             }
+
+            box.IsLavaTemplateDisplayMode = dataResults.Config.IsLavaTemplateDisplayMode;
+            box.NavigationUrls = GetBoxNavigationUrls( dataResults );
+            box.SecurityGrantToken = GetSecurityGrantToken();
+
+            return box;
         }
 
         /// <summary>
         /// Gets the data results for display.
         /// </summary>
-        /// <param name="rockContext">The rock context.</param>
         /// <param name="forceLoadDataRows">Whether to force the data rows to load, regardless of other settings.</param>
         /// <returns>The data results for display.</returns>
-        private DynamicDataResults GetDataResultsForDisplay( RockContext rockContext, bool forceLoadDataRows = false )
+        private DynamicDataResults GetDataResultsForDisplay( bool forceLoadDataRows = false )
         {
             // Load the schema first, to ensure we don't encounter an error processing the query.
             var config = new DynamicDataConfig
@@ -455,8 +443,9 @@ namespace Rock.Blocks.Reporting
                 return dataResults;
             }
 
-            // Set the display-related attribute values on the outgoing results object for use when building display.
-            config = dataResults.Config;
+            // Set display-related attribute values on the outgoing results object for use when building the display.
+            // Note: `config` (the DynamicDataConfig instance) was already set on the outgoing `dataResults` object
+            // within the `GetDataResults()` method call above.
             config.PageTitleLava = GetAttributeValue( AttributeKey.PageTitleLava );
             config.ResultsDisplayMode = GetAttributeValue( AttributeKey.ResultsDisplayMode );
 
@@ -518,7 +507,7 @@ namespace Rock.Blocks.Reporting
             else
             {
                 dataResults.ActualColumnConfigurations = LoadColumnConfigurationsFromDataSet( dataResults.DataSet, config.ColumnConfigurations, includeHiddenKeyColumns: true );
-                SetGridResults( rockContext, dataResults );
+                SetGridResults( dataResults );
             }
 
             return dataResults;
@@ -566,7 +555,6 @@ namespace Rock.Blocks.Reporting
                 var commandType = config.IsStoredProcedure ? CommandType.StoredProcedure : CommandType.Text;
                 var sqlParameters = GetSqlParameters( config.QueryParams );
                 var timeout = config.Timeout ?? 30;
-
                 var mergeFields = config.MergeFields;
 
                 // NOTE: There is already a PageParameters merge field within common merge fields, but for
@@ -732,7 +720,7 @@ namespace Rock.Blocks.Reporting
                 // Do not change this to use Rock's `ToCamelCase()` extension method,
                 // as this block's private `GetCamelCase()` method is more thorough,
                 // and will cover cases that are more likely to be encountered within
-                // the the block's dynamic query value.
+                // the block's dynamic query value.
                 c.CamelCaseName = GetCamelCase( c.SplitCaseName );
             } );
         }
@@ -805,80 +793,40 @@ namespace Rock.Blocks.Reporting
             var mergeFields = dataResults.Config.MergeFields;
             var i = 1;
 
-            if ( LavaService.RockLiquidIsEnabled )
+            var tableFields = new List<Dictionary<string, object>>();
+            foreach ( DataTable dataTable in dataSet.Tables )
             {
-                var tableFields = new List<Dictionary<string, object>>();
-                foreach ( DataTable dataTable in dataSet.Tables )
+                var lavaRows = new List<DataRowLavaData>();
+                foreach ( DataRow row in dataTable.Rows )
                 {
-                    var lavaRows = new List<DataRowDrop>();
-                    foreach ( DataRow row in dataTable.Rows )
-                    {
-                        lavaRows.Add( new DataRowDrop( row ) );
-                    }
-
-                    // Add a collection of all the tables as a merge field (even if only one table),
-                    // to allow the template to iterate over them.
-                    var tableField = new Dictionary<string, object>
-                    {
-                        { "rows", lavaRows }
-                    };
-
-                    tableFields.Add( tableField );
-
-                    // Continue to add the following merge fields to maintain compatibility with
-                    // lava templates that were written before this Obsidian version of the block
-                    // (and therefore before the 'tables' merge field) was added.
-                    if ( dataSet.Tables.Count > 1 )
-                    {
-                        mergeFields.Add( "table" + i.ToString(), tableField );
-                    }
-                    else
-                    {
-                        mergeFields.Add( "rows", lavaRows );
-                    }
-
-                    i++;
+                    lavaRows.Add( new DataRowLavaData( row ) );
                 }
 
-                mergeFields.Add( "tables", tableFields );
-            }
-            else
-            {
-                var tableFields = new List<Dictionary<string, object>>();
-                foreach ( DataTable dataTable in dataSet.Tables )
+                // Add a collection of all the tables as a merge field (even if only one table),
+                // to allow the template to iterate over them.
+                var tableField = new Dictionary<string, object>
                 {
-                    var lavaRows = new List<DataRowLavaData>();
-                    foreach ( DataRow row in dataTable.Rows )
-                    {
-                        lavaRows.Add( new DataRowLavaData( row ) );
-                    }
+                    { "rows", lavaRows }
+                };
 
-                    // Add a collection of all the tables as a merge field (even if only one table),
-                    // to allow the template to iterate over them.
-                    var tableField = new Dictionary<string, object>
-                    {
-                        { "rows", lavaRows }
-                    };
+                tableFields.Add( tableField );
 
-                    tableFields.Add( tableField );
-
-                    // Continue to add the following merge fields to maintain compatibility with
-                    // lava templates that were written before this Obsidian version of the block
-                    // (and therefore before the 'tables' merge field) was added.
-                    if ( dataSet.Tables.Count > 1 )
-                    {
-                        mergeFields.Add( "table" + i.ToString(), tableField );
-                    }
-                    else
-                    {
-                        mergeFields.Add( "rows", lavaRows );
-                    }
-
-                    i++;
+                // Continue to add the following merge fields to maintain compatibility with
+                // lava templates that were written before this Obsidian version of the block
+                // (and therefore before the 'tables' merge field) was added.
+                if ( dataSet.Tables.Count > 1 )
+                {
+                    mergeFields.Add( "table" + i.ToString(), tableField );
+                }
+                else
+                {
+                    mergeFields.Add( "rows", lavaRows );
                 }
 
-                mergeFields.Add( "tables", tableFields );
+                i++;
             }
+
+            mergeFields.Add( "tables", tableFields );
         }
 
         /// <summary>
@@ -908,9 +856,8 @@ namespace Rock.Blocks.Reporting
         /// set grid data rows; that data should instead be loaded on demand by the Obsidian grid client.
         /// </para>
         /// </summary>
-        /// <param name="rockContext">The rock context.</param>
         /// <param name="dataResults">The dynamic data results onto which to set the grid results.</param>
-        private void SetGridResults( RockContext rockContext, DynamicDataResults dataResults )
+        private void SetGridResults( DynamicDataResults dataResults )
         {
             var config = dataResults?.Config;
             if ( config == null )
@@ -1013,7 +960,7 @@ namespace Rock.Blocks.Reporting
 
             dataResults.GridResults = new GridResultsBag
             {
-                GridDefinition = GetGridBuilder( rockContext, dataResults ).BuildDefinition(),
+                GridDefinition = GetGridBuilder( dataResults ).BuildDefinition(),
                 Title = config.GridTitle,
                 KeyField = keyField,
                 ShowCheckboxSelectionColumn = config.ShowCheckboxSelectionColumn,
@@ -1148,7 +1095,7 @@ namespace Rock.Blocks.Reporting
         /// </summary>
         /// <param name="dataResults">The dynamic data results containing the column configurations.</param>
         /// <returns>The grid builder.</returns>
-        private GridBuilder<DataRow> GetGridBuilder( RockContext rockContext, DynamicDataResults dataResults )
+        private GridBuilder<DataRow> GetGridBuilder( DynamicDataResults dataResults )
         {
             if ( dataResults.GridBuilder != null )
             {
@@ -1162,7 +1109,7 @@ namespace Rock.Blocks.Reporting
             var columnConfigurations = dataResults?.ActualColumnConfigurations.ToList();
             if ( columnConfigurations?.Any() == true )
             {
-                var personService = new PersonService( rockContext );
+                var personService = new PersonService( this.RockContext );
                 var encryptedFields = dataResults.Config
                     ?.EncryptedFields
                     ?.Where( f => f.IsNotNullOrWhiteSpace() )
@@ -1183,6 +1130,19 @@ namespace Rock.Blocks.Reporting
 
                     switch ( columnType )
                     {
+                        case ColumnType.BooleanValue:
+                            gridBuilder.AddField( camelCaseName, dataRow =>
+                            {
+                                var value = dataRow[actualColumnName]?.ToString();
+
+                                if ( isEncrypted )
+                                {
+                                    value = Rock.Security.Encryption.DecryptString( value );
+                                }
+
+                                return value.AsBoolean();
+                            } );
+                            break;
                         case ColumnType.PersonValue:
                             gridBuilder.AddPersonField( camelCaseName, dataRow =>
                             {
@@ -1301,11 +1261,12 @@ namespace Rock.Blocks.Reporting
                     }
 
                     // Existing column configuration not found; add a new one with default values.
+                    var columnType = GetColumnTypeFromDataType( dataColumn.DataType );
                     column = new ColumnConfigurationBag
                     {
                         ActualColumnName = columnName,
                         Name = columnName,
-                        ColumnType = ColumnType.TextValue
+                        ColumnType = columnType
                     };
 
                     columnConfigurations.Add( column );
@@ -1315,6 +1276,37 @@ namespace Rock.Blocks.Reporting
             SetColumnConfigurationNames( columnConfigurations );
 
             return columnConfigurations;
+        }
+
+        /// <summary>
+        /// Gets the column type based on the data type.
+        /// </summary>
+        /// <param name="dataType">The data type.</param>
+        /// <returns>The column type.</returns>
+        private string GetColumnTypeFromDataType( Type dataType )
+        {
+            if ( dataType == typeof( bool ) )
+            {
+                return ColumnType.BooleanValue;
+            }
+            if ( dataType == typeof( DateTime ) || dataType == typeof( DateTimeOffset ) )
+            {
+                return ColumnType.DateTimeValue;
+            }
+            if ( dataType == typeof( decimal ) )
+            {
+                return ColumnType.CurrencyValue;
+            }
+            if ( dataType == typeof( double ) || dataType == typeof( float ) )
+            {
+                return ColumnType.NumberValue;
+            }
+            if ( dataType == typeof( int ) || dataType == typeof( long ) || dataType == typeof( short ) || dataType == typeof( byte ) )
+            {
+                return ColumnType.NumberValue;
+            }
+
+            return ColumnType.TextValue;
         }
 
         /// <summary>
@@ -1357,6 +1349,63 @@ namespace Rock.Blocks.Reporting
 
             this.RequestContext.Response.SetPageTitle( pageTitle );
             this.RequestContext.Response.SetBrowserTitle( pageTitle );
+        }
+
+        /// <summary>
+        /// Sets (or removes) page parameters on the rock request context, using the provided override values.
+        /// </summary>
+        /// <remarks>
+        /// For each override key/value pair: if the value is defined, it will be set on the request context's page
+        /// parameters collection. If the value is <see langword="null"/> or empty string, any existing parameter with
+        /// a matching key will be removed from the collection.
+        /// </remarks>
+        /// <param name="pageParameterOverrides">The override values to use when setting page parameters.</param>
+        private void ApplyPageParameterOverrides( Dictionary<string, string> pageParameterOverrides )
+        {
+            if ( pageParameterOverrides?.Any() != true )
+            {
+                return;
+            }
+
+            var pageParameters = this.RequestContext.GetPageParameters();
+            foreach ( var paramOverride in pageParameterOverrides )
+            {
+                var overrideKey = paramOverride.Key;
+                var overrideValue = paramOverride.Value;
+
+                if ( overrideValue.IsNullOrWhiteSpace() )
+                {
+                    // Remove existing parameters whose override value is empty.
+                    if ( pageParameters.ContainsKey( overrideKey ) )
+                    {
+                        pageParameters.Remove( overrideKey );
+                    }
+
+                    continue;
+                }
+
+                // Add the new value (which might override an existing value).
+                pageParameters[overrideKey] = overrideValue;
+            }
+
+            /*
+                10/22/2024 - JPH
+
+                Local testing suggests it's safe to override RockRequestContext's page parameters (in order to provide
+                low-level Lava templates, Etc. with the latest page parameter values). However, if we find this approach
+                to be problematic in the future, an alternative approach might be:
+
+                    1. Create a secondary instance of the RockRequestContext class and copy all property values from the
+                       primary instance.
+
+                    2. override the page parameters on that secondary instance.
+
+                    3. Set the secondary instance on the RockRequestContextAccessor for low-level processes to grab and
+                       use for Lava templates.
+
+                Reason: Provide alternative approach for unconventional page parameter manipulation.
+             */
+            this.RequestContext.SetPageParameters( pageParameters );
         }
 
         /// <summary>
@@ -1434,7 +1483,7 @@ namespace Rock.Blocks.Reporting
             {
                 actions.Add( new BlockCustomActionBag
                 {
-                    IconCssClass = "fa fa-edit",
+                    IconCssClass = "ti ti-edit",
                     Tooltip = "Settings",
                     ComponentFileUrl = "/Obsidian/Blocks/Reporting/dynamicDataCustomSettings.obs"
                 } );
@@ -1448,31 +1497,81 @@ namespace Rock.Blocks.Reporting
         #region Block Actions
 
         /// <summary>
+        /// Gets the data that drives the dynamic grid and Lava templates.
+        /// </summary>
+        /// <remarks>
+        /// This method should be called on block startup and whenever page parameters change.
+        /// </remarks>
+        /// <param name="bag">The information needed to get dynamic data.</param>
+        /// <returns>An object containing information about the dynamic data.</returns>
+        [BlockAction]
+        public BlockActionResult GetDynamicData( GetDynamicDataRequestBag bag )
+        {
+            if ( bag == null )
+            {
+                return ActionBadRequest( "Unable to load block data." );
+            }
+
+            if ( bag.PageParameterOverrides?.Any() == true )
+            {
+                ApplyPageParameterOverrides( bag.PageParameterOverrides );
+            }
+
+            var dataResults = GetDataResultsForDisplay();
+            if ( dataResults.ErrorMessage.IsNotNullOrWhiteSpace() )
+            {
+                return ActionInternalServerError( dataResults.ErrorMessage );
+            }
+
+            var response = new GetDynamicDataResponseBag
+            {
+                GridResults = dataResults.GridResults,
+                LavaTemplateResults = dataResults.LavaTemplateResults
+            };
+
+            if ( GetAttributeValue( AttributeKey.EnableQuickReturn ).AsBoolean() )
+            {
+                SetDynamicPageTitle( dataResults );
+                response.QuickReturnPageTitle = dataResults.PageTitle;
+            }
+
+            return ActionOk( response );
+        }
+
+        /// <summary>
         /// Gets the grid row data.
         /// </summary>
-        /// <returns>The grid row data</returns>
+        /// <param name="bag">The information needed to get grid row data.</param>
+        /// <returns>An object containing information about the grid row data.</returns>
         [BlockAction]
-        public BlockActionResult GetGridRowData()
+        public BlockActionResult GetGridRowData( GetDynamicDataRequestBag bag )
         {
-            using ( var rockContext = new RockContext() )
+            if ( bag == null )
             {
-                var dataResults = GetDataResultsForDisplay( rockContext, forceLoadDataRows: true );
-                if ( dataResults.ErrorMessage.IsNotNullOrWhiteSpace() )
-                {
-                    return ActionInternalServerError( dataResults.ErrorMessage );
-                }
-
-                var dataRows = new List<DataRow>();
-                if ( dataResults.DataSet != null && dataResults.DataSet.Tables.Count > 0 )
-                {
-                    dataRows = dataResults.DataSet.Tables[0].Rows.OfType<DataRow>().ToList();
-                }
-
-                var gridBuilder = GetGridBuilder( rockContext, dataResults );
-                var gridDataBag = gridBuilder.Build( dataRows );
-
-                return ActionOk( gridDataBag );
+                return ActionBadRequest( "Unable to get grid row data." );
             }
+
+            if ( bag.PageParameterOverrides?.Any() == true )
+            {
+                ApplyPageParameterOverrides( bag.PageParameterOverrides );
+            }
+
+            var dataResults = GetDataResultsForDisplay( forceLoadDataRows: true );
+            if ( dataResults.ErrorMessage.IsNotNullOrWhiteSpace() )
+            {
+                return ActionInternalServerError( dataResults.ErrorMessage );
+            }
+
+            var dataRows = new List<DataRow>();
+            if ( dataResults.DataSet != null && dataResults.DataSet.Tables.Count > 0 )
+            {
+                dataRows = dataResults.DataSet.Tables[0].Rows.OfType<DataRow>().ToList();
+            }
+
+            var gridBuilder = GetGridBuilder( dataResults );
+            var gridDataBag = gridBuilder.Build( dataRows );
+
+            return ActionOk( gridDataBag );
         }
 
         /// <summary>
@@ -1652,129 +1751,126 @@ namespace Rock.Blocks.Reporting
         [BlockAction]
         public BlockActionResult SaveCustomSettings( CustomSettingsBox<DynamicDataCustomSettingsBag, DynamicDataCustomSettingsOptionsBag> box )
         {
-            using ( var rockContext = new RockContext() )
+            if ( !BlockCache.IsAuthorized( Rock.Security.Authorization.ADMINISTRATE, this.RequestContext.CurrentPerson ) )
             {
-                if ( !BlockCache.IsAuthorized( Rock.Security.Authorization.ADMINISTRATE, this.RequestContext.CurrentPerson ) )
+                return ActionForbidden( "Not authorized to edit block settings." );
+            }
+
+            var block = new BlockService( this.RockContext ).Get( this.BlockId );
+            block.LoadAttributes( this.RockContext );
+
+            // Shared Settings (shared between grid and Lava results formatting display modes).
+            if ( GetAttributeValue( AttributeKey.UpdatePage ).AsBoolean() )
+            {
+                var pageName = box.Settings.PageName;
+                var pageDescription = box.Settings.PageDescription;
+
+                if ( this.PageCache != null &&
+                        ( this.PageCache.PageTitle != pageName || this.PageCache.Description != pageDescription )
+                        && this.PageCache.Guid != Rock.SystemGuid.Page.PAGE_MAP.AsGuid() // Don't allow editing the title of the page if the page is the internal page editor (Issue #5542).
+                    )
                 {
-                    return ActionForbidden( "Not authorized to edit block settings." );
-                }
-
-                var block = new BlockService( rockContext ).Get( this.BlockId );
-                block.LoadAttributes( rockContext );
-
-                // Shared Settings (shared between grid and Lava results formatting display modes).
-                if ( GetAttributeValue( AttributeKey.UpdatePage ).AsBoolean() )
-                {
-                    var pageName = box.Settings.PageName;
-                    var pageDescription = box.Settings.PageDescription;
-
-                    if ( this.PageCache != null &&
-                            ( this.PageCache.PageTitle != pageName || this.PageCache.Description != pageDescription )
-                            && this.PageCache.Guid != Rock.SystemGuid.Page.PAGE_MAP.AsGuid() // Don't allow editing the title of the page if the page is the internal page editor (Issue #5542).
-                        )
+                    var page = new PageService( this.RockContext ).Get( this.PageCache.Id );
+                    if ( page != null )
                     {
-                        var page = new PageService( rockContext ).Get( this.PageCache.Id );
-                        if ( page != null )
-                        {
-                            page.InternalName = pageName;
-                            page.PageTitle = pageName;
-                            page.BrowserTitle = pageName;
-                            page.Description = pageDescription;
+                        page.InternalName = pageName;
+                        page.PageTitle = pageName;
+                        page.BrowserTitle = pageName;
+                        page.Description = pageDescription;
 
-                            rockContext.SaveChanges();
+                        this.RockContext.SaveChanges();
 
-                            // TODO: This was done in the Web Forms block; is it doable in Obsidian?
-                            // If not, the new value will be rendered on subsequent page loads, so no big deal.
-                            //var breadCrumb = RockPage.BreadCrumbs.Where( c => c.Url == RockPage.PageReference.BuildUrl() ).FirstOrDefault();
-                            //if ( breadCrumb != null )
-                            //{
-                            //    breadCrumb.Name = pageCache.BreadCrumbText;
-                            //}
-                        }
+                        // TODO: This was done in the Web Forms block; is it doable in Obsidian?
+                        // If not, the new value will be rendered on subsequent page loads, so no big deal.
+                        //var breadCrumb = RockPage.BreadCrumbs.Where( c => c.Url == RockPage.PageReference.BuildUrl() ).FirstOrDefault();
+                        //if ( breadCrumb != null )
+                        //{
+                        //    breadCrumb.Name = pageCache.BreadCrumbText;
+                        //}
                     }
                 }
-
-                box.IfValidProperty( nameof( box.Settings.Query ),
-                    () => block.SetAttributeValue( AttributeKey.Query, box.Settings.Query ) );
-
-                box.IfValidProperty( nameof( box.Settings.IsStoredProcedure ),
-                    () => block.SetAttributeValue( AttributeKey.StoredProcedure, box.Settings.IsStoredProcedure.ToString() ) );
-
-                box.IfValidProperty( nameof( box.Settings.Parameters ),
-                    () => block.SetAttributeValue( AttributeKey.QueryParams, box.Settings.Parameters ) );
-
-                box.IfValidProperty( nameof( box.Settings.Timeout ),
-                    () => block.SetAttributeValue( AttributeKey.Timeout, box.Settings.Timeout.ToString() ) );
-
-                box.IfValidProperty( nameof( box.Settings.ResultsDisplayMode ),
-                    () => block.SetAttributeValue( AttributeKey.ResultsDisplayMode, box.Settings.ResultsDisplayMode ) );
-
-                box.IfValidProperty( nameof( box.Settings.PageTitleLava ),
-                    () => block.SetAttributeValue( AttributeKey.PageTitleLava, box.Settings.PageTitleLava ) );
-
-                // Results Formatting - Grid Settings.
-                box.IfValidProperty( nameof( box.Settings.ColumnConfigurations ),
-                    () => block.SetAttributeValue( AttributeKey.ColumnConfigurations, SerializeColumnConfigurations( box.Settings.ColumnConfigurations ) ) );
-
-                box.IfValidProperty( nameof( box.Settings.ShowCheckboxSelectionColumn ),
-                    () => block.SetAttributeValue( AttributeKey.ShowCheckboxSelectionColumn, box.Settings.ShowCheckboxSelectionColumn.ToString() ) );
-
-                box.IfValidProperty( nameof( box.Settings.DisablePaging ),
-                    () => block.SetAttributeValue( AttributeKey.DisablePaging, box.Settings.DisablePaging.ToString() ) );
-
-                box.IfValidProperty( nameof( box.Settings.IsPersonReport ),
-                    () => block.SetAttributeValue( AttributeKey.PersonReport, box.Settings.IsPersonReport.ToString() ) );
-
-                box.IfValidProperty( nameof( box.Settings.EnableStickyHeader ),
-                    () => block.SetAttributeValue( AttributeKey.EnableStickyHeaderOnGrid, box.Settings.EnableStickyHeader.ToString() ) );
-
-                box.IfValidProperty( nameof( box.Settings.EnableExport ),
-                    () => block.SetAttributeValue( AttributeKey.ShowExcelExport, box.Settings.EnableExport.ToString() ) );
-
-                box.IfValidProperty( nameof( box.Settings.EnableMergeTemplate ),
-                    () => block.SetAttributeValue( AttributeKey.ShowMergeTemplate, box.Settings.EnableMergeTemplate.ToString() ) );
-
-                box.IfValidProperty( nameof( box.Settings.EnableCommunications ),
-                    () => block.SetAttributeValue( AttributeKey.ShowCommunicate, box.Settings.EnableCommunications.ToString() ) );
-
-                box.IfValidProperty( nameof( box.Settings.EnablePersonMerge ),
-                    () => block.SetAttributeValue( AttributeKey.ShowMergePerson, box.Settings.EnablePersonMerge.ToString() ) );
-
-                box.IfValidProperty( nameof( box.Settings.EnableBulkUpdate ),
-                    () => block.SetAttributeValue( AttributeKey.ShowBulkUpdate, box.Settings.EnableBulkUpdate.ToString() ) );
-
-                box.IfValidProperty( nameof( box.Settings.EnableLaunchWorkflow ),
-                    () => block.SetAttributeValue( AttributeKey.ShowLaunchWorkflow, box.Settings.EnableLaunchWorkflow.ToString() ) );
-
-                box.IfValidProperty( nameof( box.Settings.GridTitle ),
-                    () => block.SetAttributeValue( AttributeKey.PanelTitle, box.Settings.GridTitle ) );
-
-                box.IfValidProperty( nameof( box.Settings.SelectionUrl ),
-                    () => block.SetAttributeValue( AttributeKey.UrlMask, box.Settings.SelectionUrl ) );
-
-                box.IfValidProperty( nameof( box.Settings.CommunicationMergeFields ),
-                    () => block.SetAttributeValue( AttributeKey.MergeFields, SanitizeCommaSeparatedColumnNames( box.Settings.CommunicationMergeFields ) ) );
-
-                box.IfValidProperty( nameof( box.Settings.CommunicationRecipientFields ),
-                    () => block.SetAttributeValue( AttributeKey.CommunicationRecipientPersonIdColumns, SanitizeCommaSeparatedColumnNames( box.Settings.CommunicationRecipientFields ) ) );
-
-                box.IfValidProperty( nameof( box.Settings.EncryptedFields ),
-                    () => block.SetAttributeValue( AttributeKey.EncryptedFields, SanitizeCommaSeparatedColumnNames( box.Settings.EncryptedFields ) ) );
-
-                box.IfValidProperty( nameof( box.Settings.GridHeaderContent ),
-                    () => block.SetAttributeValue( AttributeKey.GridHeaderContent, box.Settings.GridHeaderContent ) );
-
-                box.IfValidProperty( nameof( box.Settings.GridFooterContent ),
-                    () => block.SetAttributeValue( AttributeKey.GridFooterContent, box.Settings.GridFooterContent ) );
-
-                // Results Formatting - Lava Settings.
-                box.IfValidProperty( nameof( box.Settings.LavaTemplate ),
-                    () => block.SetAttributeValue( AttributeKey.FormattedOutput, box.Settings.LavaTemplate ) );
-
-                block.SaveAttributeValues( rockContext );
-
-                return ActionOk();
             }
+
+            box.IfValidProperty( nameof( box.Settings.Query ),
+                () => block.SetAttributeValue( AttributeKey.Query, box.Settings.Query ) );
+
+            box.IfValidProperty( nameof( box.Settings.IsStoredProcedure ),
+                () => block.SetAttributeValue( AttributeKey.StoredProcedure, box.Settings.IsStoredProcedure.ToString() ) );
+
+            box.IfValidProperty( nameof( box.Settings.Parameters ),
+                () => block.SetAttributeValue( AttributeKey.QueryParams, box.Settings.Parameters ) );
+
+            box.IfValidProperty( nameof( box.Settings.Timeout ),
+                () => block.SetAttributeValue( AttributeKey.Timeout, box.Settings.Timeout.ToString() ) );
+
+            box.IfValidProperty( nameof( box.Settings.ResultsDisplayMode ),
+                () => block.SetAttributeValue( AttributeKey.ResultsDisplayMode, box.Settings.ResultsDisplayMode ) );
+
+            box.IfValidProperty( nameof( box.Settings.PageTitleLava ),
+                () => block.SetAttributeValue( AttributeKey.PageTitleLava, box.Settings.PageTitleLava ) );
+
+            // Results Formatting - Grid Settings.
+            box.IfValidProperty( nameof( box.Settings.ColumnConfigurations ),
+                () => block.SetAttributeValue( AttributeKey.ColumnConfigurations, SerializeColumnConfigurations( box.Settings.ColumnConfigurations ) ) );
+
+            box.IfValidProperty( nameof( box.Settings.ShowCheckboxSelectionColumn ),
+                () => block.SetAttributeValue( AttributeKey.ShowCheckboxSelectionColumn, box.Settings.ShowCheckboxSelectionColumn.ToString() ) );
+
+            box.IfValidProperty( nameof( box.Settings.DisablePaging ),
+                () => block.SetAttributeValue( AttributeKey.DisablePaging, box.Settings.DisablePaging.ToString() ) );
+
+            box.IfValidProperty( nameof( box.Settings.IsPersonReport ),
+                () => block.SetAttributeValue( AttributeKey.PersonReport, box.Settings.IsPersonReport.ToString() ) );
+
+            box.IfValidProperty( nameof( box.Settings.EnableStickyHeader ),
+                () => block.SetAttributeValue( AttributeKey.EnableStickyHeaderOnGrid, box.Settings.EnableStickyHeader.ToString() ) );
+
+            box.IfValidProperty( nameof( box.Settings.EnableExport ),
+                () => block.SetAttributeValue( AttributeKey.ShowExcelExport, box.Settings.EnableExport.ToString() ) );
+
+            box.IfValidProperty( nameof( box.Settings.EnableMergeTemplate ),
+                () => block.SetAttributeValue( AttributeKey.ShowMergeTemplate, box.Settings.EnableMergeTemplate.ToString() ) );
+
+            box.IfValidProperty( nameof( box.Settings.EnableCommunications ),
+                () => block.SetAttributeValue( AttributeKey.ShowCommunicate, box.Settings.EnableCommunications.ToString() ) );
+
+            box.IfValidProperty( nameof( box.Settings.EnablePersonMerge ),
+                () => block.SetAttributeValue( AttributeKey.ShowMergePerson, box.Settings.EnablePersonMerge.ToString() ) );
+
+            box.IfValidProperty( nameof( box.Settings.EnableBulkUpdate ),
+                () => block.SetAttributeValue( AttributeKey.ShowBulkUpdate, box.Settings.EnableBulkUpdate.ToString() ) );
+
+            box.IfValidProperty( nameof( box.Settings.EnableLaunchWorkflow ),
+                () => block.SetAttributeValue( AttributeKey.ShowLaunchWorkflow, box.Settings.EnableLaunchWorkflow.ToString() ) );
+
+            box.IfValidProperty( nameof( box.Settings.GridTitle ),
+                () => block.SetAttributeValue( AttributeKey.PanelTitle, box.Settings.GridTitle ) );
+
+            box.IfValidProperty( nameof( box.Settings.SelectionUrl ),
+                () => block.SetAttributeValue( AttributeKey.UrlMask, box.Settings.SelectionUrl ) );
+
+            box.IfValidProperty( nameof( box.Settings.CommunicationMergeFields ),
+                () => block.SetAttributeValue( AttributeKey.MergeFields, SanitizeCommaSeparatedColumnNames( box.Settings.CommunicationMergeFields ) ) );
+
+            box.IfValidProperty( nameof( box.Settings.CommunicationRecipientFields ),
+                () => block.SetAttributeValue( AttributeKey.CommunicationRecipientPersonIdColumns, SanitizeCommaSeparatedColumnNames( box.Settings.CommunicationRecipientFields ) ) );
+
+            box.IfValidProperty( nameof( box.Settings.EncryptedFields ),
+                () => block.SetAttributeValue( AttributeKey.EncryptedFields, SanitizeCommaSeparatedColumnNames( box.Settings.EncryptedFields ) ) );
+
+            box.IfValidProperty( nameof( box.Settings.GridHeaderContent ),
+                () => block.SetAttributeValue( AttributeKey.GridHeaderContent, box.Settings.GridHeaderContent ) );
+
+            box.IfValidProperty( nameof( box.Settings.GridFooterContent ),
+                () => block.SetAttributeValue( AttributeKey.GridFooterContent, box.Settings.GridFooterContent ) );
+
+            // Results Formatting - Lava Settings.
+            box.IfValidProperty( nameof( box.Settings.LavaTemplate ),
+                () => block.SetAttributeValue( AttributeKey.FormattedOutput, box.Settings.LavaTemplate ) );
+
+            block.SaveAttributeValues( this.RockContext );
+
+            return ActionOk();
         }
 
         #endregion Block Actions
@@ -1818,6 +1914,7 @@ namespace Rock.Blocks.Reporting
             public const string CurrencyValue = "currency";
             public const string DateValue = "date";
             public const string DateTimeValue = "dateTime";
+            public const string HtmlValue = "html";
             public const string NumberValue = "number";
             public const string PersonValue = "person";
             public const string TextValue = "text";
@@ -1833,6 +1930,9 @@ namespace Rock.Blocks.Reporting
 
             private static readonly ListItemBag _dateTime = new ListItemBag { Text = "Date Time", Value = DateTimeValue };
             public static ListItemBag DateTime => _dateTime;
+
+            private static readonly ListItemBag _html = new ListItemBag { Text = "HTML", Value = HtmlValue };
+            public static ListItemBag Html => _html;
 
             private static readonly ListItemBag _number = new ListItemBag { Text = "Number", Value = NumberValue };
             public static ListItemBag Number => _number;
@@ -2079,56 +2179,6 @@ namespace Rock.Blocks.Reporting
             /// Gets or sets the lava template results.
             /// </summary>
             public LavaTemplateResultsBag LavaTemplateResults { get; set; }
-        }
-
-        /// <summary>
-        /// An object to represent data table rows within the lava template, when RockLiquid lava processing is enabled.
-        /// </summary>
-        private class DataRowDrop : DotLiquid.Drop, ILavaDataDictionary
-        {
-            private readonly DataRow _dataRow;
-
-            public DataRowDrop( DataRow dataRow )
-            {
-                _dataRow = dataRow;
-            }
-
-            public override object BeforeMethod( string method )
-            {
-                if ( _dataRow.Table.Columns.Contains( method ) )
-                {
-                    return _dataRow[method];
-                }
-
-                return null;
-            }
-
-            public List<string> AvailableKeys
-            {
-                get
-                {
-                    var keys = new List<string>();
-                    foreach ( DataColumn column in _dataRow.Table.Columns )
-                    {
-                        keys.Add( column.ColumnName );
-                    }
-                    return keys;
-                }
-            }
-
-            public bool ContainsKey( string key )
-            {
-                return _dataRow.Table.Columns.Contains( key );
-            }
-
-            public object GetValue( string key )
-            {
-                if ( _dataRow.Table.Columns.Contains( key ) )
-                {
-                    return _dataRow[key];
-                }
-                return null;
-            }
         }
 
         /// <summary>

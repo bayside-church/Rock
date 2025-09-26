@@ -150,6 +150,31 @@ namespace Rock.Communication
         /// </value>
         public bool CssInliningEnabled { get; set; }
 
+        /// <summary>
+        /// Indicates that the communication should be created immediately and
+        /// the <see cref="LastCommunicationId"/> property set before returning
+        /// from the send method.
+        /// </summary>
+        /// <remarks>
+        /// This is only for scenarios that must have the communication record
+        /// created as quickly as possible (e.g. LMS system, fallback Chat
+        /// notifications). Don't use this without DSD approval unless ye be
+        /// judged.
+        /// </remarks>
+        internal bool CreateCommunicationRecordImmediately { get; set; }
+
+        /// <summary>
+        /// The identifier of the last communication that was created for this
+        /// message.
+        /// </summary>
+        /// <remarks>
+        /// This is only for scenarios that must have the communication record
+        /// created as quickly as possible (e.g. LMS system, fallback Chat
+        /// notifications). Don't use this without DSD approval unless ye be
+        /// judged.
+        /// </remarks>
+        internal int? LastCommunicationId { get; set; }
+
         #region Constructors
 
         /// <summary>

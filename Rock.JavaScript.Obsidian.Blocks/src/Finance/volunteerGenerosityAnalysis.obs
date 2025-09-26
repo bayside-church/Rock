@@ -20,7 +20,7 @@
                     <div class="d-flex justify-content-end">
                         <button ref="refreshTooltip" class="btn btn-xs btn-default" @click.prevent="refreshData" :title="formatLastUpdated(lastUpdated) + '. Estimated refresh time ' + estimatedRefreshTime + 's.'">
                             {{ calculateTimeDifference(lastUpdated) }}
-                            <i class="fas fa-sync-alt"></i>
+                            <i class="ti ti-refresh"></i>
                         </button>
                     </div>
 
@@ -42,6 +42,7 @@
                             <DropDownList v-model="teamValue"
                                           :items="uniqueGroups"
                                           :onUpdate:modelValue="onTeamSelected"
+                                          :enhanceForLongLists="true"
                                           label="Team" />
                         </div>
                     </div>
@@ -107,15 +108,15 @@
                         visiblePriority="xs"
                         width="10%" />
 
-            <Column name="givingMonths"
+            <Column name="donationDateKey"
                     title="Giving Months"
-                    field="givingMonths"
+                    field="donationDateKey"
                     itemClass="giving-trends"
                     :disableSort="true"
                     width="30%">
                 <template #format="{ row }">
                     <div class="trend-chart">
-                        <div v-for="(bar, index) in getBarChart(row.givingMonths)" :key="index" class="bar" :class="bar.class" :title="getTooltipContent(bar.month)" ref="setBarRef">
+                        <div v-for="(bar, index) in getBarChart(row.donationDateKeys)" :key="index" class="bar" :class="bar.class" :title="getTooltipContent(bar.month)" ref="setBarRef">
                         </div>
                     </div>
                 </template>
@@ -138,11 +139,13 @@
     right: var(--table-cell-padding-x);
     left: var(--table-cell-padding-x);
     height: initial;
+    width: calc(100% - var(--table-cell-padding-x) - var(--table-cell-padding-x));
+    gap: 4px;
 }
 
 .bar {
-    width: 4%;
-    margin: 0 2px;
+    flex-grow: 1;
+    max-width: 20px;
     position: relative;
     height: 30px;
     transition: height 0.3s ease-out;
@@ -170,6 +173,7 @@
     flex-direction: column-reverse;
     height: 110px;
     margin: 0 4px;
+    border: 0.5px solid var(--color-interface-softer);
 }
 
 .not-donated,
@@ -178,19 +182,19 @@
     display: flex;
     align-items: flex-end;
     justify-content: center;
-    color: white;
     transition: height 0.3s ease-out;
     font-size: 14px;
 }
 
 .not-donated {
-    background-color: #E8E8E8;
-    color: black;
+    background-color: var(--color-interface-soft);
+    color: var(--color-interface-stronger);
 }
 
 .donated {
-    background-color: var(--color-success);
-    border-top: 1px solid #00000035;
+    background-color: var(--color-success-strong);
+    border-top: 1px solid var(--color-interface-strongest);
+    color: var(--base-interface-softest);
 }
 
 .month-label {
@@ -242,8 +246,8 @@
     const campusValue = ref<string>("");
     const teamValue = ref<string>("");
     const teamDonationStats = ref<{ month: string; donatedPercentage: number; notDonatedPercentage: number }[]>([] as { month: string; donatedPercentage: number; notDonatedPercentage: number }[]);
-    const lastUpdated = ref(bag.lastUpdated || "N/A");
-    const estimatedRefreshTime = ref(bag.estimatedRefreshTime || 0);
+    const lastUpdated = ref(bag?.lastUpdated || "N/A");
+    const estimatedRefreshTime = ref(bag?.estimatedRefreshTime || 0);
     const dataRefreshed = ref<boolean>(false);
     const isRefreshing = ref(false);
     const uniqueGroups = ref<Record<string, unknown>[]>([{ text: "All", value: "" }]);
@@ -271,6 +275,10 @@
      * @returns A string representing the time difference
      */
     const calculateTimeDifference = (lastUpdatedString: string): string => {
+        if (!lastUpdatedString || lastUpdatedString === "N/A") {
+            return "Data last updated N/A";
+        }
+
         const lastUpdatedDate = RockDateTime.parseISO(lastUpdatedString);
         const now = RockDateTime.now();
 
@@ -305,14 +313,13 @@
         return timeDiffStr;
     };
 
-
     /**
      * Calculate the donation percentages for each month
      * @returns An array of objects representing the donation percentages
      */
     const calculateDonationPercentages = (): { month: string; donatedPercentage: number; notDonatedPercentage: number }[] => {
         // Initialize an object to hold donation data for each month
-        const donationData = last13Months.reduce((acc, month) => {
+        const donationData: Record<string, { donated: Set<unknown>, total: Set<unknown> }> = last13Months.reduce((acc, month) => {
             acc[month] = { donated: new Set(), total: new Set() };
             return acc;
         }, {});
@@ -320,16 +327,19 @@
         // Group donations by giving ID and track the months each group donated
         gridData?.rows?.forEach(person => {
             const givingId = person.givingId;
-            if (typeof person.givingMonths === "string") {
-                person.givingMonths.toString().split(", ").forEach((monthYear: string) => {
+            if (typeof person.donationDateKeys === "string" && person.donationDateKeys) {
+                const dateKeys = person.donationDateKeys.split("|");
+                dateKeys.forEach(dateKey => {
+                    const date = new Date(parseInt(dateKey.slice(0, 4)), parseInt(dateKey.slice(4, 6)) - 1, parseInt(dateKey.slice(6, 8)));
+                    const monthYear = date.toLocaleString("default", { month: "short", year: "numeric" });
                     if (last13Months.includes(monthYear)) {
-                        donationData[monthYear].donated.add(givingId); // Add giving ID to the set of donors for the month
+                        donationData[monthYear].donated.add(givingId);
                     }
                 });
             }
 
             // Add giving ID to the total set of potential donors for all months
-            Object.values(donationData).forEach((monthData: any) => {
+            Object.values(donationData).forEach((monthData) => {
                 monthData.total.add(givingId);
             });
         });
@@ -429,20 +439,29 @@
     };
 
     /**
-     * @param givenMonthsStr A comma separated string of months and years
+     * @param donationDateKeys A pipe-separated string of date keys
      * @returns An array of objects representing the bar chart
      */
-    const getBarChart = (givenMonthsStr: string): { month: string; full: string; class: string; }[] => {
-        const givenMonths = givenMonthsStr ? givenMonthsStr.split(",").map(monthYear => monthYear.trim()) : [];
-        const allEmpty = givenMonths.length === 0; // Check if all months are empty
+    const getBarChart = (donationDateKeys: string | undefined): { month: string; full: string; class: string; }[] => {
+        const donatedMonths = new Set<string>();
+
+        if (donationDateKeys) {
+            const dateKeys = donationDateKeys.split("|");
+            dateKeys.forEach(dateKey => {
+                const year = parseInt(dateKey.slice(0, 4));
+                const month = parseInt(dateKey.slice(4, 6)) - 1;
+                const day = parseInt(dateKey.slice(6, 8));
+                const date = new Date(year, month, day);
+                const monthYear = date.toLocaleString("default", { month: "short", year: "numeric" });
+
+                donatedMonths.add(monthYear);
+            });
+        }
 
         return last13Months.map(displayedMonth => {
-            const isFull = givenMonths.includes(displayedMonth);
-            let barClass = isFull ? "full" : "empty";
-            if (allEmpty) barClass = "empty";
-
+            const isFull = donatedMonths.has(displayedMonth);
+            const barClass = isFull ? "full" : "empty";
             return { month: displayedMonth, full: isFull.toString(), class: barClass };
-
         });
     };
 
@@ -521,7 +540,7 @@
                 dataRefreshed.value = false;
                 gridData = reactive(result.data);
                 if (bag.uniqueCampuses) {
-                    uniqueCampuses.value = [{ text: "All", value: "" }, ...bag.uniqueCampuses.map(campus => ({ text: decodeHtml(campus), value: campus }))];
+                    uniqueCampuses.value = [{ text: "All", value: "" }, ...bag.uniqueCampuses];
                 }
                 if (bag.uniqueGroups) {
                     uniqueGroups.value = [{ text: "All", value: "" }, ...bag.uniqueGroups.map(group => ({ text: decodeHtml(group), value: group }))];

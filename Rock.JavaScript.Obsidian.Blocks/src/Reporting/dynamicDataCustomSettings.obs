@@ -1,6 +1,6 @@
 <!-- Copyright by the Spark Development Network; Licensed under the Rock Community License -->
 <template>
-    <Modal v-model="isModalOpen" title="Configuration" :saveText="saveButtonText" @save="onSave">
+    <Modal v-model="isModalOpen" title="Dynamic Data Settings" :saveText="saveButtonText" @save="onSave">
 
         <NotificationBox v-if="errorMessage" :alertType="AlertType.Warning">
             {{ errorMessage }}
@@ -89,7 +89,7 @@
                             <RockButton :btnSize="BtnSize.ExtraSmall"
                                         @click="onReloadColumnsClick"
                                         :disabled="isDisabled">
-                                <i class="fa fa-redo" aria-hidden></i> Reload Columns From Query
+                                <i class="ti ti-arrow-forward-up" aria-hidden></i> Reload Columns From Query
                             </RockButton>
                         </div>
                     </template>
@@ -126,6 +126,7 @@
 
                             <Switch v-model="enableStickyHeader"
                                     text="Enable Sticky Header"
+                                    help="Note: If too many fields are selected in the query and cause the component to overflow, the sticky header property will not be applied to the table columns."
                                     :disabled="isDisabled" />
                         </div>
 
@@ -373,10 +374,6 @@
 
     const saveButtonText = computed((): string => {
         return errorMessage.value || (!isLoading.value && !isDisabled.value) ? "Save" : "";
-    });
-
-    const securityGrantToken = computed((): string | null => {
-        return securityGrant.token.value;
     });
 
     // #endregion Computed Values

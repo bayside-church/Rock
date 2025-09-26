@@ -8,7 +8,7 @@
         <asp:Panel ID="pnlContent" CssClass="panel panel-block" runat="server">
 
             <div class="panel-heading">
-                <h1 class="panel-title"><i class="fa fa-cog"></i>
+                <h1 class="panel-title"><i class="ti ti-settings"></i>
                     <asp:Literal ID="lReadOnlyTitle" runat="server" /></h1>
                 <div class="panel-labels">
                     <Rock:HighlightLabel ID="hlblWorkflowId" runat="server" LabelType="Info" />
@@ -85,7 +85,7 @@
                                     <Rock:DataTextBox ID="tbStatus" runat="server" SourceTypeName="Rock.Model.Workflow, Rock" PropertyName="Status" Label="Status Text" />
                                 </div>
                                 <div class="col-md-6">
-                                    <Rock:RockCheckBox ID="cbIsCompleted" runat="server" Label="Completed" Text="Yes" />
+                                    <Rock:RockCheckBox ID="cbIsCompleted" runat="server" Label="Completed" />
                                     <Rock:RockLiteral ID="lIsCompleted" runat="server" Label="Completed" Visible="false" />
                                     <Rock:RockControlWrapper ID="cwState" runat="server">
                                         <asp:Literal ID="lState" runat="server" />

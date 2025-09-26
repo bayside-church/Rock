@@ -23,6 +23,8 @@ import { RockDateTime } from "@Obsidian/Utility/rockDateTime";
 import { DefinedValue } from "@Obsidian/SystemGuids/definedValue";
 import { Guid } from "@Obsidian/Types";
 import { areEqual } from "@Obsidian/Utility/guid";
+import { toWordFull } from "@Obsidian/Utility/numberUtils";
+import { toTitleCase } from "@Obsidian/Utility/stringUtils";
 import { ListItemBag } from "@Obsidian/ViewModels/Utility/listItemBag";
 
 // This global state must exist outside of the `useConfigurePaymentPlanFeature()` composable
@@ -204,6 +206,34 @@ export function useConfigurePaymentPlanFeature() {
         });
     }
 
+    /**
+     * Gets a preview of a payment plan configuration
+     * that modifies the current work-in-progress config with the provided options.
+     */
+    function previewWorkInProgress(overrides?: Partial<PaymentPlanConfigurationOptions>): PaymentPlanConfiguration | null | undefined {
+        const wipConfig = wipPaymentPlanConfiguration.value;
+
+        if (!isWorkInProgress.value || !wipConfig) {
+            // Nothing to reconfigure.
+            return;
+        }
+
+        // Reconfigure the "work in progress" payment plan.
+        return getPaymentPlanConfiguration({
+            amountToPayToday: wipConfig.amountToPayToday,
+            balanceDue: wipConfig.balanceDue,
+            desiredAllowedPaymentPlanFrequencies: paymentPlanFrequencies.value,
+            desiredNumberOfPayments: wipConfig.numberOfPayments,
+            desiredPaymentPlanFrequency: wipConfig.paymentPlanFrequency,
+            desiredStartDate: wipConfig.startDate ?? RockDateTime.now().date,
+            endDate: wipConfig.endDate,
+            minAmountToPayToday: wipConfig.minAmountToPayToday,
+
+            // Override with values provided to the function.
+            ...overrides
+        });
+    }
+
     /** Removes the new payment plan from the registration. */
     function cancel(): void {
         wipPaymentPlanConfiguration.value = null;
@@ -211,8 +241,12 @@ export function useConfigurePaymentPlanFeature() {
         registrationEntryState.paymentPlan = null;
     }
 
-    /** Initializes the "work in progress" payment plan configuration from current registration values. */
-    function initializeWorkInProgress(): void {
+    /**
+     * Initializes the "work in progress" payment plan configuration from current registration values.
+     *
+     * @param fallbackOptions The fallback options if the current registration does not have a payment plan configured.
+     */
+    function initializeWorkInProgress(fallbackOptions?: Partial<Pick<PaymentPlanConfigurationOptions, "desiredNumberOfPayments" | "desiredStartDate" | "desiredPaymentPlanFrequency">>): void {
         if (!balanceDue.value) {
             throw "Cannot initialize 'work in progress' payment plan before useConfigurePaymentPlanFeature().init() is called.";
         }
@@ -221,23 +255,32 @@ export function useConfigurePaymentPlanFeature() {
         const endDate: RockDateTime = paymentPlanDeadlineDate.value ?? RockDateTime.now().addYears(1).date;
         const transactionFrequencyGuid: Guid | null = registrationEntryState.paymentPlan?.transactionFrequencyGuid ?? null;
         const noopPaymentPlanFrequency = getNoopPaymentPlanFrequency(today, endDate);
-        const desiredPaymentPlanFrequency =
-            transactionFrequencyGuid
-                ? paymentPlanFrequencies.value.find(p => areEqual(p.listItemBag.value, transactionFrequencyGuid)) ?? noopTransactionFrequency
-                : noopPaymentPlanFrequency;
 
         wipPaymentPlanConfiguration.value = getPaymentPlanConfiguration({
-            // Always initialize the one-time amount to the Amount To Pay Today value.
-            amountToPayToday: RockCurrency.create(registrationEntryState.amountToPayToday, balanceDue.value.currencyInfo),
+            // Always initialize the one-time amount to the Amount To Pay Today on the registration.
+            amountToPayToday: RockCurrency.create(
+                registrationEntryState.amountToPayToday,
+                balanceDue.value.currencyInfo
+            ),
             balanceDue: balanceDue.value,
             desiredAllowedPaymentPlanFrequencies: paymentPlanFrequencies.value,
-            desiredNumberOfPayments: registrationEntryState.paymentPlan?.numberOfPayments ?? 0,
-            desiredPaymentPlanFrequency: desiredPaymentPlanFrequency as PaymentPlanFrequency,
-            desiredStartDate: registrationEntryState.paymentPlan?.startDate
-                ? RockDateTime.parseISO(registrationEntryState.paymentPlan.startDate) ?? today
-                : today,
+            desiredNumberOfPayments: registrationEntryState.paymentPlan?.numberOfPayments
+                ?? fallbackOptions?.desiredNumberOfPayments ?? 0,
+            desiredPaymentPlanFrequency: (
+                transactionFrequencyGuid
+                    ? paymentPlanFrequencies.value.find(p => areEqual(p.listItemBag.value, transactionFrequencyGuid))
+                    : null
+            ) ?? fallbackOptions?.desiredPaymentPlanFrequency ?? noopPaymentPlanFrequency,
+            desiredStartDate: (
+                registrationEntryState.paymentPlan?.startDate
+                    ? RockDateTime.parseISO(registrationEntryState.paymentPlan.startDate)
+                    : null
+            ) ?? fallbackOptions?.desiredStartDate ?? today,
             endDate,
-            minAmountToPayToday: RockCurrency.create(readonlyRegistrationCostSummary.value.minimumRemainingAmount, balanceDue.value.currencyInfo),
+            minAmountToPayToday: RockCurrency.create(
+                readonlyRegistrationCostSummary.value.minimumRemainingAmount,
+                balanceDue.value.currencyInfo
+            ),
         });
     }
 
@@ -257,14 +300,17 @@ export function useConfigurePaymentPlanFeature() {
     return {
         // Expose the "work in progress" WIP payment plan configuration so it can be restored when changing tabs.
         wipPaymentPlanConfiguration,
+        balanceDue: computed(() => balanceDue.value),
         isConfigured,
         isPaymentPlanConfigurationSupported,
+        paymentPlanDeadlineDate,
         paymentPlanFrequencies,
         cancel,
         configure,
         init,
         initializeWorkInProgress,
         reconfigureWorkInProgress,
+        previewWorkInProgress
     };
 }
 
@@ -301,10 +347,9 @@ const transactionFrequencyOneTime: TransactionFrequency = {
         const today = RockDateTime.now().date;
         const tomorrow = today.addDays(1);
 
-        const earliestPossibleDate =
-            firstDate.isLaterThan(today)
-                ? firstDate // First date is in the future (including tomorrow).
-                : tomorrow; // Tomorrow is the earliest date.
+        const earliestPossibleDate = firstDate.isLaterThan(today)
+            ? firstDate // First date is in the future (including tomorrow).
+            : tomorrow; // Tomorrow is the earliest date.
 
         if (desiredDate.isLaterThan(secondDate)) {
             // The desired date is after the second date,
@@ -329,6 +374,10 @@ const transactionFrequencyOneTime: TransactionFrequency = {
 
     get maxNumberOfPaymentsForOneYear(): number {
         return 1;
+    },
+
+    getNPaymentsOfAmountMessage(_numberOfPayments: number, amount: RockCurrency): string {
+        return `One Payment of ${amount}`;
     }
 };
 
@@ -391,6 +440,10 @@ const transactionFrequencyWeekly: TransactionFrequency = {
     get maxNumberOfPaymentsForOneYear(): number {
         return 52;
     },
+
+    getNPaymentsOfAmountMessage(numberOfPayments: number, amount: RockCurrency): string {
+        return `${toTitleCase(toWordFull(numberOfPayments))} Weekly Payments of ${amount}`;
+    }
 };
 
 const transactionFrequencyBiWeekly: TransactionFrequency = {
@@ -451,6 +504,10 @@ const transactionFrequencyBiWeekly: TransactionFrequency = {
 
     get maxNumberOfPaymentsForOneYear(): number {
         return 26;
+    },
+
+    getNPaymentsOfAmountMessage(numberOfPayments: number, amount: RockCurrency): string {
+        return `${toTitleCase(toWordFull(numberOfPayments))} Bi-Weekly Payments of ${amount}`;
     }
 };
 
@@ -569,7 +626,6 @@ const transactionFrequencyFirstAndFifteenth: TransactionFrequency = {
         secondDate = secondDate.date;
         const earliestDesiredDate = getNextDay(desiredDate.date, 1, 15);
 
-
         if (earliestDesiredDate.isLaterThan(secondDate)) {
             // The desired date is after the second date,
             // so there are no more valid dates.
@@ -594,6 +650,10 @@ const transactionFrequencyFirstAndFifteenth: TransactionFrequency = {
 
     get maxNumberOfPaymentsForOneYear(): number {
         return 24;
+    },
+
+    getNPaymentsOfAmountMessage(numberOfPayments: number, amount: RockCurrency): string {
+        return `${toTitleCase(toWordFull(numberOfPayments))} Payments of ${amount} Every First and Fifteenth`;
     }
 };
 
@@ -620,30 +680,23 @@ const transactionFrequencyTwiceMonthly: TransactionFrequency = {
     },
 
     getValidTransactionDate(firstDate: RockDateTime, secondDate: RockDateTime, desiredDate: RockDateTime): RockDateTime | null {
-        firstDate = firstDate.date;
+        const earliestPossibleDate = getNextDay(firstDate.date, 1, 15);
         secondDate = secondDate.date;
-        desiredDate = desiredDate.date;
-        const today = RockDateTime.now().date;
-        const tomorrow = today.addDays(1);
+        const earliestDesiredDate = getNextDay(desiredDate.date, 1, 15);
 
-        const earliestPossibleDate =
-            firstDate.isLaterThan(today)
-                ? firstDate // First date is in the future (including tomorrow).
-                : tomorrow; // Tomorrow is the earliest date.
-
-        if (desiredDate.isLaterThan(secondDate)) {
+        if (earliestDesiredDate.isLaterThan(secondDate)) {
             // The desired date is after the second date,
             // so there are no more valid dates.
             return null;
         }
-        else if (desiredDate.isEarlierThan(earliestPossibleDate)) {
+        else if (earliestDesiredDate.isEarlierThan(earliestPossibleDate)) {
             // The desired date is before the earliest possible date (first date or tomorrow).
             // The next valid date to use is the earliest possible date.
             return earliestPossibleDate;
         }
         else {
             // The desired date is valid (falls between the first and second dates).
-            return desiredDate;
+            return earliestDesiredDate;
         }
     },
 
@@ -655,6 +708,10 @@ const transactionFrequencyTwiceMonthly: TransactionFrequency = {
 
     get maxNumberOfPaymentsForOneYear(): number {
         return 24;
+    },
+
+    getNPaymentsOfAmountMessage(numberOfPayments: number, amount: RockCurrency): string {
+        return `${toTitleCase(toWordFull(numberOfPayments))} Payments of ${amount} Twice Monthly`;
     }
 };
 
@@ -728,6 +785,10 @@ const transactionFrequencyMonthly: TransactionFrequency = {
 
     get maxNumberOfPaymentsForOneYear(): number {
         return 12;
+    },
+
+    getNPaymentsOfAmountMessage(numberOfPayments: number, amount: RockCurrency): string {
+        return `${toTitleCase(toWordFull(numberOfPayments))} Monthly Payments of ${amount}`;
     }
 };
 
@@ -801,6 +862,10 @@ const transactionFrequencyQuarterly: TransactionFrequency = {
 
     get maxNumberOfPaymentsForOneYear(): number {
         return 4;
+    },
+
+    getNPaymentsOfAmountMessage(numberOfPayments: number, amount: RockCurrency): string {
+        return `${toTitleCase(toWordFull(numberOfPayments))} Quarterly Payments of ${amount}`;
     }
 };
 
@@ -874,6 +939,10 @@ const transactionFrequencyTwiceAYear: TransactionFrequency = {
 
     get maxNumberOfPaymentsForOneYear(): number {
         return 2;
+    },
+
+    getNPaymentsOfAmountMessage(numberOfPayments: number, amount: RockCurrency): string {
+        return `${toTitleCase(toWordFull(numberOfPayments))} Payments of ${amount} Twice Yearly`;
     }
 };
 
@@ -947,6 +1016,10 @@ const transactionFrequencyYearly: TransactionFrequency = {
 
     get maxNumberOfPaymentsForOneYear(): number {
         return 1;
+    },
+
+    getNPaymentsOfAmountMessage(numberOfPayments: number, amount: RockCurrency): string {
+        return `${toTitleCase(toWordFull(numberOfPayments))} Yearly Payments of ${amount}`;
     }
 };
 
@@ -986,6 +1059,10 @@ export const noopTransactionFrequency: TransactionFrequency = {
 
     getNextTransactionDate: function (_firstDateTime: RockDateTime, _secondDateTime: RockDateTime, _previousDate: RockDateTime): RockDateTime | null {
         return null;
+    },
+
+    getNPaymentsOfAmountMessage(_numberOfPayments: number, _amount: RockCurrency): string {
+        return "";
     }
 };
 
@@ -1023,7 +1100,10 @@ export function getPaymentPlanFrequency(listItemBag: ListItemBag, desiredStartDa
             },
             getValidTransactionDate(desiredDate: RockDateTime) {
                 return transactionFrequency.getValidTransactionDate(startPaymentDate, paymentDeadlineDate, desiredDate);
-            }
+            },
+            getNPaymentsOfAmountMessage(numberOfPayments: number, amountPerPayment: RockCurrency): string {
+                return transactionFrequency.getNPaymentsOfAmountMessage(numberOfPayments, amountPerPayment);
+            },
         };
     }
     else {
@@ -1043,6 +1123,9 @@ export function getNoopPaymentPlanFrequency(startPaymentDate: RockDateTime, paym
         },
         getValidTransactionDate(_desiredDate: RockDateTime) {
             return null;
+        },
+        getNPaymentsOfAmountMessage(_numberOfPayments: number, _amountPerPayment: RockCurrency): string {
+            return "";
         }
     };
 }
@@ -1079,7 +1162,13 @@ export function getPaymentPlanConfiguration(options: PaymentPlanConfigurationOpt
     const zero = RockCurrency.create(0, options.balanceDue.currencyInfo);
 
     const minAmountToPayToday = options.minAmountToPayToday.noLessThan(zero);
-    const amountToPayToday = options.amountToPayToday.noLessThan(minAmountToPayToday);
+
+    // This calculation needs to leave some balance available for the payment plan, or it will break
+    // the maximum payment calculation.
+    const amountToPayToday = options.balanceDue.subtract(options.amountToPayToday).isZero
+        ? minAmountToPayToday
+        : options.amountToPayToday.noLessThan(minAmountToPayToday);
+
     const amountForPaymentPlan = options.balanceDue.subtract(amountToPayToday);
 
     const allowedPaymentPlanFrequencies = getAllowedPaymentPlanFrequencies(

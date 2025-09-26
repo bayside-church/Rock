@@ -1,4 +1,4 @@
-// <copyright>
+﻿// <copyright>
 // Copyright by the Spark Development Network
 //
 // Licensed under the Rock Community License (the "License");
@@ -30,6 +30,7 @@ namespace Rock.Model
     [RockDomain( "Engagement" )]
     [Table( "StepStatus" )]
     [DataContract]
+    [CodeGenerateRest]
     [Rock.SystemGuid.EntityTypeGuid( "6C270D6A-F126-445B-93F0-5079A968BF4E")]
     public partial class StepStatus : Model<StepStatus>, IOrdered, IHasActiveFlag
     {
@@ -62,6 +63,16 @@ namespace Rock.Model
         [MaxLength( 100 )]
         [DataMember]
         public string StatusColor { get; set; }
+
+        /// <summary>
+        /// Gets or sets a flag indicating if this Step Status is part of the Rock core system/framework. This property is required.
+        /// </summary>
+        /// <value>
+        /// A <see cref="System.Boolean"/> value that is <c>true</c> if this Step Status is part of the Rock core system/framework; otherwise <c>false</c>.
+        /// </value>
+        [Required]
+        [DataMember( IsRequired = true )]
+        public bool IsSystem { get; set; }
 
         #endregion Entity Properties
 

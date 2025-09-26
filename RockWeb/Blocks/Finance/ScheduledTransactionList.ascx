@@ -8,7 +8,7 @@
 
             <div class="panel panel-block">
                 <div class="panel-heading">
-                    <h1 class="panel-title"><i class="fa fa-calendar"></i> Scheduled Transaction List</h1>
+                    <h1 class="panel-title"><i class="ti ti-calendar"></i> Scheduled Transaction List</h1>
                 </div>
                 <div class="panel-body">
 
@@ -19,7 +19,7 @@
                             <Rock:DefinedValuePicker ID="dvpFrequency" runat="server" Label="Frequency" />
                             <Rock:DateRangePicker ID="drpDates" runat="server" Label="Created" />
                             <Rock:RockDropDownList ID="ddlAccount" runat="server" Label="Account" EnhanceForLongLists="true" />
-                            <Rock:RockCheckBox ID="cbIncludeInactive" runat="server" Label="Include Inactive Schedules" Text="Yes" />
+                            <Rock:RockCheckBox ID="cbIncludeInactive" runat="server" Label="Include Inactive Schedules" />
                         </Rock:GridFilter>
                         <Rock:Grid ID="gList" AllowSorting="true" runat="server" EmptyDataText="No Scheduled Transactions Found"
                             ShowConfirmDeleteDialog="true" RowItemText="Scheduled Transaction" ExportSource="ColumnOutput">

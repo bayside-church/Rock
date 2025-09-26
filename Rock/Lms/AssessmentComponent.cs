@@ -15,13 +15,17 @@
 // </copyright>
 //
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.ComponentModel.Composition;
 using System.Linq;
 
-using Newtonsoft.Json.Linq;
-
+using Rock.Attribute;
+using Rock.Cms.StructuredContent;
+using Rock.Data;
+using Rock.Enums.Lms;
 using Rock.Model;
+using Rock.Net;
 
 namespace Rock.Lms
 {
@@ -32,107 +36,223 @@ namespace Rock.Lms
     [Export( typeof( LearningActivityComponent ) )]
     [ExportMetadata( "ComponentName", "Assessment" )]
 
+    [RockInternal( "17.0" )]
     [Rock.SystemGuid.EntityTypeGuid( "a585c101-02e8-4953-bf77-c783c7cfdfdc" )]
     public class AssessmentComponent : LearningActivityComponent
     {
-        /// <summary>
-        /// Gets the Highlight color for the component.
-        /// </summary>
+        #region Keys
+
+        private static class SettingKey
+        {
+            public const string AssessmentTerm = "assessmentTerm";
+
+            public const string Header = "header";
+
+            public const string Items = "items";
+
+            public const string MultipleChoiceWeight = "multipleChoiceWeight";
+
+            public const string ShowMissedQuestionsOnResults = "showMissedQuestionsOnResults";
+
+            public const string ShowResultsOnCompletion = "showResultsOnCompletion";
+        }
+
+        private static class CompletionKey
+        {
+            public const string CompletedItems = "completedItems";
+
+            public const string MultipleChoiceWeight = "multipleChoiceWeight";
+        }
+
+        #endregion
+
+        #region Properties
+
+        /// <inheritdoc/>
         public override string HighlightColor => "#a9551d";
 
-        /// <summary>
-        /// Gets the icon CSS class for the component.
-        /// </summary>
-        public override string IconCssClass => "fa fa-list";
+        /// <inheritdoc/>
+        public override string IconCssClass => "ti ti-list";
 
-        /// <summary>
-        /// Gets the name of the component.
-        /// </summary>
+        /// <inheritdoc/>
         public override string Name => "Assessment";
 
-        /// <summary>
-        /// Initializes a new instance of the Assessment component.
-        /// </summary>
-        public AssessmentComponent() : base( @"/Obsidian/Controls/Internal/LearningActivity/assessmentLearningActivity.obs" ) { }
+        /// <inheritdoc/>
+        public override string ComponentUrl => @"/Obsidian/Controls/Internal/LearningActivity/assessmentLearningActivity.obs";
 
-        /// <summary>
-        /// Removes the isCorrect flag from any multiple choice assessment items.
-        /// </summary>
-        /// <param name="rawConfigurationJsonString"></param>
-        /// <returns>The json string stripped of any information that might identify correct answers.</returns>
-        public override string StudentScrubbedConfiguration( string rawConfigurationJsonString )
+        #endregion
+
+        #region Methods
+
+        /// <inheritdoc/>
+        public override Dictionary<string, string> GetActivityConfiguration( LearningClassActivity activity, Dictionary<string, string> componentData, PresentedFor presentation, RockContext rockContext, RockRequestContext requestContext )
         {
-            try
+            if ( presentation == PresentedFor.Configuration )
             {
-                const string multipleChoiceItemTypeName = "Multiple Choice";
-                var correctAnswerPath = $"$.items[?(@.typeName == '{multipleChoiceItemTypeName}')].correctAnswer";
-                var jObject = JObject.Parse( rawConfigurationJsonString );
-                var correctAnswers = jObject.SelectTokens( correctAnswerPath );
+                return new Dictionary<string, string>();
+            }
+            else
+            {
+                var content = componentData.GetValueOrNull( SettingKey.Header );
 
-                foreach ( var correctAnswer in correctAnswers )
+                var headerHtml = content.IsNotNullOrWhiteSpace()
+                    ? new StructuredContentHelper( content ).Render()
+                    : string.Empty;
+
+                if ( headerHtml.IsNotNullOrWhiteSpace() )
                 {
-                    correctAnswer.Parent.Remove();
+                    var mergeFields = requestContext.GetCommonMergeFields();
+
+                    headerHtml = headerHtml.ResolveMergeFields( mergeFields );
                 }
 
-                return jObject.ToJson();
-            }
-            catch ( Exception ex )
-            {
-                ExceptionLogService.LogException( ex );
-            }
+                var items = componentData.GetValueOrNull( SettingKey.Items ).FromJsonOrNull<List<AssessmentItem>>()
+                    ?? new List<AssessmentItem>();
 
-            // If there was an error don't return anything (to prevent leaking answers).
-            return string.Empty;
+                if ( presentation == PresentedFor.Student )
+                {
+                    // Hide the correct answer from the student.
+                    foreach ( var item in items )
+                    {
+                        item.CorrectAnswer = null;
+                    }
+                }
+
+                return new Dictionary<string, string>
+                {
+                    [SettingKey.AssessmentTerm] = componentData.GetValueOrNull( SettingKey.AssessmentTerm ),
+                    [SettingKey.Header] = headerHtml,
+                    [SettingKey.Items] = items.ToCamelCaseJson( false, false ),
+                    [SettingKey.MultipleChoiceWeight] = componentData.GetValueOrNull( SettingKey.MultipleChoiceWeight ),
+                    [SettingKey.ShowMissedQuestionsOnResults] = componentData.GetValueOrNull( SettingKey.ShowMissedQuestionsOnResults ),
+                    [SettingKey.ShowResultsOnCompletion] = componentData.GetValueOrNull( SettingKey.ShowResultsOnCompletion )
+                };
+            }
         }
 
-        /// <summary>
-        /// Calculates the student grade based on the configured multiple choice responses and weights.
-        /// Includes the calculations for the facilitator graded Short Answer items as well (if completed).
-        /// </summary>
-        /// <param name="configurationJson">The JSON string of the components configuration.</param>
-        /// <param name="completionJson">The JSON string of the components completion.</param>
-        /// <param name="pointsPossible">The total number of points possible for this activity.</param>
-        /// <returns>The actual earned points for this activity.</returns>
-        public override int CalculatePointsEarned( string configurationJson, string completionJson, int pointsPossible )
+
+        /// <inheritdoc/>
+        public override Dictionary<string, string> GetComponentData( LearningClassActivity activity, Dictionary<string, string> componentSettings, RockContext rockContext, RockRequestContext requestContext )
         {
-            var multipleChoiceSectionPoints = GetMultipleChoiceSectionPoints(configurationJson, completionJson, pointsPossible );
-            var shortAnswerSectionPoints = GetShortAnswerSectionPoints(configurationJson, completionJson, pointsPossible);
+            // This is a cheat, we shouldn't really be trying to access the original
+            // JSON this way, but we don't have a better way to do it.
+            var oldData = activity.LearningActivity?.ActivityComponentSettingsJson?.FromJsonOrNull<Dictionary<string, string>>();
 
-            return multipleChoiceSectionPoints + shortAnswerSectionPoints;
+            new StructuredContentHelper( componentSettings?.GetValueOrNull( SettingKey.Header ) )
+                .DetectAndApplyDatabaseChanges( oldData?.GetValueOrNull( SettingKey.Header ), rockContext );
+
+            return base.GetComponentData( activity, componentSettings, rockContext, requestContext );
+        }
+
+        /// <inheritdoc/>
+        public override Dictionary<string, string> GetCompletionValues( LearningClassActivityCompletion completion, Dictionary<string, string> completionData, Dictionary<string, string> componentData, PresentedFor presentation, RockContext rockContext, RockRequestContext requestContext )
+        {
+            // Note: We don't strip the correct from students here because
+            // they have already answered the questions. The answers are now
+            // included so we can display the result data to them.
+            return completionData;
+        }
+
+        /// <inheritdoc/>
+        public override Dictionary<string, string> GetCompletionData( LearningClassActivityCompletion completion, Dictionary<string, string> completionValues, Dictionary<string, string> componentData, PresentedFor presentation, RockContext rockContext, RockRequestContext requestContext )
+        {
+            var completionData = new Dictionary<string, string>( completionValues );
+
+            if ( presentation == PresentedFor.Student )
+            {
+                var items = componentData.GetValueOrNull( SettingKey.Items ).FromJsonOrNull<List<AssessmentItem>>()
+                    ?? new List<AssessmentItem>();
+                var completedItems = completionData.GetValueOrNull( CompletionKey.CompletedItems ).FromJsonOrNull<List<AssessmentItem>>()
+                    ?? new List<AssessmentItem>();
+
+                // Restore the correct value when this is coming from the student
+                // so we can properly display it on the summary screen later. But
+                // only restore the answer if it hasn't already been set, otherwise
+                // the facilitator might change the answer after it was responded to
+                // and skew the results.
+                foreach ( var item in completedItems )
+                {
+                    if ( item.CorrectAnswer == null )
+                    {
+                        item.CorrectAnswer = items.FirstOrDefault( i => i.UniqueId == item.UniqueId )?.CorrectAnswer;
+                    }
+                }
+
+                completionData[CompletionKey.CompletedItems] = completedItems.ToCamelCaseJson( false, false );
+            }
+
+            return completionData;
+        }
+
+        /// <inheritdoc/>
+        public override int? CalculatePointsEarned( LearningClassActivityCompletion completion, Dictionary<string, string> completionData, Dictionary<string, string> componentData, int pointsPossible, RockContext rockContext, RockRequestContext requestContext )
+        {
+            var multipleChoiceSectionPoints = GetMultipleChoiceSectionPoints( componentData, completionData, pointsPossible );
+            var shortAnswerSectionPoints = GetShortAnswerSectionPoints( componentData, completionData );
+
+            if ( shortAnswerSectionPoints.HasValue )
+            {
+                return null;
+            }
+
+            return multipleChoiceSectionPoints.HasValue
+                ? ( int? ) Math.Round( multipleChoiceSectionPoints.Value )
+                : null;
+        }
+
+        /// <inheritdoc/>
+        public override bool RequiresGrading( LearningClassActivityCompletion completion, Dictionary<string, string> completionData, Dictionary<string, string> componentData, RockContext rockContext, RockRequestContext requestContext )
+        {
+            if ( completion.GradedByPersonAliasId.HasValue )
+            {
+                return false;
+            }
+
+            var completionHasShortAnswer = HasShortAnswerItems( completionData, "completedItems" );
+
+            if ( completionHasShortAnswer.HasValue )
+            {
+                return completionHasShortAnswer.Value;
+            }
+
+            return HasShortAnswerItems( componentData, "items" ) ?? false;
         }
 
         /// <summary>
-        /// Parses the configuration and completion Jsons and calculates the points earned for the multiple choice section of the assessment.
+        /// Calculates the points earned for the multiple choice section of the
+        /// assessment.
         /// </summary>
-        /// <param name="configurationJson">The JSON string of the components configuration.</param>
-        /// <param name="completionJson">The JSON string of the components completion.</param>
-        /// <param name="pointsPossible">The total number of points possible for this activity.</param>
-        /// <returns>The actual earned points for the multiple choice section of the assessment.</returns>
-        private int GetMultipleChoiceSectionPoints( string configurationJson, string completionJson, int pointsPossible )
+        /// <param name="componentData">The component configuraiton data.</param>
+        /// <param name="completionData">The completion values from being submitted by student.</param>
+        /// <param name="pointsPossible">The maximum number of points possible.</param>
+        /// <returns>The number of points from correct answers or <c>null</c> if there were no multiple choice questions.</returns>
+        private decimal? GetMultipleChoiceSectionPoints( Dictionary<string, string> componentData, Dictionary<string, string> completionData, int pointsPossible )
         {
             try
             {
                 var correctMultipleChoiceItems = 0;
-                const string multipleChoiceItemTypeName = "Multiple Choice";
-                var itemsPath = $"$.items[?(@.typeName == '{multipleChoiceItemTypeName}')]";
+                var configuredItems = componentData["items"].FromJsonOrNull<List<AssessmentItem>>()
+                    ?.Where( item => item.Type == AssessmentItemType.MultipleChoice )
+                    .ToList()
+                    ?? new List<AssessmentItem>();
+                var completedItems = completionData["completedItems"].FromJsonOrNull<List<AssessmentItem>>()
+                    ?? new List<AssessmentItem>();
+                var multipleChoiceWeight = componentData["multipleChoiceWeight"].AsDecimal();
 
-                var config = JObject.Parse( configurationJson );
-                var completion = JObject.Parse( completionJson );
-
-                var configuredItems = config.SelectTokens( itemsPath );
-                var multipleChoiceWeight = config.SelectToken( "multipleChoiceWeight" )?.ToObject<decimal>() ?? 0;
+                if ( !configuredItems.Any() )
+                {
+                    return null;
+                }
 
                 foreach ( var question in configuredItems )
                 {
-                    var questionId = question.SelectToken( "uniqueId" )?.ToObject<string>() ?? string.Empty;
-
-                    if ( questionId == string.Empty )
+                    if ( question.UniqueId == Guid.Empty )
                     {
                         continue;
                     }
 
-                    var correctAnswer = question["correctAnswer"]?.ToStringSafe();
-                    var response = completion.SelectToken( $"$.completedItems[?(@.uniqueId  == '{questionId}')].response" )?.ToObject<string>() ?? string.Empty;
+                    var correctAnswer = question.CorrectAnswer.ToStringSafe();
+                    var response = completedItems.FirstOrDefault( item => item.UniqueId == question.UniqueId )?.Response ?? string.Empty;
 
                     if ( correctAnswer.Equals( response, StringComparison.OrdinalIgnoreCase ) )
                     {
@@ -145,50 +265,49 @@ namespace Rock.Lms
                 var availablePoints = pointsPossible * sectionWeight;
                 var percentCorrect = correctMultipleChoiceItems / multipleChoiceItemCount;
                 var pointsEarned = availablePoints * percentCorrect;
-                return (int)pointsEarned;
+
+                return pointsEarned;
             }
             catch ( Exception ex )
             {
                 ExceptionLogService.LogException( ex );
             }
 
-            return 0;
+            return null;
         }
 
         /// <summary>
-        /// Parses the configuration and completion Jsons and calculates the points earned for the short answer section of the assessment.
+        /// Calculates the points given by the facilitator for the non-multiple
+        /// choice questions in the assessment.
         /// </summary>
-        /// <param name="configurationJson">The JSON string of the components configuration.</param>
-        /// <param name="completionJson">The JSON string of the components completion.</param>
-        /// <param name="pointsPossible">The total number of points possible for this activity.</param>
-        /// <returns>The actual earned points for the short answer section of the assessment.</returns>
-        private int GetShortAnswerSectionPoints( string configurationJson, string completionJson, int pointsPossible )
+        /// <param name="componentData">The component configuraiton data.</param>
+        /// <param name="completionData">The completion values from being submitted by student.</param>
+        /// <returns>The number of points from correct answers or <c>null</c> if there were no non-multiple choice questions.</returns>
+        private decimal? GetShortAnswerSectionPoints( Dictionary<string, string> componentData, Dictionary<string, string> completionData )
         {
-            var pointsEarned = 0;
+            decimal? pointsEarned = null;
+
             try
             {
-                const string shortAnswerItemTypeName = "Short Answer";
-                var itemsPath = $"$.items[?(@.typeName == '{shortAnswerItemTypeName}')]";
+                var configuredItems = componentData["items"].FromJsonOrNull<List<AssessmentItem>>()
+                    ?.Where( item => item.Type == AssessmentItemType.MultipleChoice )
+                    .ToList()
+                    ?? new List<AssessmentItem>();
+                var completedItems = completionData["completedItems"].FromJsonOrNull<List<AssessmentItem>>()
+                    ?? new List<AssessmentItem>();
 
-                var config = JObject.Parse( configurationJson );
-                var completion = JObject.Parse( completionJson );
-
-                var configuredItems = config.SelectTokens( itemsPath ); ;
-                
                 foreach ( var question in configuredItems )
                 {
-                    var questionId = question.SelectToken( "uniqueId" )?.ToObject<string>() ?? string.Empty;
-                    
-                    if ( questionId == string.Empty )
+                    if ( question.UniqueId == Guid.Empty )
                     {
                         continue;
                     }
 
-                    var faciltatorScore = completion.SelectToken( $"$.completedItems[?(@.uniqueId  == '{questionId}')].pointsEarned" )?.ToObject<int>();
+                    var facilitatorScore = completedItems.FirstOrDefault( item => item.UniqueId == question.UniqueId )?.PointsEarned;
 
-                    if (faciltatorScore.HasValue )
+                    if ( facilitatorScore.HasValue )
                     {
-                        pointsEarned += faciltatorScore.Value;
+                        pointsEarned += facilitatorScore.Value;
                     }
                 }
 
@@ -200,5 +319,73 @@ namespace Rock.Lms
 
             return pointsEarned;
         }
+
+        /// <summary>
+        /// Checks the configuration JSON for any items of the "Short Answer" type.
+        /// </summary>
+        /// <param name="data">The component data or completion data.</param>
+        /// <param name="itemsPropertyNames">The name of the property containing the items.</param>
+        /// <returns><c>true</c>If able to positively determine the configuration contains "Short Answer" items; otherwise <c>false</c>.</returns>
+        private bool? HasShortAnswerItems( Dictionary<string, string> data, string itemsPropertyNames )
+        {
+            try
+            {
+                var items = data[itemsPropertyNames].FromJsonOrNull<List<AssessmentItem>>() ?? new List<AssessmentItem>();
+
+                return items.Any( item => item.Type == AssessmentItemType.ShortAnswer );
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        #endregion
+
+        #region Support Classes
+
+        private enum AssessmentItemType
+        {
+            MultipleChoice = 0,
+            Section = 1,
+            ShortAnswer = 2
+        }
+
+        private class AssessmentItem
+        {
+            public AssessmentItemType Type { get; set; }
+
+            public Guid UniqueId { get; set; }
+
+            public bool? HasBeenGraded { get; set; }
+
+            public int Order { get; set; }
+
+            public decimal? PointsEarned { get; set; }
+
+            public string Response { get; set; }
+
+            public List<string> Answers { get; set; }
+
+            public string CorrectAnswer { get; set; }
+
+            public string HelpText { get; set; }
+
+            public string Question { get; set; }
+
+            public string Title { get; set; }
+
+            public string Summary { get; set; }
+
+            public int? AnswerBoxRows { get; set; }
+
+            public int? MaxCharacterCount { get; set; }
+
+            public decimal? PointsPossible { get; set; }
+
+            public decimal? QuestionWeight { get; set; }
+        }
+
+        #endregion
     }
 }

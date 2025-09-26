@@ -1,4 +1,4 @@
-// <copyright>
+﻿// <copyright>
 // Copyright by the Spark Development Network
 //
 // Licensed under the Rock Community License (the "License");
@@ -26,6 +26,8 @@ using Rock.Data;
 using Rock.Model;
 using Rock.Obsidian.UI;
 using Rock.Security;
+using Rock.SystemGuid;
+using Rock.Utility;
 using Rock.ViewModels.Blocks;
 using Rock.ViewModels.Blocks.Cms.PersistedDatasetList;
 using Rock.Web.Cache;
@@ -39,8 +41,8 @@ namespace Rock.Blocks.Cms
     [DisplayName( "Persisted Dataset List" )]
     [Category( "CMS" )]
     [Description( "Displays a list of persisted datasets." )]
-    [IconCssClass( "fa fa-list" )]
-    // [SupportedSiteTypes( Model.SiteType.Web )]
+    [IconCssClass( "ti ti-list" )]
+    [SupportedSiteTypes( Model.SiteType.Web )]
 
     [LinkedPage( "Detail Page",
         Description = "The page that will show the persisted dataset details.",
@@ -57,7 +59,7 @@ namespace Rock.Blocks.Cms
     [Rock.SystemGuid.EntityTypeGuid( "dc11e26e-7e4a-4550-af2d-2c9b94beed4e" )]
     [Rock.SystemGuid.BlockTypeGuid( "cfbb4daf-1aeb-4095-8098-e3a82e30fa7e" )]
     [CustomizedGrid]
-    public class PersistedDatasetList : RockEntityListBlockType<PersistedDataset>
+    public class PersistedDatasetList : RockListBlockType<PersistedDatasetListBag>
     {
         #region Keys
 
@@ -120,36 +122,78 @@ namespace Rock.Blocks.Cms
         {
             return new Dictionary<string, string>
             {
-                [NavigationUrlKey.DetailPage] = this.GetLinkedPageUrl( AttributeKey.DetailPage, "PersistedDatasetId", "((Key))" )
+                [NavigationUrlKey.DetailPage] = this.GetLinkedPageUrl( AttributeKey.DetailPage, new Dictionary<string, string> { ["PersistedDatasetId"] = "((Key))", ["autoEdit"] = "true", ["returnUrl"] = this.GetCurrentPageUrl() } )
             };
         }
 
         /// <inheritdoc/>
-        protected override IQueryable<PersistedDataset> GetListQueryable( RockContext rockContext )
+        protected override IQueryable<PersistedDatasetListBag> GetListQueryable( RockContext rockContext )
         {
             var persistedDatasetService = new PersistedDatasetService( rockContext );
 
             // Use AsNoTracking() since these records won't be modified
-            var qry = persistedDatasetService.Queryable().AsNoTracking();
+            var qry = persistedDatasetService.Queryable()
+                .AsNoTracking();
 
-            return qry;
+            return qry.Select( p => new PersistedDatasetListBag
+            {
+                AccessKey = p.AccessKey,
+                Name = p.Name,
+                Id = p.Id,
+                LastRefreshDateTime = p.LastRefreshDateTime,
+                TimeToBuildMS = p.TimeToBuildMS,
+                AllowManualRefresh = p.AllowManualRefresh,
+                ResultSize = p.ResultData != null ? p.ResultData.Length / 1024 : 0,
+                IsSystem = p.IsSystem,
+                IsActive = p.IsActive
+            } );
+        }
+
+        /// <inheritdoc/>   
+        protected override IQueryable<PersistedDatasetListBag> GetOrderedListQueryable( IQueryable<PersistedDatasetListBag> queryable, RockContext rockContext )
+        {
+            return queryable.OrderBy( b => b.Name ).ThenBy( b => b.AccessKey );
         }
 
         /// <inheritdoc/>
-        protected override GridBuilder<PersistedDataset> GetGridBuilder()
+        protected override List<PersistedDatasetListBag> GetListItems( IQueryable<PersistedDatasetListBag> queryable, RockContext rockContext )
         {
-            return new GridBuilder<PersistedDataset>()
+            var items = queryable.ToList();
+            var hasher = IdHasher.Instance;
+
+            foreach ( var item in items )
+            {
+                item.IdKey = hasher.GetHash( item.Id );
+            }
+
+            return items;
+        }
+
+        /// <inheritdoc/>
+        protected override GridBuilder<PersistedDatasetListBag> GetGridBuilder()
+        {
+            return new GridBuilder<PersistedDatasetListBag>()
                 .WithBlock( this )
                 .AddTextField( "idKey", a => a.IdKey )
-                .AddField("id", a => a.Id)
+                .AddField( "id", a => a.Id )
                 .AddTextField( "name", a => a.Name )
                 .AddField( "lastRefreshDateTime", a => a.LastRefreshDateTime )
                 .AddTextField( "accessKey", a => a.AccessKey )
-                .AddField( "timeToBuildMS", a => a.TimeToBuildMS.HasValue ? Math.Round( ( double ) a.TimeToBuildMS ).ToString() : "-" )
-                .AddField("allowManualRefresh", a => a.AllowManualRefresh)
-                .AddTextField( "resultData", a => a.ResultData )
-                .AddField( "resultSize", a => a.ResultData != null ? a.ResultData.Length / 1024 : 0 )
-                .AddField( "isSystem", a => a.IsSystem );
+                .AddField( "timeToBuildMS", a => a.TimeToBuildMS.HasValue ? Math.Round( ( double ) a.TimeToBuildMS ) : a.TimeToBuildMS )
+                .AddField( "allowManualRefresh", a => a.AllowManualRefresh )
+                /*
+                     7/22/2025 - NA
+
+                     Avoid loading all data immediately, as the dataset could be extremely large (potentially hundreds of megabytes).
+                     This is a safeguard to prevent excessive memory usage and slow performance.
+
+                    //.AddTextField( "resultData", a => a.ResultData )
+
+                     Reason: Prevent unnecessary loading of large datasets.
+                */
+                .AddField( "resultSize", a => a.ResultSize )
+                .AddField( "isSystem", a => a.IsSystem )
+                .AddField( "isActive", a => a.IsActive );
         }
 
         #endregion
@@ -170,13 +214,36 @@ namespace Rock.Blocks.Cms
                 }
 
                 // Refresh the dataset and save changes
-                persistedDataset.UpdateResultData();
-                rockContext.SaveChanges();
+                var result = persistedDataset.UpdateResultData();
 
-                // Update the cache
-                PersistedDatasetCache.UpdateCachedEntity( persistedDataset.Id, EntityState.Modified );
+                if ( result.IsSuccess )
+                {
+                    rockContext.SaveChanges();
 
-                return ActionOk();
+                    // Update the cache
+                    PersistedDatasetCache.UpdateCachedEntity( persistedDataset.Id, EntityState.Modified );
+
+                    return ActionOk();
+                }
+                else
+                {
+                    // Get max preview size from block settings (default 1MB)
+                    var maxPreviewSizeMB = this.GetAttributeValue( AttributeKey.MaxPreviewSizeMB ).AsDecimalOrNull() ?? 1;
+                    maxPreviewSizeMB = Math.Max( 1, maxPreviewSizeMB );
+                    var maxPreviewSizeLength = ( int ) ( maxPreviewSizeMB * 1024 * 1024 );
+
+                    string refreshMaxLengthWarning = result?.WarningMessage?.Length > maxPreviewSizeLength
+                        ? string.Format( "Output size is {0}. Showing first {1}.", result?.WarningMessage?.Length.FormatAsMemorySize(), maxPreviewSizeLength.FormatAsMemorySize() )
+                        : null;
+
+                    var response = new
+                    {
+                        RefreshJson = ( string.Format( "<pre>{0}</pre>", result?.WarningMessage?.TruncateHtml( maxPreviewSizeLength ) ) ),
+                        RefreshMaxLengthWarning = refreshMaxLengthWarning,
+                    };
+
+                    return ActionBadRequest( response.ToCamelCaseJson( false, true ) );
+                }
             }
         }
 
@@ -196,7 +263,12 @@ namespace Rock.Blocks.Cms
                 // Ensure data is refreshed if needed
                 if ( persistedDataset.LastRefreshDateTime == null )
                 {
-                    persistedDataset.UpdateResultData();
+                    var result = persistedDataset.UpdateResultData();
+
+                    if ( !result.IsSuccess && persistedDataset.ResultData.IsNullOrWhiteSpace() )
+                    {
+                        return ActionBadRequest( result.WarningMessage );
+                    }
                 }
 
                 // Get max preview size from block settings (default 1MB)
@@ -204,9 +276,23 @@ namespace Rock.Blocks.Cms
                 maxPreviewSizeMB = Math.Max( 1, maxPreviewSizeMB );
                 var maxPreviewSizeLength = ( int ) ( maxPreviewSizeMB * 1024 * 1024 );
 
+                if ( persistedDataset.ResultData.IsNullOrWhiteSpace() )
+                {
+                    return ActionOk( new
+                    {
+                        PreviewData = "The result data for this dataset is empty, rebuild the dataset to refresh the result data.",
+                        TimeToBuildMS = persistedDataset.TimeToBuildMS
+                    } );
+                }
+
+                var preViewObject = persistedDataset.ResultData.FromJsonDynamic().ToJson( true );
+                string refreshMaxLengthWarning = preViewObject?.Length > maxPreviewSizeLength
+                    ? string.Format( "JSON size is {0}. Showing first {1}.", preViewObject?.Length.FormatAsMemorySize(), maxPreviewSizeLength.FormatAsMemorySize() )
+                    : null;
+
                 // Truncate data if it exceeds max size
-                var previewData = persistedDataset.ResultData;
-                if ( previewData.Length > maxPreviewSizeLength )
+                var previewData = preViewObject.Truncate( maxPreviewSizeLength );
+                if ( previewData?.Length > maxPreviewSizeLength )
                 {
                     previewData = previewData.Substring( 0, maxPreviewSizeLength );
                 }
@@ -214,7 +300,8 @@ namespace Rock.Blocks.Cms
                 var response = new
                 {
                     PreviewData = previewData,
-                    TimeToBuildMS = persistedDataset.TimeToBuildMS
+                    TimeToBuildMS = persistedDataset.TimeToBuildMS,
+                    RefreshMaxLengthWarning = refreshMaxLengthWarning
                 };
 
                 return ActionOk( response );

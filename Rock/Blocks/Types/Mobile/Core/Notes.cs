@@ -43,7 +43,7 @@ namespace Rock.Blocks.Types.Mobile.Core
     [DisplayName( "Notes" )]
     [Category( "Mobile > Core" )]
     [Description( "Displays entity notes to the user and allows adding new notes." )]
-    [IconCssClass( "fa fa-sticky-note" )]
+    [IconCssClass( "ti ti-sticker-2" )]
     [SupportedSiteTypes( Model.SiteType.Mobile )]
 
     #region Block Attributes
@@ -99,7 +99,7 @@ namespace Rock.Blocks.Types.Mobile.Core
     [BlockTemplateField( "Notes Template",
         Description = "The template to use when rendering the notes. Provided with a 'Notes' merge field, among some others (see documentation).",
         TemplateBlockValueGuid = SystemGuid.DefinedValue.BLOCK_TEMPLATE_MOBILE_NOTES,
-        DefaultValue = "C9134085-D433-444D-9803-8E5CE1B053DE",
+        DefaultValue = "1EB6DCE4-69F1-44B9-A674-E1C67E216B2A",
         IsRequired = true,
         Key = AttributeKey.NotesTemplate,
         Order = 7 )]
@@ -403,7 +403,7 @@ namespace Rock.Blocks.Types.Mobile.Core
             }
 
             string photoUrl = "";
-            if( note.CreatedByPersonAlias?.Person?.PhotoUrl != null )
+            if ( note.CreatedByPersonAlias?.Person?.PhotoUrl != null )
             {
                 photoUrl = MobileHelper.BuildPublicApplicationRootUrl( note.CreatedByPersonAlias.Person.PhotoUrl );
             }
@@ -428,14 +428,13 @@ namespace Rock.Blocks.Types.Mobile.Core
         /// <summary>
         /// Gets the viewable notes.
         /// </summary>
-        /// <param name="rockContext">The rock context.</param>
         /// <param name="parentNoteGuid">The parent note unique identifier.</param>
         /// <param name="startIndex">The start index.</param>
         /// <param name="count">The count.</param>
         /// <returns>List&lt;Note&gt;.</returns>
-        private List<Note> GetViewableNotes( RockContext rockContext, Guid? parentNoteGuid, int startIndex, int count )
+        private List<Note> GetViewableNotes( Guid? parentNoteGuid, int startIndex, int count )
         {
-            var noteService = new NoteService( rockContext );
+            var noteService = new NoteService( RockContext );
             var viewableNoteTypeIds = GetViewableNoteTypes().Select( t => t.Id ).ToList();
 
             var entityType = EntityTypeCache.Get( ContextEntityType );
@@ -446,11 +445,13 @@ namespace Rock.Blocks.Types.Mobile.Core
                 return null;
             }
 
+            var currentPersonId = GetCurrentPerson()?.Id;
             var notesQuery = noteService.Queryable()
                 .AsNoTracking()
                 .Include( a => a.CreatedByPersonAlias.Person )
                 .Include( a => a.ParentNote )
                 .Include( a => a.ChildNotes )
+                .AreViewableBy( currentPersonId )
                 .Where( a => viewableNoteTypeIds.Contains( a.NoteTypeId ) )
                 .Where( a => a.EntityId == entity.Id );
 
@@ -464,9 +465,9 @@ namespace Rock.Blocks.Types.Mobile.Core
             }
 
             return notesQuery
+                .ToList()
                 .OrderByDescending( a => a.IsAlert == true )
                 .ThenByDescending( a => a.CreatedDateTime )
-                .ToList()
                 .Where( a => a.IsAuthorized( Authorization.VIEW, RequestContext.CurrentPerson ) )
                 .Skip( startIndex )
                 .Take( count )
@@ -482,21 +483,18 @@ namespace Rock.Blocks.Types.Mobile.Core
         /// <returns>The list of notes found.</returns>
         private List<object> GetEntityNotes( Guid? parentNoteGuid, int startIndex, int count )
         {
-            using ( var rockContext = new RockContext() )
+            var viewableNotes = GetViewableNotes( parentNoteGuid, startIndex, count );
+
+            if ( viewableNotes == null )
             {
-                var viewableNotes = GetViewableNotes( rockContext, parentNoteGuid, startIndex, count );
-
-                if ( viewableNotes == null )
-                {
-                    return null;
-                }
-
-                var noteData = viewableNotes
-                    .Select( a => GetNoteObject( a ) )
-                    .ToList();
-
-                return noteData;
+                return null;
             }
+
+            var noteData = viewableNotes
+                .Select( a => GetNoteObject( a ) )
+                .ToList();
+
+            return noteData;
         }
 
         /// <summary>
@@ -785,12 +783,6 @@ namespace Rock.Blocks.Types.Mobile.Core
                 note.EditedByPersonAliasId = RequestContext.CurrentPerson?.PrimaryAliasId;
                 note.EditedDateTime = RockDateTime.Now;
 
-#pragma warning disable CS0618 // Type or member is obsolete
-                // Set this so anything doing direct SQL queries will still find
-                // the right set of notes.
-                note.ApprovalStatus = NoteApprovalStatus.Approved;
-#pragma warning restore CS0618 // Type or member is obsolete
-
                 rockContext.SaveChanges();
 
                 // If we created a new note (and the feature is enabled), we want to send a communication
@@ -798,11 +790,13 @@ namespace Rock.Blocks.Types.Mobile.Core
                 if ( newNote && EnableGroupNotification && GroupNotificationCommunicationTemplate.HasValue )
                 {
                     // If there is a Group context, send the communication. Even in the cases where the note entity type is Group.
-                    if ( RequestContext.ContextEntities.TryGetValue( typeof( Group ), out var contextGroupEntity ) )
+                    var contextGroupEntity = RequestContext.GetContextEntity<Group>();
+
+                    if ( contextGroupEntity != null )
                     {
                         Task.Run( () =>
                         {
-                            SendNoteAddedCommunicationToGroup( contextGroupEntity.Value as Group, text );
+                            SendNoteAddedCommunicationToGroup( contextGroupEntity, text );
                         } );
                     }
                 }

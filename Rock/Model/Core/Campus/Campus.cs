@@ -32,6 +32,7 @@ namespace Rock.Model
     [RockDomain( "Core" )]
     [Table( "Campus" )]
     [DataContract]
+    [CodeGenerateRest( DisableEntitySecurity = true )]
     [Analytics( false, true )]
     [Rock.SystemGuid.EntityTypeGuid( Rock.SystemGuid.EntityType.CAMPUS )]
     public partial class Campus : Model<Campus>, IOrdered, ICacheable
@@ -164,6 +165,7 @@ namespace Rock.Model
         /// </value>
         [DataMember]
         [DefinedValue( SystemGuid.DefinedType.CAMPUS_STATUS )]
+        [EnableAttributeQualification]
         public int? CampusStatusValueId { get; set; }
 
         /// <summary>
@@ -174,6 +176,7 @@ namespace Rock.Model
         /// </value>
         [DataMember]
         [DefinedValue( SystemGuid.DefinedType.CAMPUS_TYPE )]
+        [EnableAttributeQualification]
         public int? CampusTypeValueId { get; set; }
 
         /// <summary>
@@ -214,6 +217,27 @@ namespace Rock.Model
         [DataMember]
         [DecimalPrecision( 8, 2 )]
         public decimal? TitheMetric { get; set; }
+
+        /// <summary>
+        /// The identifier of the beacon that is associated with this campus.
+        /// This is typically used with Bluetooth proximity beacons and allows
+        /// the <see cref="Campus"/> to be determined from a beacon.
+        /// </summary>
+        /// <remarks>
+        /// This is typically set automatically on creation to match the
+        /// identifier of the campus.
+        /// </remarks>
+        [DataMember]
+        public int? BeaconId { get; set; }
+
+        /// <summary>
+        /// Gets or sets the average weekend attendance.
+        /// </summary>
+        /// <value>
+        /// The average weekend attendance.
+        /// </value>
+        [DataMember]
+        public int? AverageWeekendAttendance { get; set; }
 
         #endregion Entity Properties
 

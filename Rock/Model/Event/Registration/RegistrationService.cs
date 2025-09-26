@@ -28,6 +28,66 @@ namespace Rock.Model
     public partial class RegistrationService
     {
         /// <summary>
+        /// Attempts to deactivate (not delete) the payment plan for a registration.
+        /// </summary>
+        /// <param name="registration">The registration whose payment plan should be deactivated.</param>
+        /// <param name="financialScheduledTransactionService">The financial scheduled transaction service.</param>
+        /// <param name="error">Set to an error message if the operation fails.</param>
+        /// <param name="warning">Set to a warning message if the operation succeeds with a warning.</param>
+        /// <returns>True if successful, false if there was an error.</returns>
+        public bool TryCancelPaymentPlan( Registration registration, FinancialScheduledTransactionService financialScheduledTransactionService, out string error, out string warning )
+        {
+            if ( registration?.PaymentPlanFinancialScheduledTransaction == null || !registration.PaymentPlanFinancialScheduledTransaction.IsActive )
+            {
+                error = null;
+                warning = null;
+                return true;
+            }
+
+            var financialScheduledTransactionId = registration?.PaymentPlanFinancialScheduledTransactionId;
+            if ( !financialScheduledTransactionId.HasValue )
+            {
+                error = null;
+                warning = "This registration has no payment plan or it has already been canceled.";
+                return true;
+            }
+
+            var financialScheduledTransaction = financialScheduledTransactionService.Get( financialScheduledTransactionId.Value );
+
+            if ( financialScheduledTransaction == null )
+            {
+                error = null;
+                warning = "The payment plan record could not be found. It may have already been canceled.";
+                return true;
+            }
+
+            if ( !financialScheduledTransactionService.Cancel( financialScheduledTransaction, out var cancelErrorMessage ) )
+            {
+                error = $"An error occurred while canceling your scheduled transaction on the financial gateway. Message: {cancelErrorMessage}";
+                warning = null;
+                return false;
+            }
+
+            try
+            {
+                if ( !financialScheduledTransactionService.GetStatus( financialScheduledTransaction, out var getStatusErrorMessage ) )
+                {
+                    error = null;
+                    warning = $"The scheduled transaction was canceled on the financial gateway but was not marked inactive in Rock. Message: {getStatusErrorMessage}";
+                    return true;
+                }
+            }
+            catch
+            {
+                // Ignore
+            }
+
+            error = null;
+            warning = null;
+            return true;
+        }
+
+        /// <summary>
         /// Gets the payments.
         /// </summary>
         /// <param name="registrationId">The registration identifier.</param>
@@ -179,7 +239,8 @@ namespace Rock.Model
                 // Verify this registration is for the same person and instance.
                 if ( context.Registration != null )
                 {
-                    if ( context.Registration.PersonAliasId.HasValue && currentPerson?.Aliases.Any( a => a.Id == context.Registration.PersonAliasId.Value ) != true )
+                    if ( ( context.Registration.PersonAlias != null && context.Registration.PersonAlias.PersonId != currentPerson.Id )
+                        && ( context.Registration.CreatedByPersonAlias != null && context.Registration.CreatedByPersonAlias.PersonId != currentPerson.Id ) )
                     {
                         // This existing registration does not belong to this person
                         errorMessage = "Your existing registration was not found";
@@ -468,6 +529,7 @@ namespace Rock.Model
             ShowSmsOptIn = template.ShowSmsOptIn;
             SmsOptInText = Rock.Web.SystemSettings.GetValue( Rock.SystemKey.SystemSetting.SMS_OPT_IN_MESSAGE_LABEL );
             ConnectionStatusValueId = template.ConnectionStatusValueId;
+            RecordSourceValueId = instance.GetRegistrantRecordSourceValueId();
 
             // Workflow type ids
             WorkflowTypeIds = new List<int>();
@@ -831,6 +893,22 @@ namespace Rock.Model
         /// The connection status value identifier.
         /// </value>
         public int? ConnectionStatusValueId { get; private set; }
+
+        /// <summary>
+        /// Gets the record source value identifier, according to the registration template and instance.
+        /// </summary>
+        /// <value>
+        /// The record source value identifier, according to the registration template and instance.
+        /// </value>
+        public int? RecordSourceValueId { get; private set; }
+
+        /// <summary>
+        /// Gets or sets the actual record source value identifier, taking into account page parameter, cookie and default values.
+        /// </summary>
+        /// <value>
+        /// The actual record source value identifier, taking into account page parameter, cookie and default values.
+        /// </value>
+        public int? ActualRecordSourceValueId { get; set; }
 
         /// <summary>
         /// Gets the group type identifier.

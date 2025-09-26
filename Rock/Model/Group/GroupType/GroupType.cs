@@ -22,10 +22,14 @@ using System.ComponentModel.DataAnnotations.Schema;
 using System.Data.Entity.ModelConfiguration;
 using System.Linq;
 using System.Runtime.Serialization;
+
 using Rock.Data;
+using Rock.Enums.CheckIn;
+using Rock.Enums.Communication.Chat;
 using Rock.Enums.Group;
 using Rock.Lava;
 using Rock.Security;
+using Rock.Utility;
 using Rock.Web.Cache;
 
 namespace Rock.Model
@@ -37,8 +41,10 @@ namespace Rock.Model
     [RockDomain( "Group" )]
     [Table( "GroupType" )]
     [DataContract]
+    [CodeGenerateRest]
+    [EnableAttributeQualification( nameof( Id ) )]
     [Rock.SystemGuid.EntityTypeGuid( "0DD30B04-01CF-4B38-8E83-BE661E2F7286" )]
-    public partial class GroupType : Model<GroupType>, IOrdered, ICacheable
+    public partial class GroupType : Model<GroupType>, IOrdered, ICacheable, IHasAdditionalSettings
     {
         #region Entity Properties
 
@@ -212,6 +218,25 @@ namespace Rock.Model
         public AttendanceRule AttendanceRule { get; set; }
 
         /// <summary>
+        /// <para>
+        /// When <see cref="AttendanceRule"/> is set to <see cref="AttendanceRule.AlreadyEnrolledInGroup"/>
+        /// then this specifies the group matching logic used.
+        /// </para>
+        /// <para>
+        /// <see cref="AlreadyEnrolledMatchingLogic.MustBeEnrolled"/> simply
+        /// that the person be a member of the group and no additional filtering
+        /// is performed.
+        /// </para>
+        /// <para>
+        /// <see cref="AlreadyEnrolledMatchingLogic.PreferEnrolledGroups"/> will
+        /// additionally then filter out any non-preferred groups if the person
+        /// is a member of any preferred groups.
+        /// </para>
+        /// </summary>
+        [DataMember]
+        public AlreadyEnrolledMatchingLogic AlreadyEnrolledMatchingLogic { get; set; }
+
+        /// <summary>
         /// Gets or sets the group capacity rule.
         /// </summary>
         /// <value>
@@ -296,6 +321,7 @@ namespace Rock.Model
         /// </value>
         [DataMember]
         [DefinedValue( SystemGuid.DefinedType.GROUPTYPE_PURPOSE )]
+        [EnableAttributeQualification]
         public int? GroupTypePurposeValueId { get; set; }
 
         /// <summary>
@@ -686,7 +712,7 @@ namespace Rock.Model
         /// </summary>
         /// <value>The attendance reminder followup days.</value>
         [DataMember]
-        [MaxLength(100)]
+        [MaxLength( 100 )]
         public string AttendanceReminderFollowupDays { get; set; }
 
         //AttendanceReminderLastSentDateTime
@@ -757,6 +783,101 @@ namespace Rock.Model
         [DataMember]
         [DecimalPrecision( 8, 2 )]
         public decimal NonLeaderToLeaderRelationshipMultiplier { get; set; }
+
+        /// <summary>
+        /// Gets or sets a value that groups in this area should not be available
+        /// when a person already has a check-in for the same schedule.
+        /// </summary>
+        [DataMember]
+        public bool IsConcurrentCheckInPrevented { get; set; }
+
+        /// <summary>
+        /// Gets or sets whether groups of this type are allowed to participate in the chat system as a chat channel.
+        /// </summary>
+        /// <value>
+        /// Whether groups of this type are allowed to participate in the chat system as a chat channel.
+        /// </value>
+        [DataMember]
+        public bool IsChatAllowed { get; set; }
+
+        /// <summary>
+        /// Gets or sets whether all groups of this type have the chat feature enabled by default. This can be overridden
+        /// by the value of <see cref="Group.IsChatEnabledOverride"/>.
+        /// </summary>
+        /// <value>
+        /// Whether all groups of this type have the chat feature enabled by default.
+        /// </value>
+        [DataMember]
+        public bool IsChatEnabledForAllGroups { get; set; }
+
+        /// <summary>
+        /// Gets or sets whether individuals are allowed to leave chat channels of this type. If set to
+        /// <see langword="false"/>, then they will only be allowed to mute the channel. This can be overridden by the
+        /// value of <see cref="Group.IsLeavingChatChannelAllowedOverride"/>.
+        /// </summary>
+        /// <value>
+        /// Whether individuals are allowed to leave chat channels of this type.
+        /// </value>
+        [DataMember]
+        public bool IsLeavingChatChannelAllowed { get; set; }
+
+        /// <summary>
+        /// Gets or sets whether chat channels of this type are public. A public channel is visible to everyone when
+        /// performing a search. This also implies that the channel may be joined by any person via the chat application.
+        /// This can be overridden by the value of <see cref="Group.IsChatChannelPublicOverride"/>.
+        /// </summary>
+        /// <value>
+        /// Whether chat channels of this type are public.
+        /// </value>
+        [DataMember]
+        public bool IsChatChannelPublic { get; set; }
+
+        /// <summary>
+        /// Gets or sets whether chat channels of this type are always shown in the channel list even if the person has
+        /// not joined the channel. This also implies that the channel may be joined by any person via the chat
+        /// application. This can be overridden by the value of <see cref="Group.IsChatChannelAlwaysShownOverride"/>.
+        /// </summary>
+        /// <value>
+        /// Whether chat channels of this type are always shown in the channel list.
+        /// </value>
+        [DataMember]
+        public bool IsChatChannelAlwaysShown { get; set; }
+
+        /// <summary>
+        /// Gets or sets the <see cref="ChatNotificationMode"/> to control how push notifications are sent for chat
+        /// channels of this type. This can be overridden by the value of <see cref="Group.ChatPushNotificationModeOverride"/>.
+        /// </summary>
+        /// <value>
+        /// The <see cref="ChatNotificationMode"/> to control how push notifications are sent for chat channels of this type.
+        /// </value>
+        [DataMember]
+        public ChatNotificationMode ChatPushNotificationMode { get; set; }
+
+        /// <summary>
+        /// Gets or sets the default Id of the Record Source Type <see cref="Rock.Model.DefinedValue"/>, representing
+        /// the source of <see cref="GroupMember"/>s added to <see cref="Group"/>s of this type. This can be overridden
+        /// by <see cref="Group.GroupMemberRecordSourceValueId"/>.
+        /// </summary>
+        /// <value>
+        /// A <see cref="System.Int32"/> representing the Id of the Record Source Type <see cref="Rock.Model.DefinedValue"/>.
+        /// </value>
+        [DataMember]
+        [DefinedValue( SystemGuid.DefinedType.RECORD_SOURCE_TYPE )]
+        public int? GroupMemberRecordSourceValueId { get; set; }
+
+        /// <summary>
+        /// Gets or sets whether <see cref="Group"/>s of this type can override <see cref="GroupMemberRecordSourceValueId"/>.
+        /// </summary>
+        /// <value>
+        /// A <see cref="System.Boolean"/> representing whether <see cref="Group"/>s of this type can override
+        /// <see cref="GroupMemberRecordSourceValueId"/>.
+        /// </value>
+        [DataMember]
+        public bool AllowGroupSpecificRecordSource { get; set; }
+
+        /// <inheritdoc/>
+        [DataMember]
+        public string AdditionalSettingsJson { get; set; }
 
         #endregion Entity Properties
 
@@ -884,6 +1005,15 @@ namespace Rock.Model
         [Required]
         [DataMember( IsRequired = true )]
         public bool ShowAdministrator { get; set; }
+
+        /// <summary>
+        /// Gets or sets the types of notifications the coordinator receives about scheduled individuals.
+        /// </summary>
+        /// <value>
+        /// The schedule coordinator notification types.
+        /// </value>
+        [DataMember]
+        public ScheduleCoordinatorNotificationType? ScheduleCoordinatorNotificationTypes { get; set; }
 
         #endregion
 
@@ -1155,6 +1285,18 @@ namespace Rock.Model
         [DataMember]
         public virtual SystemCommunication AttendanceReminderSystemCommunication { get; set; }
 
+        /// <summary>
+        /// Gets or sets the default Record Source Type <see cref="DefinedValue"/>, representing the source of
+        /// <see cref="GroupMember"/>s added to <see cref="Group"/>s of this type. This can be overridden by
+        /// <see cref="Group.GroupMemberRecordSourceValue"/> if <see cref="AllowGroupSpecificRecordSource"/> is
+        /// <see langword="true"/>.
+        /// </summary>
+        /// <value>
+        /// A <see cref="Rock.Model.DefinedValue"/> representing the Record Source Type .
+        /// </value>
+        [DataMember]
+        public virtual DefinedValue GroupMemberRecordSourceValue { get; set; }
+
         #endregion
 
         #region Public Methods
@@ -1193,6 +1335,7 @@ namespace Rock.Model
             this.HasOptional( p => p.ScheduleReminderSystemCommunication ).WithMany().HasForeignKey( p => p.ScheduleReminderSystemCommunicationId ).WillCascadeOnDelete( false );
             this.HasOptional( p => p.ScheduleCancellationWorkflowType ).WithMany().HasForeignKey( p => p.ScheduleCancellationWorkflowTypeId ).WillCascadeOnDelete( false );
             this.HasOptional( p => p.AttendanceReminderSystemCommunication ).WithMany().HasForeignKey( p => p.AttendanceReminderSystemCommunicationId ).WillCascadeOnDelete( false );
+            this.HasOptional( p => p.GroupMemberRecordSourceValue ).WithMany().HasForeignKey( p => p.GroupMemberRecordSourceValueId ).WillCascadeOnDelete( false );
         }
     }
 

@@ -4,7 +4,7 @@
         <template #default="{ uniqueId, field }">
             <div class="control-wrapper">
                 <NotificationBox v-if="uploadErrorMessage" alertType="warning">
-                    <strong><i class="fa fa-exclamation-triangle"></i> Warning </strong>
+                    <strong><i class="ti ti-alert-triangle"></i> Warning </strong>
                     <span>{{ uploadErrorMessage }}</span>
                 </NotificationBox>
 
@@ -14,18 +14,18 @@
                         <span v-else :class="thumbnailClass"></span>
 
                         <div v-if="isDeleteVisible" class="fileupload-remove">
-                            <a v-if="fileGuid" href="#" class="remove-file" title="Remove File" @click.prevent.stop="onRemoveFileClick">
-                                <i class="fa fa-times"></i>
+                            <a href="#" class="remove-file" title="Remove File" @click.prevent.stop="onRemoveFileClick">
+                                <i class="ti ti-x"></i>
                             </a>
                         </div>
                     </div>
 
                     <div v-if="isUploading" class="upload-progress">
-                        <i class="fa fa-refresh fa-spin fa-3x"></i>
+                        <i class="ti ti-refresh ti-spin ti-3x"></i>
                         <div>{{ uploadProgressText }}</div>
                     </div>
 
-                    <div class="fileupload-dropzone">
+                    <div v-if="!disabled" class="fileupload-dropzone">
                         <span>{{ uploadButtonText }}</span>
                         <input ref="fileInputElement" type="file" style="display: none;" @change="onFileChange" @remove="onFileRemove" :disabled="disabled" />
                     </div>
@@ -40,12 +40,21 @@
     import { computed, PropType, ref, watch } from "vue";
     import NotificationBox from "./notificationBox.obs";
     import { BinaryFiletype } from "@Obsidian/SystemGuids/binaryFiletype";
-    import { uploadBinaryFile } from "@Obsidian/Utility/http";
+    import { uploadBinaryFile, uploadContentFile } from "@Obsidian/Utility/http";
     import { ListItemBag } from "@Obsidian/ViewModels/Utility/listItemBag";
     import RockFormField from "./rockFormField.obs";
-    import { toGuidOrNull } from "@Obsidian/Utility/guid";
+    import { newGuid, toGuidOrNull } from "@Obsidian/Utility/guid";
+    import { useSecurityGrantToken } from "@Obsidian/Utility/block";
 
     const props = defineProps({
+        /**
+         * The current file value. The {@link ListItemBag.value} property should
+         * contain either a BinaryFile GUID value or an absolute path (starting
+         * with a forward slash) on the server to the static file.
+         *
+         * The {@link ListItemBag.text} property should contain the name of the
+         * file.
+         */
         modelValue: {
             type: Object as PropType<ListItemBag | null>,
             required: false
@@ -94,6 +103,21 @@
         disabled: {
             type: Boolean as PropType<boolean>,
             default: false
+        },
+
+        isBinaryFile: {
+            type: Boolean as PropType<boolean>,
+            default: true
+        },
+
+        rootFolder: {
+            type: String as PropType<string>,
+            default: ""
+        },
+
+        uploadPath: {
+            type: String as PropType<string>,
+            default: ""
         }
     });
 
@@ -102,8 +126,9 @@
         (e: "error", value: string): void;
     }>();
 
-    const fileGuid = ref<Guid | null>(toGuidOrNull(props.modelValue?.value));
-    const fileName = ref(props.modelValue?.text ?? "");
+    const internalValue = ref(props.modelValue);
+
+    const securityGrantToken = useSecurityGrantToken();
 
     // Variables related to the progress of uploading a new file.
     const isUploading = ref(false);
@@ -114,10 +139,21 @@
     const fileInputElement = ref<HTMLInputElement | null>(null);
     const dropZoneElement = ref<HTMLElement | null>(null);
 
+    const fileGuid = computed<Guid | null>(() => {
+        return toGuidOrNull(internalValue.value?.value);
+    });
+
+    const fileName = computed<string>(() => {
+        return internalValue.value?.text ?? "";
+    });
+
     /** The URL used to download the file. */
     const fileUrl = computed((): string | null => {
         if (fileGuid.value) {
             return `/GetFile.ashx?guid=${fileGuid.value}`;
+        }
+        else if (internalValue.value?.value && internalValue.value.value.startsWith("/")) {
+            return internalValue.value.value;
         }
 
         return null;
@@ -130,7 +166,9 @@
 
     /** True if the delete button should be visible. */
     const isDeleteVisible = computed((): boolean => {
-        return props.showDeleteButton && !!fileGuid.value;
+        return props.showDeleteButton
+            && !props.disabled
+            && (!!fileGuid.value || internalValue.value?.value?.startsWith("/") === true);
     });
 
     /**
@@ -145,19 +183,30 @@
         uploadErrorMessage.value = "";
 
         try {
-            // Perform the actual file upload using the helper function.
-            const result = await uploadBinaryFile(file, props.binaryFileTypeGuid || BinaryFiletype.Default, {
-                isTemporary: props.uploadAsTemporary,
-                progress: (progress, total, percent) => {
-                    uploadProgressText.value = `${percent}%`;
-                },
-                parentEntityTypeId: props.parentEntityTypeId,
-                parentEntityId: props.parentEntityId,
-                baseUrl: props.uploadUrl
-            });
+            if (props.isBinaryFile) {
+                // Perform the actual file upload using the helper function.
+                const result = await uploadBinaryFile(file, props.binaryFileTypeGuid || BinaryFiletype.Default, {
+                    isTemporary: props.uploadAsTemporary,
+                    progress: (progress, total, percent) => {
+                        uploadProgressText.value = `${percent}%`;
+                    },
+                    parentEntityTypeId: props.parentEntityTypeId,
+                    parentEntityId: props.parentEntityId,
+                    baseUrl: props.uploadUrl,
+                securityGrantToken: securityGrantToken.value
+                });
+                internalValue.value = result;
+            }
+            else {
+                const result = await uploadContentFile(file, props.rootFolder, props.uploadPath, {
+                    progress: (progress, total, percent) => {
+                        uploadProgressText.value = `${percent}%`;
+                    }
+                });
 
-            fileGuid.value = toGuidOrNull(result.value);
-            fileName.value = result.text ?? "";
+                result.value = newGuid();
+                internalValue.value = result;
+            }
         }
         catch (e) {
             // Show any error message we got.
@@ -189,8 +238,7 @@
                 fileInputElement.value.value = "";
             }
 
-            fileGuid.value = null;
-            fileName.value = "";
+            internalValue.value = null;
         }
     };
 
@@ -218,8 +266,7 @@
             return;
         }
 
-        fileGuid.value = null;
-        fileName.value = "";
+        internalValue.value = null;
     };
 
     // Watch for the drop zone element to become available. Once we have it
@@ -258,22 +305,12 @@
 
     // Watch for changes to the model value and update our internal values.
     watch(() => props.modelValue, () => {
-        fileGuid.value = toGuidOrNull(props.modelValue?.value);
-        fileName.value = props.modelValue?.text ?? "";
+        internalValue.value = props.modelValue;
     });
 
     // Watch for changes to our internal values and update the model value.
-    watch([fileGuid, fileName], () => {
-        let newValue: ListItemBag | undefined = undefined;
-
-        if (fileGuid.value) {
-            newValue = {
-                value: fileGuid.value,
-                text: fileName.value
-            };
-        }
-
-        emit("update:modelValue", newValue);
+    watch(internalValue, () => {
+        emit("update:modelValue", internalValue.value ?? undefined);
     });
 
     watch(uploadErrorMessage, error => {

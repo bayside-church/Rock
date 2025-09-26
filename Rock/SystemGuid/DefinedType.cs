@@ -24,11 +24,6 @@ namespace Rock.SystemGuid
     public class DefinedType
     {
         /// <summary>
-        /// AI Models.
-        /// </summary>
-        public const string AI_PROVIDER_MODELS = "0829EF1C-028C-44D6-AB8D-90F0905E030E";
-
-        /// <summary>
         /// Guid for Attendance record SourceValueId.
         /// </summary>
         public const string ATTENDANCE_SOURCE = "A27BF9DD-7AF0-47B4-8FE4-0B5E510381DB";
@@ -62,6 +57,11 @@ namespace Rock.SystemGuid
         /// GUID for the Campus Type
         /// </summary>
         public const string CAMPUS_TYPE = "8C2260A8-6130-414A-BD32-22743FEAB256";
+
+        /// <summary>
+        /// GUID for the Chat Reaction defined type.
+        /// </summary>
+        public const string CHAT_REACTION = "879C25EE-8BF3-46CE-8549-DB4CAF4074E9";
 
         /// <summary>
         /// The types of static color swatches supported
@@ -99,6 +99,11 @@ namespace Rock.SystemGuid
         /// The list of phone country code formats and how to format their numbers 
         /// </summary>
         public const string COMMUNICATION_PHONE_COUNTRY_CODE = "45E9EF7C-91C7-45AB-92C1-1D6219293847";
+
+        /// <summary>
+        /// Guid for the Communication Topic.
+        /// </summary>
+        public const string COMMUNICATION_TOPIC = "A798492C-F0A4-496E-9142-97D9336C3E99";
 
         /// <summary>
         /// Guid for Content Channel Audience Type
@@ -214,6 +219,11 @@ namespace Rock.SystemGuid
         /// The grouptype inactive reason
         /// </summary>
         public const string GROUPTYPE_INACTIVE_REASONS = "EB5D9839-F770-4E22-8B56-0B09397307D9";
+
+        /// <summary>
+        /// Guid for the icon libraries
+        /// </summary>
+        public const string ICON_LIBRARIES = "EEFC6AA8-3946-47AB-8DAF-149EEF347DF3";
 
         /// <summary>
         /// Guid for the types of interaction service.
@@ -409,6 +419,14 @@ namespace Rock.SystemGuid
         /// The "Saved Check-in Configurations" defined type that provides a list
         /// of saved configuration settings for quickly starting up kiosks.
         /// </summary>
+        public const string SAVED_KIOSK_TEMPLATES = "F986008C-99BB-4C48-8A6E-38C8A121D75B";
+
+        /// <summary>
+        /// The "Saved Check-in Configurations" defined type that provides a list
+        /// of saved configuration settings for quickly starting up kiosks.
+        /// </summary>
+        [RockObsolete( "1.16.7" )]
+        [Obsolete( "Use SAVED_KIOSK_TEMPLATES instead." )]
         public const string SAVED_CHECKIN_CONFIGURATIONS = "F986008C-99BB-4C48-8A6E-38C8A121D75B";
 
         /// <summary>
@@ -549,8 +567,18 @@ namespace Rock.SystemGuid
         /// <summary>
         /// The statement generator lava template (Legacy)
         /// </summary>
-        [Obsolete("Use FinancialStatementTemplate instead")]
-        [RockObsolete("1.12.4")]
+        [Obsolete( "Use FinancialStatementTemplate instead" )]
+        [RockObsolete( "1.12.4" )]
         public const string STATEMENT_GENERATOR_LAVA_TEMPLATE_LEGACY = "74A23516-A20A-40C9-93B5-1AB5FDFF6750";
+
+        /// <summary>
+        /// Guid for the types of Record Sources (such as external website, event registration, etc.)
+        /// </summary>
+        public const string RECORD_SOURCE_TYPE = "B8F781C5-6690-4E5E-8BCE-75CC62DB0EBB";
+
+        /// <summary>
+        /// Guid for the types of Organizational Objectives (such as Outreach, Discipleship, Activation)
+        /// </summary>
+        public const string ORGANIZATIONAL_OBJECTIVE_TYPE = "47448937-1993-4064-95F9-18BB35E1F45B";
     }
 }

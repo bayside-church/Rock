@@ -11,7 +11,7 @@
 
         <div class="panel panel-block">
             <div class="panel-heading">
-                <h1 class="panel-title"><i class="fa fa-square"></i> Entity List</h1>
+                <h1 class="panel-title"><i class="ti ti-square"></i> Entity List</h1>
             </div>
             <div class="panel-body">
 
@@ -28,7 +28,7 @@
                                 <HeaderStyle CssClass="grid-columncommand" />
                                 <ItemStyle CssClass="grid-columncommand" HorizontalAlign="Center"/>
                                 <ItemTemplate>
-                                    <a id="aSecure" runat="server" class="btn btn-sm btn-square btn-security"><i class="fa fa-lock"></i></a>
+                                    <a id="aSecure" runat="server" class="btn btn-sm btn-square btn-security"><i class="ti ti-lock"></i></a>
                                 </ItemTemplate>
                             </Rock:RockTemplateFieldUnselected>
                         </Columns>
@@ -48,7 +48,19 @@
                 <asp:ValidationSummary ID="ValidationSummary1" runat="server" HeaderText="Please correct the following:" CssClass="alert alert-validation" />
                 <Rock:DataTextBox ID="tbName" runat="server" SourceTypeName="Rock.Model.EntityType, Rock" PropertyName="Name" Label="Entity Type Name" />
                 <Rock:DataTextBox ID="tbFriendlyName" runat="server" SourceTypeName="Rock.Model.EntityType, Rock" PropertyName="FriendlyName" Label="Friendly Name" />
-                <Rock:RockCheckBox ID="cbCommon" runat="server" Label="Common" Text="Yes" Help="There are various places that a user is prompted for an entity type.  'Common' entities will be listed first for the user to easily find them" />
+
+                <div class="row">
+                    <div class="col-md-6">
+                        <Rock:RockCheckBox ID="cbCommon" runat="server" Label="Common" Help="There are various places that a user is prompted for an entity type.  'Common' entities will be listed first for the user to easily find them" />
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <Rock:RockCheckBox ID="cbIsRelatedToInteraction" runat="server" Label="Track Interaction" Help="When enabled this will track which interaction was active when instances of this entity type are created." />
+                        </div>
+                    </div>
+                </div>
+
                 <Rock:CodeEditor ID="ceIndexResultsTemplate" runat="server" Label="Index Results Template" EditorTheme="Rock" EditorMode="Lava" EditorHeight="200"
                     Help="The Lava used by the Universal Search feature to display results. Available merge fields include CurrentPerson, IndexDocument and DisplayOptions." />
                 <Rock:CodeEditor ID="ceIndexDocumentUrl" runat="server" Label="Index Document URL Pattern" EditorTheme="Rock" EditorMode="Lava" EditorHeight="200"

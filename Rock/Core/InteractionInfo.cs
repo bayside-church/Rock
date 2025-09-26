@@ -78,6 +78,12 @@ namespace Rock.Core
 
         #region Interaction Properties
 
+        /// <inheritdoc cref="Guid"/>
+        /// <remarks>
+        /// If this is not specified then a new Guid will be created.
+        /// </remarks>
+        public Guid? InteractionGuid { get; set; }
+
         /// <inheritdoc cref="Interaction.InteractionDateTime"/>
         public DateTime InteractionDateTime { get; set; }
 
@@ -147,6 +153,17 @@ namespace Rock.Core
         /// </summary>
         public string UserAgent { get; set; }
 
+        /// <summary>
+        /// Gets or sets the UserAgentPlatformVersion value.
+        /// </summary>
+        /// <remarks>
+        /// This is not always provided by user agents and we have to request it by sending
+        /// Headers "Accept-CH" and "Critical-CH" with a value of Sec-CH-UA-Platform-Version
+        /// and possibly the "Permissions-Policy" header with a value of "ch-ua-platform-version=(self)"
+        /// see https://learn.microsoft.com/en-us/microsoft-edge/web-platform/how-to-detect-win11.
+        /// </remarks>
+        public string UserAgentPlatformVersion {  get; set; }
+
         #endregion Helper Properties
 
         #region Constructors
@@ -196,10 +213,11 @@ namespace Rock.Core
 
             #region Set Interaction Properties
 
+            this.InteractionGuid = info.InteractionGuid;
             this.InteractionDateTime = info.InteractionDateTime;
             this.Operation = info.InteractionOperation;
             this.InteractionComponentId = info.InteractionComponentId ?? 0;
-            this.EntityId = info.ComponentEntityId;
+            this.EntityId = info.InteractionEntityId;
             this.RelatedEntityTypeId = info.InteractionRelatedEntityTypeId;
             this.RelatedEntityId = info.InteractionRelatedEntityId;
             this.PersonAliasId = info.PersonAliasId;
@@ -222,6 +240,8 @@ namespace Rock.Core
             #region Set Helper Properties
 
             this.UserAgent = info.UserAgent;
+
+            this.UserAgentPlatformVersion = info.UserAgentPlatformVersion;
 
             #endregion Set Helper Properties
         }

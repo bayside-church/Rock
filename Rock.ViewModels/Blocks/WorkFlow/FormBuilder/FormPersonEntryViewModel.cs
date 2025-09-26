@@ -45,6 +45,12 @@ namespace Rock.ViewModels.Blocks.WorkFlow.FormBuilder
 
         /// <summary>
         /// The DefinedValue unique identifier that specifies the value used for
+        /// Person.RecordSourceValue when a new Person is created.
+        /// </summary>
+        public Guid? RecordSource { get; set; }
+
+        /// <summary>
+        /// The DefinedValue unique identifier that specifies the value used for
         /// Person.ConnectionStatusValue when a new Person is created.
         /// </summary>
         public Guid? ConnectionStatus { get; set; }
@@ -54,6 +60,13 @@ namespace Rock.ViewModels.Blocks.WorkFlow.FormBuilder
         /// form. The campus picker will always be required if it is visible.
         /// </summary>
         public bool ShowCampus { get; set; }
+
+
+        /// <summary>
+        /// Indicates if the campus picker on the person entry form should include Inactive Campuses.
+        /// Defaulting to true as it was the existing behavior before this option was introduced.
+        /// </summary>
+        public bool IncludeInactiveCampus { get; set; } = true;
 
         /// <summary>
         /// The DefinedValue unique identifier for the campus type used to

@@ -46,7 +46,7 @@
                        width="80px"
                        :itemClass="'d-flex justify-content-center align-items-center'" />
 
-        <SecurityColumn />
+        <SecurityColumn :itemTitle="'name'" />
 
         <DeleteColumn v-if="config.isDeleteEnabled" @click="onDeleteClick" />
 
@@ -118,11 +118,12 @@
     </Grid>
 
     <!-- Informational Note -->
-    <NotificationBox :alertType="'info'"
+    <NotificationBox
+                     :alertType="'info'"
                      :dismissible="false"
                      :class="'mt-4'"
                      heading="Note">
-           {{ note }}
+        {{ note }}
     </NotificationBox>
 </template>
 
@@ -146,6 +147,10 @@
     const gridDataSource = ref<Promise<GridDataBag>>();
     let gridData: GridDataBag | undefined;
     const note = " Rock will ensure that at least one layout entry exists for each layout file in the site's theme folder. If all the layouts for a layout file are deleted, Rock will automatically and immediately recreate a new layout entry.";
+
+    // #endregion
+
+    // #region Computed Values
 
     // #endregion
 

@@ -24,7 +24,7 @@ Now the desktop application needs to be code signed.
 This is because it will self-elevate to administrator when launched and we want it to show a proper UAC dialog.
 
 ```
-signtool.exe /f SparkDevelopmentNetwork.cer /d "Rock Cloud Print" Rock.CloudPrint.Desktop\bin\Release\net8.0-windows\publish\Rock.CloudPrint.Desktop.exe
+signtool.exe sign /f SparkDevelopmentNetwork.cer /d "Rock Cloud Print" Rock.CloudPrint.Desktop\bin\Release\net8.0-windows\publish\Rock.CloudPrint.Desktop.exe
 ```
 
 ## Building Installer
@@ -35,5 +35,28 @@ Then build the Rock.CloudPrint.Installer project.
 Now the MSI needs to be code signed.
 
 ```
-signtool.exe /f SparkDevelopmentNetwork.cer /d "Rock Cloud Print" Rock.CloudPrint.Installer\bin\x64\Rock.CloudPrint.Installer.msi
+signtool.exe sign /f SparkDevelopmentNetwork.cer /d "Rock Cloud Print" Rock.CloudPrint.Installer\bin\x64\Release\Rock.CloudPrint.Installer.msi
+```
+
+## Docker Image
+
+A local docker image can be built with the following command (Docker Desktop must be running):
+
+```
+cd Rock.CloudPrint.Service
+dotnet publish --os linux --arch x64 /t:PublishContainer
+```
+
+For additional information on how we can publish this to the docker registry: https://learn.microsoft.com/en-us/dotnet/core/docker/publish-as-container?pivots=dotnet-8-0#containerregistry
+
+For beta testing, you can then save the docker image with:
+
+```
+docker save rock-cloudprint-service -o rock-cloudprint-service.tar
+```
+
+This file can then be loaded into another computer with:
+
+```
+docker load -i rock-cloudprint-service.tar
 ```

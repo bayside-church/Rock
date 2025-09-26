@@ -4,7 +4,8 @@
           :definition="config.gridDefinition ?? undefined"
           :data="gridDataSource"
           keyField="idKey"
-          :itemTerm="itemTerm"
+          itemTerm="Attempt"
+          :title="itemTerm"
           :entityTypeGuid="EntityType.AchievementAttempt"
           stickyHeader
           liveUpdates
@@ -19,7 +20,7 @@
         <TextColumn name="achiever"
                     title="Achiever"
                     field="achiever"
-                    :filter="textValueFilter"
+                    :filter="pickExistingValueFilter"
                     visiblePriority="xs"
                     width="17%" />
 
@@ -35,23 +36,35 @@
                     title="Start Date"
                     field="startDate"
                     :filter="dateValueFilter"
-                    visiblePriority="md" />
+                    visiblePriority="md"
+                    headerClass="title-right"
+                    itemClass="justify-content-end text-right" />
 
         <DateColumn name="endDate"
                     title="End Date"
                     field="endDate"
                     :filter="dateValueFilter"
-                    visiblePriority="md" />
+                    visiblePriority="md"
+                    headerClass="title-right"
+                    itemClass="justify-content-end text-right" />
 
         <BooleanColumn name="isSuccessful"
                        title="Successful"
                        field="isSuccessful"
-                       visiblePriority="md" />
+                       :filter="booleanValueFilter"
+                       width="150"
+                       visiblePriority="md"
+                       headerClass="text-center"
+                       itemClass="justify-content-center text-center" />
 
         <BooleanColumn name="isClosed"
                        title="Closed"
                        field="isClosed"
-                       visiblePriority="md" />
+                       :filter="booleanValueFilter"
+                       width="150"
+                       visiblePriority="md"
+                       headerClass="text-center"
+                       itemClass="justify-content-center text-center" />
 
         <Column name="progress"
                 title="Progress"
@@ -74,7 +87,7 @@
                 itemClass="grid-columncommand"
                 width="57px">
             <template #format="{ row }">
-                <a v-if="row.personId" class='btn btn-default btn-sm' :href="`/person/${row.personId}`"><i class='fa fa-user'></i></a>
+                <a v-if="row.personId" class='btn btn-default btn-sm' :href="`/person/${row.personId}`"><i class='ti ti-user'></i></a>
                 <span v-else>{{ row.achiever }}</span>
             </template>
         </Column>
@@ -91,12 +104,16 @@
 .progress-cell {
     display: block;
 }
+
+.title-right .grid-column-title {
+    text-align: right;
+}
 </style>
 
 <script setup lang="ts">
     import { useConfigurationValues, useInvokeBlockAction, usePersonPreferences } from "@Obsidian/Utility/block";
     import { EntityType } from "@Obsidian/SystemGuids/entityType";
-    import Grid, { TextColumn, BooleanColumn, dateValueFilter, textValueFilter, DeleteColumn, Column, DateColumn } from "@Obsidian/Controls/grid";
+    import Grid, { TextColumn, BooleanColumn, dateValueFilter, textValueFilter, pickExistingValueFilter, booleanValueFilter, DeleteColumn, Column, DateColumn } from "@Obsidian/Controls/grid";
     import { alert } from "@Obsidian/Utility/dialogs";
     import { ListBlockBox } from "@Obsidian/ViewModels/Blocks/listBlockBox";
     import { AchievementAttemptListOptionsBag } from "@Obsidian/ViewModels/Blocks/Engagement/AchievementAttemptList/achievementAttemptListOptionsBag";

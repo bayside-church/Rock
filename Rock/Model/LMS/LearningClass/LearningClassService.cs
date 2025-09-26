@@ -21,13 +21,32 @@ using System.Linq;
 using System.Linq.Expressions;
 
 using Rock.Data;
-using Rock.Enums.Lms;
 using Rock.Utility;
 
 namespace Rock.Model
 {
+    /*
+    12/16/2024 - DSH
+
+    The LearningClass model participates in the the TPT (Table-Per-Type) pattern. This
+    can cause some rare unexpected results. See the engineering note above the
+    Group class for details.
+    */
+
     public partial class LearningClassService
     {
+        /// <summary>
+        /// Determines if the <see cref="LearningClass"/> should allow updates to the <see cref="LearningGradingSystem"/>.
+        /// </summary>
+        /// <param name="learningClassId">The identifier of the learning class to check.</param>
+        /// <returns><c>true</c> if updates should be allowed;otherwise <c>false</c>.</returns>
+        public bool CanUpdateGradingSystem( int learningClassId )
+        {
+            return !Queryable()
+                .Where( c => c.Id == learningClassId )
+                .Any( c => c.LearningParticipants.Any() );
+        }
+
         /// <summary>
         /// Creates a new <see cref="LearningClass" /> with Attributes by copying values from the specified learning class.
         /// </summary>
@@ -77,12 +96,22 @@ namespace Rock.Model
             newLearningClass.CopyAttributesFrom( learningClass );
 
             var rockContext = this.Context as RockContext;
-            var newActivities = new List<LearningActivity>();
+            var newActivities = new List<LearningClassActivity>();
+
+            var contentPages = new LearningClassContentPageService( rockContext )
+                .Queryable()
+                .Where( c => c.LearningClassId == learningClass.Id )
+                .ToList();
+
+            foreach ( var contentPage in contentPages )
+            {
+                newLearningClass.ContentPages.Add( contentPage.CloneWithoutIdentity() );
+            }
 
             // If we're also copying activities populate a list of new activities.
             if ( includeActivities )
             {
-                var activityService = new LearningActivityService( rockContext );
+                var activityService = new LearningClassActivityService( rockContext );
                 var activities = activityService.Queryable().Where( c => c.LearningClassId == learningClass.Id ).ToList();
 
                 foreach ( var activity in activities )
@@ -110,6 +139,25 @@ namespace Rock.Model
             } );
 
             return newLearningClass;
+        }
+
+        /// <summary>
+        /// Deletes the <see cref="LearningClass"/> for the specified <paramref name="learningClassId"/>.
+        /// Includes deleting related data like <see cref="LearningClassActivity"/>,
+        /// <see cref="LearningClassAnnouncement"/>, <see cref="LearningClassContentPage"/>
+        /// and <see cref="LearningParticipant"/> records.
+        /// </summary>
+        /// <param name="learningClassId">The identifier of the <see cref="LearningClass"/> to delete.</param>
+        public void Delete( int learningClassId )
+        {
+            var classForDeletion = Queryable()
+                .Include( c => c.LearningClassActivities )
+                .Include( c => c.Announcements )
+                .Include( c => c.ContentPages )
+                .Include( c => c.LearningParticipants )
+                .FirstOrDefault( c => c.Id == learningClassId );
+
+            base.Delete( classForDeletion );
         }
 
         /// <summary>
@@ -154,26 +202,6 @@ namespace Rock.Model
         }
 
         /// <summary>
-        /// Gets the Default <see cref="LearningClass"/> for the specified id key of the <see cref="LearningCourse"/>.
-        /// </summary>
-        /// <typeparam name="TResult">The type of the result.</typeparam>
-        /// <param name="courseIdKey">The id key of the <see cref="Rock.Model.LearningCourse" /> to retrieve the default class for.</param>
-        /// <param name="selector">The selector.</param>
-        /// <returns>
-        /// The entity containing the provided selected properties for the default class.
-        /// </returns>
-        public TResult GetCourseDefaultClass<TResult>( string courseIdKey, Expression<Func<LearningClass, TResult>> selector )
-        {
-            var courseId = IdHasher.Instance.GetId( courseIdKey ).ToIntSafe();
-            if ( courseId == 0 )
-            {
-                return default;
-            }
-
-            return GetCourseDefaultClass( courseId, selector );
-        }
-
-        /// <summary>
         /// Gets the Default <see cref="LearningClass"/> for the specified identifier of the <see cref="LearningCourse"/>.
         /// </summary>
         /// <typeparam name="TResult">The type of the result.</typeparam>
@@ -208,7 +236,6 @@ namespace Rock.Model
         /// </returns>
         public TResult GetCourseDefaultClass<TResult>( LearningCourse course, Expression<Func<LearningClass, TResult>> selector )
         {
-
             if ( course == null || course.LearningClasses == null )
             {
                 return default;
@@ -224,15 +251,15 @@ namespace Rock.Model
         }
 
         /// <summary>
-        /// Gets the list of <see cref="LearningActivity"/> for the specified <see cref="LearningClass"/> id key.
+        /// Gets the list of <see cref="LearningClassActivity"/> for the specified <see cref="LearningClass"/> id key.
         /// </summary>
         /// <typeparam name="TResult">The type of the result.</typeparam>
-        /// <param name="classIdKey">The id key of the <see cref="Rock.Model.LearningClass" /> to retrieve the list of <see cref="LearningActivity"/> for.</param>
+        /// <param name="classIdKey">The id key of the <see cref="Rock.Model.LearningClass" /> to retrieve the list of <see cref="LearningClassActivity"/> for.</param>
         /// <param name="selector">The selector.</param>
         /// <returns>
         /// The entity containing the selected properties for the list of activities.
         /// </returns>
-        public IQueryable<TResult> GetLearningPlan<TResult>( string classIdKey, Expression<Func<LearningActivity, TResult>> selector )
+        public IQueryable<TResult> GetLearningPlan<TResult>( string classIdKey, Expression<Func<LearningClassActivity, TResult>> selector )
         {
             var classId = IdHasher.Instance.GetId( classIdKey ).ToIntSafe();
             if ( classId == 0 )
@@ -244,21 +271,21 @@ namespace Rock.Model
         }
 
         /// <summary>
-        /// Gets the list of <see cref="LearningActivity"/> for the specified <see cref="LearningClass"/> identifier.
+        /// Gets the list of <see cref="LearningClassActivity"/> for the specified <see cref="LearningClass"/> identifier.
         /// </summary>
         /// <typeparam name="TResult">The type of the result.</typeparam>
-        /// <param name="classId">The identifier of the <see cref="Rock.Model.LearningClass" /> to retrieve the list of <see cref="LearningActivity"/> for.</param>
+        /// <param name="classId">The identifier of the <see cref="Rock.Model.LearningClass" /> to retrieve the list of <see cref="LearningClassActivity"/> for.</param>
         /// <param name="selector">The selector.</param>
         /// <returns>
         /// The entity containing the selected properties for the list of activities.
         /// </returns>
-        public IQueryable<TResult> GetLearningPlan<TResult>( int classId, Expression<Func<LearningActivity, TResult>> selector )
+        public IQueryable<TResult> GetLearningPlan<TResult>( int classId, Expression<Func<LearningClassActivity, TResult>> selector )
         {
             var learningClass = Queryable()
-                .Include( c => c.LearningActivities )
+                .Include( c => c.LearningClassActivities )
                 .FirstOrDefault( c => c.Id == classId );
 
-            if ( learningClass == null || learningClass.LearningActivities == null )
+            if ( learningClass == null || learningClass.LearningClassActivities == null )
             {
                 return default;
             }
@@ -267,26 +294,26 @@ namespace Rock.Model
         }
 
         /// <summary>
-        /// Gets the list of <see cref="LearningActivity"/> for the specified <see cref="LearningClass"/>.
+        /// Gets the list of <see cref="LearningClassActivity"/> for the specified <see cref="LearningClass"/>.
         /// </summary>
         /// <typeparam name="TResult">The type of the result.</typeparam>
-        /// <param name="learningClass">The <see cref="Rock.Model.LearningClass" /> to retrieve the list of <see cref="LearningActivity"/> for.</param>
+        /// <param name="learningClass">The <see cref="Rock.Model.LearningClass" /> to retrieve the list of <see cref="LearningClassActivity"/> for.</param>
         /// <param name="selector">The selector.</param>
         /// <returns>
         /// The entity containing the selected properties for the list of activities.
         /// </returns>
-        public IQueryable<TResult> GetLearningPlan<TResult>( LearningClass learningClass, Expression<Func<LearningActivity, TResult>> selector )
+        public IQueryable<TResult> GetLearningPlan<TResult>( LearningClass learningClass, Expression<Func<LearningClassActivity, TResult>> selector )
         {
-            if ( learningClass == null || learningClass.LearningActivities == null )
+            if ( learningClass == null || learningClass.LearningClassActivities == null )
             {
                 return default;
             }
 
-            return learningClass.LearningActivities
+            return learningClass.LearningClassActivities
                 .OrderBy( a => a.Order )
                 .ThenBy( a => a.Id )
                 .AsQueryable()
-                .DefaultIfEmpty( new LearningActivity() )
+                .DefaultIfEmpty( new LearningClassActivity() )
                 .Select( selector );
         }
 
@@ -305,6 +332,39 @@ namespace Rock.Model
                         p.PersonId == personId &&
                         p.GroupRole.IsLeader == false )
                     );
+        }
+
+        /// <summary>
+        /// Gets the active classes for the specified program.
+        /// </summary>
+        /// <param name="programIdKey">The identifier key of the <see cref="LearningProgram"/> to retrieve active classes for.</param>
+        /// <returns>An IQueryable of LearningClasses that are considered 'Active'.</returns>
+        public IQueryable<LearningClass> GetActiveClasses( string programIdKey )
+        {
+            if (int.TryParse(programIdKey, out var programId ) )
+            {
+                GetActiveClasses( programId );
+            }
+
+            var idFromHash = IdHasher.Instance.GetId( programIdKey ).ToIntSafe();
+
+            return idFromHash > 0 ? GetActiveClasses( idFromHash ) : Queryable();
+        }
+
+        /// <summary>
+        /// Gets the active classes for the specified program.
+        /// </summary>
+        /// <param name="programId">The identifier of the <see cref="LearningProgram"/> to retrieve active classes for.</param>
+        /// <returns>An IQueryable of LearningClasses that are considered 'Active'.</returns>
+        public IQueryable<LearningClass> GetActiveClasses( int programId )
+        {
+            var now = RockDateTime.Now;
+            return Queryable()
+                .Where( c =>
+                    c.LearningCourse.LearningProgramId == programId
+                    && c.IsActive
+                    && ( !c.LearningSemester.EndDate.HasValue || c.LearningSemester.EndDate > now )
+                );
         }
     }
 }

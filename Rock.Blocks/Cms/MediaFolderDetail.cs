@@ -18,12 +18,12 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.Data.Entity.Core;
 using System.Linq;
 
 using Rock.Attribute;
 using Rock.Constants;
 using Rock.Data;
+using Rock.Media;
 using Rock.Model;
 using Rock.Security;
 using Rock.ViewModels.Blocks;
@@ -42,7 +42,7 @@ namespace Rock.Blocks.Cms
     [DisplayName( "Media Folder Detail" )]
     [Category( "CMS" )]
     [Description( "Displays the details of a particular media folder." )]
-    [IconCssClass( "fa fa-question" )]
+    [IconCssClass( "ti ti-question-mark" )]
     [SupportedSiteTypes( Model.SiteType.Web )]
 
     #region Block Attributes
@@ -207,6 +207,7 @@ namespace Rock.Blocks.Cms
                 MediaAccount = entity.MediaAccount.ToListItemBag(),
                 Description = entity.Description,
                 IsContentChannelSyncEnabled = entity.IsContentChannelSyncEnabled,
+                IsAllowsManualEntry = DoesMediaAccountComponentAllowManualEntry( entity ),
                 IsPublic = entity.IsPublic,
                 ContentChannelItemAttributes = entity.MediaElements.ToListItemBagList(),
                 Name = entity.Name,
@@ -233,7 +234,7 @@ namespace Rock.Blocks.Cms
 
             if ( loadAttributes )
             {
-                bag.LoadAttributesAndValuesForPublicView( entity, RequestContext.CurrentPerson );
+                bag.LoadAttributesAndValuesForPublicView( entity, RequestContext.CurrentPerson, enforceSecurity: true );
             }
 
             return bag;
@@ -262,7 +263,7 @@ namespace Rock.Blocks.Cms
 
             if ( loadAttributes )
             {
-                bag.LoadAttributesAndValuesForPublicEdit( entity, RequestContext.CurrentPerson );
+                bag.LoadAttributesAndValuesForPublicEdit( entity, RequestContext.CurrentPerson, enforceSecurity: true );
             }
 
             return bag;
@@ -311,7 +312,7 @@ namespace Rock.Blocks.Cms
                 {
                     entity.LoadAttributes( rockContext );
 
-                    entity.SetPublicAttributeValues( box.Entity.AttributeValues, RequestContext.CurrentPerson );
+                    entity.SetPublicAttributeValues( box.Entity.AttributeValues, RequestContext.CurrentPerson, enforceSecurity: true );
                 } );
 
             return true;
@@ -456,9 +457,10 @@ namespace Rock.Blocks.Cms
                 var mediaFolderKey = pageReference.GetPageParameter( PageParameterKey.MediaFolderId );
                 var pageParameters = new Dictionary<string, string>();
                 var additionalParameters = new Dictionary<string, string>();
+                var mediaFolderId = Rock.Utility.IdHasher.Instance.GetId( mediaFolderKey ) ?? mediaFolderKey.AsInteger();
 
                 var data = new MediaFolderService( rockContext )
-                    .GetSelect( mediaFolderKey, mf => new
+                    .GetSelect( mediaFolderId, mf => new
                     {
                         mf.Name,
                         mf.MediaAccountId
@@ -479,6 +481,32 @@ namespace Rock.Blocks.Cms
                     AdditionalParameters = additionalParameters
                 };
             }
+        }
+
+        /// <summary>
+        /// Determines whether manual entry is allowed for the media account component associated with the given media folder.
+        /// </summary>
+        /// <param name="mediaFolder">The media folder containing the media account information.</param>
+        /// <returns>
+        ///   <c>true</c> if the associated media account component allows manual entry or if no component is found; otherwise, <c>false</c>.
+        /// </returns>
+        private bool DoesMediaAccountComponentAllowManualEntry( MediaFolder mediaFolder )
+        {
+            var componentEntityTypeId = mediaFolder != null && mediaFolder.MediaAccount != null
+                ? mediaFolder.MediaAccount.ComponentEntityTypeId
+                : ( int? ) null;
+
+            if ( componentEntityTypeId.HasValue )
+            {
+                var componentEntityType = EntityTypeCache.Get( componentEntityTypeId.Value );
+                if ( componentEntityType != null )
+                {
+                    var mediaAccountComponent = MediaAccountContainer.GetComponent( componentEntityType.Name );
+                    return mediaAccountComponent.AllowsManualEntry;
+                }
+            }
+
+            return true;
         }
 
         #endregion
@@ -532,7 +560,8 @@ namespace Rock.Blocks.Cms
 
                 if ( entity.MediaAccountId == 0 )
                 {
-                    entity.MediaAccountId = RequestContext.GetPageParameter( PageParameterKey.MediaAccountId ).AsInteger();
+                    var mediaAccountKey = RequestContext.GetPageParameter( PageParameterKey.MediaAccountId );
+                    entity.MediaAccountId = Rock.Utility.IdHasher.Instance.GetId( mediaAccountKey ) ?? mediaAccountKey.AsInteger();
                 }
 
                 // Update the entity instance from the information in the bag.

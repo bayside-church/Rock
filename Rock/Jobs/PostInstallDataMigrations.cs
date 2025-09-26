@@ -20,6 +20,8 @@ using System.ComponentModel;
 using System.Data.Entity;
 using System.Linq;
 
+using Microsoft.EntityFrameworkCore;
+
 using Rock.Attribute;
 using Rock.Data;
 using Rock.Model;
@@ -39,6 +41,13 @@ namespace Rock.Jobs
         DefaultIntegerValue = 3600 )]
     public class PostInstallDataMigrations : RockJob
     {
+        /// <summary>
+        /// This is used to disable certain features that don't play well with
+        /// running from inside a unit test. This includes things like network
+        /// operations or steps which modify on-disk content.
+        /// </summary>
+        static internal bool IsRunningFromUnitTest { get; set; }
+
         private static class AttributeKey
         {
             public const string CommandTimeout = "CommandTimeout";
@@ -76,7 +85,7 @@ namespace Rock.Jobs
         {
             using ( var rockContext = new RockContext() )
             {
-                rockContext.Database.CommandTimeout = commandTimeout;
+                rockContext.Database.SetCommandTimeout( commandTimeout );
                 if ( !rockContext.Set<AnalyticsSourceDate>().AsQueryable().Any() )
                 {
                     var analyticsStartDate = new DateTime( RockDateTime.Today.AddYears( -150 ).Year, 1, 1 );
@@ -88,9 +97,15 @@ namespace Rock.Jobs
 
         private void InsertAnalyticsSourceZipCodeData( int commandTimeout )
         {
+            // This tries to access a file on disk that doesn't exist for the unit test.
+            if ( IsRunningFromUnitTest )
+            {
+                return;
+            }
+
             using ( var rockContext = new RockContext() )
             {
-                rockContext.Database.CommandTimeout = commandTimeout;
+                rockContext.Database.SetCommandTimeout( commandTimeout );
                 if ( !rockContext.Set<AnalyticsSourcePostalCode>().AsQueryable().Any() )
                 {
                     Rock.Model.AnalyticsSourcePostalCode.GenerateAnalyticsSourcePostalCodeData();
@@ -102,7 +117,7 @@ namespace Rock.Jobs
         {
             using ( var rockContext = new RockContext() )
             {
-                rockContext.Database.CommandTimeout = commandTimeout;
+                rockContext.Database.SetCommandTimeout( commandTimeout );
                 rockContext.Database.ExecuteSqlCommand( "DELETE FROM IdentityVerificationCode" );
 
                 InsertIdentityVerificationCodeDataChunk( rockContext, 1001, 250000 );

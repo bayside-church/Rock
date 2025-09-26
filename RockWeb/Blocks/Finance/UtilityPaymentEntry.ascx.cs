@@ -37,6 +37,8 @@ using Rock.Utility;
 using Rock.Web.Cache;
 using Rock.Web.UI;
 using Rock.Web.UI.Controls;
+using Rock.Constants;
+using Rock.Crm.RecordSource;
 
 namespace RockWeb.Blocks.Finance
 {
@@ -175,9 +177,9 @@ namespace RockWeb.Blocks.Finance
         "Use Account Campus Mapping Logic",
         Description = @"If enabled, the accounts will be determined as follows:
         <ul>
-          <li>If the selected account is not associated with a campus, the Selected Account will be the first matching active child account that is associated with the selected campus.</li>
-          <li>If the selected account is not associated with a campus, but there are no active child accounts for the selected campus, the parent account (the one the user sees) will be returned.</li>
-          <li>If the selected account is associated with a campus, that account will be returned regardless of campus selection (and it won't use the child account logic)</li>
+          <li>If no campus is selected, then the selected account will be used.</li>
+          <li>If an active direct child account has a campus that matches the selected campus, then the first matching child account will be used.</li>
+          <li>If no active direct child account matches the selected campus, then the selected account will be used.</li>
         <ul>",
         Key = AttributeKey.UseAccountCampusMappingLogic,
         DefaultBooleanValue = false,
@@ -221,7 +223,7 @@ namespace RockWeb.Blocks.Finance
 
     [DefinedValueField( "Connection Status",
         Key = AttributeKey.ConnectionStatus,
-        Description = "The connection status to use for new individuals (default: 'Prospect'.)",
+        Description = "The connection status to use for new individuals (default: 'Prospect').",
         DefinedTypeGuid = Rock.SystemGuid.DefinedType.PERSON_CONNECTION_STATUS,
         IsRequired = true,
         AllowMultiple = false,
@@ -230,44 +232,60 @@ namespace RockWeb.Blocks.Finance
 
     [DefinedValueField( "Record Status",
         Key = AttributeKey.RecordStatus,
-        Description = "The record status to use for new individuals (default: 'Pending'.)",
+        Description = "The record status to use for new individuals (default: 'Pending').",
         DefinedTypeGuid = Rock.SystemGuid.DefinedType.PERSON_RECORD_STATUS,
         IsRequired = true,
         AllowMultiple = false,
         DefaultValue = Rock.SystemGuid.DefinedValue.PERSON_RECORD_STATUS_PENDING,
         Order = 23 )]
 
+    [DefinedValueField( "Record Source",
+        Key = AttributeKey.RecordSource,
+        Description = "The record source to use for new individuals (default = 'Giving'). If a 'RecordSource' page parameter is found, it will be used instead.",
+        DefinedTypeGuid = Rock.SystemGuid.DefinedType.RECORD_SOURCE_TYPE,
+        IsRequired = true,
+        AllowMultiple = false,
+        DefaultValue = Rock.SystemGuid.DefinedValue.RECORD_SOURCE_TYPE_GIVING,
+        Order = 24 )]
+
     [BooleanField( "Enable Comment Entry",
         Key = AttributeKey.EnableCommentEntry,
         Description = "Allows the guest to enter the value that's put into the comment field (will be appended to the 'Payment Comment Template' setting)",
         DefaultBooleanValue = false,
-        Order = 24 )]
+        Order = 25 )]
 
     [TextField( "Comment Entry Label",
         Key = AttributeKey.CommentEntryLabel,
         Description = "The label to use on the comment edit field (e.g. Trip Name to give to a specific trip).",
         IsRequired = false,
         DefaultValue = "Comment",
-        Order = 25 )]
+        Order = 26 )]
 
     [BooleanField( "Enable Business Giving",
         Key = AttributeKey.EnableBusinessGiving,
         Description = "Should the option to give as a business be displayed?",
         DefaultBooleanValue = true,
-        Order = 26 )]
+        Order = 27 )]
 
     [BooleanField( "Enable Anonymous Giving",
         Key = AttributeKey.EnableAnonymousGiving,
         Description = "Should the option to give anonymously be displayed. Giving anonymously will display the transaction as 'Anonymous' in places where it is shown publicly, for example, on a list of fundraising contributors.",
         DefaultBooleanValue = false,
-        Order = 27 )]
+        Order = 28 )]
 
     [BooleanField(
         "Disable Captcha Support",
         Description = "If set to 'Yes' the CAPTCHA verification step will not be performed.",
         Key = AttributeKey.DisableCaptchaSupport,
         DefaultBooleanValue = false,
-        Order = 28 )]
+        Order = 29 )]
+
+    [BooleanField(
+        "Enable End Date",
+        Description = "When enabled, this setting allows an individual to specify an optional end date for their recurring scheduled gifts.",
+        Key = AttributeKey.EnableEndDate,
+        DefaultBooleanValue = false,
+        Order = 30 )]
 
     #endregion Default Category
 
@@ -525,6 +543,7 @@ namespace RockWeb.Blocks.Finance
 
     #endregion Block Attributes
 
+    [Rock.Cms.DefaultBlockRole( Rock.Enums.Cms.BlockRole.Primary )]
     [Rock.SystemGuid.BlockTypeGuid( "4CCC45A5-4AB9-4A36-BF8D-A6E316790004" )]
     public partial class UtilityPaymentEntry : Rock.Web.UI.RockBlock
     {
@@ -555,6 +574,7 @@ namespace RockWeb.Blocks.Finance
             public const string AddressType = "AddressType";
             public const string ConnectionStatus = "ConnectionStatus";
             public const string RecordStatus = "RecordStatus";
+            public const string RecordSource = "RecordSource";
             public const string EnableCommentEntry = "EnableCommentEntry";
             public const string CommentEntryLabel = "CommentEntryLabel";
             public const string EnableBusinessGiving = "EnableBusinessGiving";
@@ -562,6 +582,7 @@ namespace RockWeb.Blocks.Finance
             public const string AdditionalAccounts = "AdditionalAccounts";
             public const string EnableAccountHierarchy = "EnableAccountHierarchy";
             public const string DisableCaptchaSupport = "DisableCaptchaSupport";
+            public const string EnableEndDate = "EnableEndDate";
 
             // Email Templates Category
             public const string ConfirmAccountTemplate = "ConfirmAccountTemplate";
@@ -654,7 +675,8 @@ mission. We are so grateful for your commitment.</p>
     <dd>
 
     {% if Transaction.TransactionFrequencyValue %}
-        {{ Transaction.TransactionFrequencyValue.Value }} starting on {{ Transaction.NextPaymentDate | Date:'sd' }}
+        {{ Transaction.TransactionFrequencyValue.Value }} //- Updated to include EndDate
+{% if Transaction.EndDate %}starting on {{ Transaction.NextPaymentDate | Date:'sd' }} and ending on {{ Transaction.EndDate | Date:'sd' }}{% else %}starting on {{ Transaction.NextPaymentDate | Date:'sd' }}{% endif %}
     {% else %}
         Today
     {% endif %}
@@ -919,7 +941,7 @@ mission. We are so grateful for your commitment.</p>
         {
             if ( e.IsValid )
             {
-                nbPaymentTokenError.Visible= false;
+                nbPaymentTokenError.Visible = false;
                 nbPaymentTokenError.Text = string.Empty;
 
                 _hostedPaymentInfoControl.Visible = true;
@@ -928,7 +950,7 @@ mission. We are so grateful for your commitment.</p>
                 return;
             }
 
-            nbPaymentTokenError.Visible= true;
+            nbPaymentTokenError.Visible = true;
             nbPaymentTokenError.Text = "There was an issue processing your request. Please try again. If the issue persists please contact us.";
             cpCaptcha.Visible = false;
             btnHostedPaymentInfoNext.Visible = false;
@@ -959,7 +981,7 @@ mission. We are so grateful for your commitment.</p>
                 hfHostPaymentInfoSubmitScript.Value = this.FinancialGatewayComponent.GetHostPaymentInfoSubmitScript( this.FinancialGateway, _hostedPaymentInfoControl );
                 _hostedPaymentInfoControl.Visible = true;
 
-                nbPaymentTokenError.Visible= false;
+                nbPaymentTokenError.Visible = false;
                 nbPaymentTokenError.Text = string.Empty;
             }
 
@@ -1088,10 +1110,23 @@ mission. We are so grateful for your commitment.</p>
             // Set the frequency date label based on if 'One Time' is selected or not
             if ( btnFrequency.Items.Count > 0 )
             {
-                dtpStartDate.Label = btnFrequency.Items[0].Selected ? "When" : "First Gift";
+                int oneTimeFrequencyId = DefinedValueCache.Get( Rock.SystemGuid.DefinedValue.TRANSACTION_FREQUENCY_ONE_TIME ).Id;
+                bool isOneTime = ( btnFrequency.SelectedValueAsInt() ?? 0 ) == oneTimeFrequencyId;
+
+                dtpStartDate.Label = isOneTime ? "When" : "First Gift";
                 if ( _scheduledTransactionToBeTransferred != null && _scheduledTransactionToBeTransferred.NextPaymentDate.HasValue )
                 {
                     dtpStartDate.Label = "Next Gift";
+                }
+
+                if ( GetAttributeValue( AttributeKey.EnableEndDate ).AsBoolean() && !isOneTime )
+                {
+                    dtpEndDate.Visible = true;
+                }
+                else
+                {
+                    dtpEndDate.Visible = false;
+                    dtpEndDate.SelectedDate = null;
                 }
             }
 
@@ -1363,7 +1398,7 @@ mission. We are so grateful for your commitment.</p>
                 var literal = new LiteralControl() { ID = "btnAddAccountLiteral" };
                 var openingHtml = $@"
 <div class=""btn-group js-button-dropdownlist"">
-    <button type=""button"" class=""btn btn-default dropdown-toggle js-buttondropdown-btn-select"" data-toggle=""dropdown"" aria-expanded=""false"">{GetAttributeValue( AttributeKey.AddAccountText )} <span class=""fa fa-caret-down""></span></button>
+    <button type=""button"" class=""btn btn-default dropdown-toggle js-buttondropdown-btn-select"" data-toggle=""dropdown"" aria-expanded=""false"">{GetAttributeValue( AttributeKey.AddAccountText )} <span class=""ti ti-caret-down-filled""></span></button>
     <ul class=""dropdown-menu"">
 ";
 
@@ -1607,6 +1642,20 @@ mission. We are so grateful for your commitment.</p>
                 .Where( a => a is IHostedGatewayComponent && !( a is TestGateway ) )
                 .Select( a => a as IHostedGatewayComponent ).ToList();
 
+            // Now remove any components that have no active instances
+            hostedGatewayComponentList = hostedGatewayComponentList
+                .Where( item =>
+                {
+                    using ( var rockContext = new Rock.Data.RockContext() )
+                    {
+                        var entityType = Rock.Web.Cache.EntityTypeCache.Get( item.TypeGuid );
+                        return new FinancialGatewayService( rockContext )
+                            .Queryable()
+                            .Any( g => g.EntityTypeId == entityType.Id && g.IsActive );
+                    }
+                } )
+                .ToList();
+
             rptInstalledGateways.DataSource = hostedGatewayComponentList;
             rptInstalledGateways.DataBind();
         }
@@ -1668,14 +1717,24 @@ mission. We are so grateful for your commitment.</p>
         protected void btnFrequency_SelectionChanged( object sender, EventArgs e )
         {
             int oneTimeFrequencyId = DefinedValueCache.Get( Rock.SystemGuid.DefinedValue.TRANSACTION_FREQUENCY_ONE_TIME ).Id;
-            bool oneTime = ( btnFrequency.SelectedValueAsInt() ?? 0 ) == oneTimeFrequencyId;
+            bool isOneTime = ( btnFrequency.SelectedValueAsInt() ?? 0 ) == oneTimeFrequencyId;
 
-            dtpStartDate.Label = oneTime ? "When" : "First Gift";
+            dtpStartDate.Label = isOneTime ? "When" : "First Gift";
+
+            if ( GetAttributeValue( AttributeKey.EnableEndDate ).AsBoolean() && !isOneTime )
+            {
+                dtpEndDate.Visible = true;
+            }
+            else
+            {
+                dtpEndDate.Visible = false;
+                dtpEndDate.SelectedDate = null;
+            }
 
             var earliestScheduledStartDate = FinancialGatewayComponent.GetEarliestScheduledStartDate( FinancialGateway );
 
             // if scheduling recurring, it can't start today since the gateway will be taking care of automated giving, it might have already processed today's transaction. So make sure it is no earlier than the gateway's earliest start date.
-            if ( !oneTime && ( !dtpStartDate.SelectedDate.HasValue || dtpStartDate.SelectedDate.Value.Date < earliestScheduledStartDate ) )
+            if ( !isOneTime && ( !dtpStartDate.SelectedDate.HasValue || dtpStartDate.SelectedDate.Value.Date < earliestScheduledStartDate ) )
             {
                 dtpStartDate.SelectedDate = earliestScheduledStartDate;
             }
@@ -2075,6 +2134,18 @@ mission. We are so grateful for your commitment.</p>
                 allowedCurrencyTypes.Add( achCurrency );
             }
 
+            var applePayCurrency = DefinedValueCache.Get( Rock.SystemGuid.DefinedValue.CURRENCY_TYPE_APPLE_PAY.AsGuid() );
+            if ( financialGatewayComponent.SupportsSavedAccount( applePayCurrency ) )
+            {
+                allowedCurrencyTypes.Add( applePayCurrency );
+            }
+
+            var googlePayCurrency = DefinedValueCache.Get( Rock.SystemGuid.DefinedValue.CURRENCY_TYPE_ANDROID_PAY.AsGuid() );
+            if ( financialGatewayComponent.SupportsSavedAccount( googlePayCurrency ) )
+            {
+                allowedCurrencyTypes.Add( googlePayCurrency );
+            }
+
             int[] allowedCurrencyTypeIds = allowedCurrencyTypes.Select( a => a.Id ).ToArray();
 
             personSavedAccountsQuery = personSavedAccountsQuery.Where( a =>
@@ -2161,6 +2232,15 @@ mission. We are so grateful for your commitment.</p>
 
                     var participationMode = PageParameters().ContainsKey( PageParameterKey.ParticipationMode ) ? PageParameter( PageParameterKey.ParticipationMode ).AsIntegerOrNull() ?? 1 : 1;
 
+                    /*
+                         4/3/2025 - SMC
+
+                         This logic overlaps with logic in the Fundraising Donation Entry block. Any changes made here should also be applied there.
+                         When these blocks are migrated to Obsidian, this redundancy should be resolved to ensure the logic exists in only one place.
+
+                         Reason: Prevent code duplication and maintain consistency between blocks.
+                    */
+
                     if ( EntityTypeCache.Get( transactionEntityTypeId ).Guid == Rock.SystemGuid.EntityType.GROUP_MEMBER.AsGuid() )
                     {
                         var groupMember = new GroupMemberService( rockContext ).Get( transactionEntity.Guid );
@@ -2177,7 +2257,7 @@ mission. We are so grateful for your commitment.</p>
                             }
 
                             var contributionTotal = new FinancialTransactionDetailService( rockContext )
-                            .GetContributionsForGroupMemberList( transactionEntityTypeId, familyMemberGroupMembersInCurrentGroup.Select( m => m.Id ).ToList() );
+                                .GetContributionsForGroupMemberList( transactionEntityTypeId, familyMemberGroupMembersInCurrentGroup.Select( m => m.Id ).ToList() );
                             mergeFields.Add( "FundraisingGoal", groupFundraisingGoal );
                             mergeFields.Add( "AmountRaised", contributionTotal );
                         }
@@ -2285,7 +2365,7 @@ mission. We are so grateful for your commitment.</p>
             }
             else
             {
-                if ( enableTextToGiveSetup  )
+                if ( enableTextToGiveSetup )
                 {
                     btnSavedAccountPaymentInfoNext.Text = "Give";
                     btnHostedPaymentInfoNext.Text = "Give";
@@ -2311,7 +2391,9 @@ mission. We are so grateful for your commitment.</p>
             bool givingAsBusiness = !enableTextToGiveSetup && GetAttributeValue( AttributeKey.EnableBusinessGiving ).AsBoolean() && !tglGiveAsOption.Checked;
             bool userLoggedIn = CurrentPerson != null;
 
-            acAddress.Label = givingAsBusiness ? "Business Address" : "Address";
+            var addressTypeGuid = GetAttributeValue( AttributeKey.AddressType ).AsGuid();
+            var addressType = DefinedValueCache.Get( addressTypeGuid );
+            acAddress.Label = givingAsBusiness ? "Business Address" : addressType.Value + " Address";
             pnbPhone.Label = givingAsBusiness ? "Business Phone" : "Phone";
             txtEmail.Label = givingAsBusiness ? "Business Email" : "Email";
 
@@ -2513,7 +2595,7 @@ mission. We are so grateful for your commitment.</p>
                     cbSmsOptIn.Checked = workPhone?.IsMessagingEnabled ?? false;
                 }
             }
-            
+
         }
 
         /// <summary>
@@ -2555,7 +2637,7 @@ mission. We are so grateful for your commitment.</p>
                 if ( person == null )
                 {
                     // Check to see if there's only one person with same email, first name, and last name
-                    if ( !string.IsNullOrWhiteSpace( txtEmail.Text ) && 
+                    if ( !string.IsNullOrWhiteSpace( txtEmail.Text ) &&
                         !string.IsNullOrWhiteSpace( txtFirstName.Text ) &&
                         !string.IsNullOrWhiteSpace( txtLastName.Text ) )
                     {
@@ -2585,6 +2667,8 @@ mission. We are so grateful for your commitment.</p>
                         {
                             person.RecordStatusValueId = dvcRecordStatus.Id;
                         }
+
+                        person.RecordSourceValueId = GetRecordSourceValueId();
 
                         // Create Person/Family
                         familyGroup = PersonService.SaveNewPerson( person, rockContext, null, false );
@@ -2683,7 +2767,7 @@ mission. We are so grateful for your commitment.</p>
                         familyGroup,
                         GetAttributeValue( AttributeKey.AddressType ),
                         acAddress.Street1, acAddress.Street2, acAddress.City, acAddress.State, acAddress.PostalCode, acAddress.Country,
-                        true);
+                        true );
                 }
             }
 
@@ -2731,6 +2815,8 @@ mission. We are so grateful for your commitment.</p>
                 {
                     person.RecordStatusValueId = dvcRecordStatus.Id;
                 }
+
+                person.RecordSourceValueId = GetRecordSourceValueId();
 
                 // Create Person/Family
                 PersonService.SaveNewPerson( person, rockContext, null, false );
@@ -2854,6 +2940,8 @@ mission. We are so grateful for your commitment.</p>
                         business.RecordStatusValueId = dvcRecordStatus.Id;
                     }
 
+                    business.RecordSourceValueId = GetRecordSourceValueId();
+
                     // Create Person/Family
                     familyGroup = PersonService.SaveNewPerson( business, rockContext, null, false );
 
@@ -2954,6 +3042,18 @@ mission. We are so grateful for your commitment.</p>
         }
 
         /// <summary>
+        /// Gets the record source to use for new individuals.
+        /// </summary>
+        /// <returns>
+        /// The identifier of the Record Source Type <see cref="DefinedValue"/> to use.
+        /// </returns>
+        private int? GetRecordSourceValueId()
+        {
+            return RecordSourceHelper.GetSessionRecordSourceValueId()
+                ?? DefinedValueCache.Get( GetAttributeValue( AttributeKey.RecordSource ).AsGuid() )?.Id;
+        }
+
+        /// <summary>
         /// Fetches the old (to be transferred) scheduled transaction and verifies
         /// that the target person is the same on the scheduled transaction.  Then
         /// it puts it into the _scheduledTransactionToBeTransferred private field
@@ -3049,6 +3149,11 @@ mission. We are so grateful for your commitment.</p>
                 {
                     errorMessages.Add( $"When scheduling a repeating payment, the minimum start date is {earliestScheduledStartDate.ToShortDateString()}" );
                 }
+
+                if ( schedule.EndDate.HasValue && schedule.EndDate < schedule.StartDate )
+                {
+                    errorMessages.Add( $"When scheduling a repeating payment, the minimum end date is {schedule.StartDate.ToShortDateString()}" );
+                }
             }
             else
             {
@@ -3063,6 +3168,16 @@ mission. We are so grateful for your commitment.</p>
                 if ( string.IsNullOrWhiteSpace( txtFirstName.Text ) || string.IsNullOrWhiteSpace( txtLastName.Text ) )
                 {
                     errorMessages.Add( "Make sure to enter both a first and last name" );
+                }
+
+                if ( System.Text.RegularExpressions.Regex.IsMatch( txtFirstName.Text, RegexPatterns.SpecialCharacterRemovalPattern ) || System.Text.RegularExpressions.Regex.IsMatch( txtLastName.Text, RegexPatterns.SpecialCharacterRemovalPattern ) )
+                {
+                    errorMessages.Add( "Make sure to enter a first and last name that does not contain special characters such as quotes, parentheses, etc." );
+                }
+
+                if ( System.Text.RegularExpressions.Regex.IsMatch( txtFirstName.Text, RegexPatterns.EmojiAndSpecialFontRemovalPattern ) || System.Text.RegularExpressions.Regex.IsMatch( txtLastName.Text, RegexPatterns.EmojiAndSpecialFontRemovalPattern ) )
+                {
+                    errorMessages.Add( "Make sure to enter a first and last name that does not contain emojis or special fonts." );
                 }
 
                 if ( !txtFirstName.IsValid )
@@ -3099,6 +3214,21 @@ mission. We are so grateful for your commitment.</p>
                 if ( string.IsNullOrWhiteSpace( txtBusinessContactFirstName.Text ) || string.IsNullOrWhiteSpace( txtBusinessContactLastName.Text ) )
                 {
                     errorMessages.Add( "Make sure to enter both a first and last name for Business Contact" );
+                }
+
+                if ( !txtBusinessContactFirstName.IsValid )
+                {
+                    errorMessages.Add( txtBusinessContactFirstName.CustomValidator.ErrorMessage );
+                }
+
+                if ( System.Text.RegularExpressions.Regex.IsMatch( txtBusinessContactFirstName.Text, RegexPatterns.SpecialCharacterRemovalPattern ) || System.Text.RegularExpressions.Regex.IsMatch( txtBusinessContactLastName.Text, RegexPatterns.SpecialCharacterRemovalPattern ) )
+                {
+                    errorMessages.Add( "Make sure to enter a first and last name that does not contain special characters such as quotes, parentheses, etc for Business Contact." );
+                }
+
+                if ( System.Text.RegularExpressions.Regex.IsMatch( txtBusinessContactFirstName.Text, RegexPatterns.EmojiAndSpecialFontRemovalPattern ) || System.Text.RegularExpressions.Regex.IsMatch( txtBusinessContactLastName.Text, RegexPatterns.EmojiAndSpecialFontRemovalPattern ) )
+                {
+                    errorMessages.Add( "Make sure to enter a first and last name that does not contain emojis or special fonts for Business Contact." );
                 }
 
                 if ( DisplayPhone && string.IsNullOrWhiteSpace( pnbBusinessContactPhone.Number ) )
@@ -3245,7 +3375,8 @@ mission. We are so grateful for your commitment.</p>
             {
                 // If a one-time gift was selected for today's date, then treat as a onetime immediate transaction (not scheduled)
                 int oneTimeFrequencyId = DefinedValueCache.Get( Rock.SystemGuid.DefinedValue.TRANSACTION_FREQUENCY_ONE_TIME ).Id;
-                if ( btnFrequency.SelectedValue == oneTimeFrequencyId.ToString() && dtpStartDate.SelectedDate <= RockDateTime.Today )
+                bool isOneTime = ( btnFrequency.SelectedValueAsInt() ?? 0 ) == oneTimeFrequencyId;
+                if ( isOneTime && dtpStartDate.SelectedDate <= RockDateTime.Today )
                 {
                     // one-time immediate payment
                     return null;
@@ -3260,6 +3391,14 @@ mission. We are so grateful for your commitment.</p>
                 else
                 {
                     schedule.StartDate = DateTime.MinValue;
+                }
+
+                if ( GetAttributeValue( AttributeKey.EnableEndDate ).AsBoolean() && !isOneTime )
+                {
+                    if ( dtpEndDate.SelectedDate.HasValue && dtpEndDate.SelectedDate > RockDateTime.Today )
+                    {
+                        schedule.EndDate = dtpEndDate.SelectedDate.Value;
+                    }
                 }
 
                 return schedule;
@@ -3439,6 +3578,7 @@ mission. We are so grateful for your commitment.</p>
         {
             scheduledTransaction.TransactionFrequencyValueId = schedule.TransactionFrequencyValue.Id;
             scheduledTransaction.StartDate = schedule.StartDate;
+            scheduledTransaction.EndDate = schedule.EndDate;
             scheduledTransaction.AuthorizedPersonAliasId = person.PrimaryAliasId.Value;
             scheduledTransaction.FinancialGatewayId = financialGateway.Id;
 
@@ -3597,7 +3737,7 @@ mission. We are so grateful for your commitment.</p>
 
             TransactionCode = transaction.TransactionCode;
         }
-        
+
         /// <summary>
         /// Populates the transaction details for a FinancialTransaction or ScheduledFinancialTransaction
         /// </summary>
@@ -3912,7 +4052,7 @@ mission. We are so grateful for your commitment.</p>
             pnlConfirmation.Visible = page == EntryStep.ShowConfirmation;
             pnlSuccess.Visible = page == EntryStep.ShowTransactionSummary;
 
-            hfCurrentPage.Value = page.ConvertToString(false);
+            hfCurrentPage.Value = page.ConvertToString( false );
         }
 
         /// <summary>

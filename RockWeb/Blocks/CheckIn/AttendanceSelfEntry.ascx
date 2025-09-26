@@ -24,10 +24,10 @@
 
                         <div class="col-sm-7 col-sm-pull-5">
                             <fieldset>
-                                <Rock:RockTextBox ID="tbFirstName" runat="server" Label="First Name" Required="true" ValidationGroup="vgPrimary" />
-                                <Rock:RockTextBox ID="tbLastName" runat="server" Label="Last Name" Required="true" ValidationGroup="vgPrimary" />
+                                <Rock:RockTextBox ID="tbFirstName" runat="server" Label="First Name" Required="true" ValidationGroup="vgPrimary" NoSpecialCharacters="true" NoEmojisOrSpecialFonts="true" />
+                                <Rock:RockTextBox ID="tbLastName" runat="server" Label="Last Name" Required="true" ValidationGroup="vgPrimary" NoSpecialCharacters="true" NoEmojisOrSpecialFonts="true" />
                                 <Rock:EmailBox ID="tbEmail" runat="server" Label="Email" Required="false" ValidationGroup="vgPrimary" />
-                                <Rock:BirthdayPicker ID="bpBirthDay" runat="server" Label="Birthday" ValidationGroup="vgPrimary" />
+                                <Rock:BirthdayPicker ID="bpBirthDay" runat="server" Label="Birth Date" ValidationGroup="vgPrimary" />
                                 <asp:Panel ID="pnlPhone" runat="server" CssClass="margin-b-lg">
                                     <Rock:PhoneNumberBox ID="pnbPhone" runat="server" Label="Mobile Phone" ValidationGroup="vgPrimary" />
                                     <Rock:RockCheckBox ID="cbIsMessagingEnabled" runat="server" Text="May we message you on occassion" DisplayInline="true" ValidationGroup="vgPrimary" />
@@ -56,7 +56,7 @@
                                 <Rock:RockTextBox ID="tbOtherFirstName" runat="server" Label="First Name" Required="true" ValidationGroup="vgOther" />
                                 <Rock:RockTextBox ID="tbOtherLastName" runat="server" Label="Last Name" Required="true" ValidationGroup="vgOther" />
                                 <Rock:EmailBox ID="tbOtherEmail" runat="server" Label="Email" Required="false" ValidationGroup="vgOther" />
-                                <Rock:BirthdayPicker ID="bpOtherBirthDay" runat="server" Label="Birthday" ValidationGroup="vgOther" />
+                                <Rock:BirthdayPicker ID="bpOtherBirthDay" runat="server" Label="Birth Date" ValidationGroup="vgOther" />
                                 <asp:Panel ID="pnlOtherPhone" runat="server" CssClass="margin-b-lg">
                                     <Rock:PhoneNumberBox ID="pnOtherMobile" runat="server" Label="Mobile Phone" ValidationGroup="vgOther" />
                                     <Rock:RockCheckBox ID="cbOtherMessagingEnabled" runat="server" Text="May we message you on occassion" DisplayInline="true" ValidationGroup="vgOther" />
@@ -73,7 +73,7 @@
                                             <asp:HiddenField ID="hfRowId" runat="server" Value='<%# Eval("Guid") %>' />
                                             <b><%# Eval("FullName") %></b> <span><%#Eval("RelationshipType") %></span>
                                             <div class="rollover-item control-actions pull-right">
-                                                <asp:LinkButton ID="lbDelete" runat="server" CommandName="delete" CommandArgument='<%# Eval("Guid") %>'><i class="fa fa-times"></i></asp:LinkButton>
+                                                <asp:LinkButton ID="lbDelete" runat="server" CommandName="delete" CommandArgument='<%# Eval("Guid") %>'><i class="ti ti-x"></i></asp:LinkButton>
                                             </div>
                                         </div>
                                     </ItemTemplate>
@@ -116,7 +116,7 @@
                                 <asp:Repeater ID="rptFamilyMembers" runat="server">
                                     <ItemTemplate>
                                         <button type="button" person-id='<%# Eval("Id") %>' class='<%# "btn btn-default btn-lg btn-checkbox" + ((bool)Eval("Selected") ? " active" : "") %>'>
-                                            <i class="fa <%# ((bool)Eval("Selected") ? "fa-check-circle-o" : "fa-circle-o") %>"></i>
+                                            <i class="ti <%# ((bool)Eval("Selected") ? "ti-circle-check" : "ti-circle") %>"></i>
                                             <span class="name"><%# Eval("FullName") %></span>
                                         </button>
                                     </ItemTemplate>
@@ -128,7 +128,7 @@
                                 <asp:Repeater ID="rptOtherMembers" runat="server">
                                     <ItemTemplate>
                                         <button type="button" person-id='<%# Eval("Id") %>' class='<%# "btn btn-default btn-lg btn-checkbox" + ((bool)Eval("Selected") ? " active" : "") %>'>
-                                            <i class="fa <%# ((bool)Eval("Selected") ? "fa-check-circle-o" : "fa-circle-o") %>"></i>
+                                            <i class="ti <%# ((bool)Eval("Selected") ? "ti-circle-check" : "ti-circle") %>"></i>
                                             <span class="name"><%# Eval("FullName") %></span>
                                             <span class="small"><%# Eval("RelationshipType") %></span>
                                         </button>
@@ -170,7 +170,7 @@
                 });
 
                 $('button.btn-checkbox').click( function() {{
-                    $(this).find('i').toggleClass('fa-check-circle-o').toggleClass('fa-circle-o');
+                    $(this).find('i').toggleClass('ti-circle-check').toggleClass('ti-circle');
                 }});
             })
 

@@ -40,7 +40,7 @@ namespace Rock.Blocks.Engagement
     [DisplayName( "Campaign List" )]
     [Category( "Engagement" )]
     [Description( "Block for viewing list of campaign connection configurations." )]
-    [IconCssClass( "fa fa-list" )]
+    [IconCssClass( "ti ti-list" )]
     // [SupportedSiteTypes( Model.SiteType.Web )]
 
     [LinkedPage( "Detail Page",
@@ -128,7 +128,7 @@ namespace Rock.Blocks.Engagement
         {
             return new Dictionary<string, string>
             {
-                [NavigationUrlKey.DetailPage] = this.GetLinkedPageUrl( AttributeKey.DetailPage, PageParameterKey.ConnectionCampaignGuid, "((Key))" )
+                [NavigationUrlKey.DetailPage] = this.GetLinkedPageUrl( AttributeKey.DetailPage, new Dictionary<string, string> { [PageParameterKey.ConnectionCampaignGuid] = "((Key))", ["autoEdit"] = "true", ["returnUrl"] = this.GetCurrentPageUrl() } )
             };
         }
 

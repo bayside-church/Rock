@@ -34,6 +34,7 @@ namespace Rock.Field.Types
     /// 
     /// </summary>
     /// <seealso cref="Rock.Field.FieldType" />
+    [FieldTypeUsage( FieldTypeUsage.System )]
     [RockPlatformSupport( Utility.RockPlatform.WebForms, Utility.RockPlatform.Obsidian)]
     [Rock.SystemGuid.FieldTypeGuid( Rock.SystemGuid.FieldType.CONDITIONAL_SCALE )]
     public class ConditionalScaleFieldType : DecimalFieldType
@@ -351,7 +352,7 @@ namespace Rock.Field.Types
             conditionalScaleRulesControlsRepeater.ItemDataBound += ConditionalScaleRulesControlsRepeater_ItemDataBound;
             pnlRulesEditor.Controls.Add( conditionalScaleRulesControlsRepeater );
 
-            LinkButton btnAddRule = new LinkButton { ID = "btnAddRule", CssClass = "btn btn-square btn-action btn-xs margin-b-md", Text = "<i class='fa fa-plus-circle'></i>", CausesValidation = false };
+            LinkButton btnAddRule = new LinkButton { ID = "btnAddRule", CssClass = "btn btn-square btn-action btn-xs margin-b-md", Text = "<i class='ti ti-circle-plus'></i>", CausesValidation = false };
             btnAddRule.Click += BtnAddRule_Click;
             pnlRulesEditor.Controls.Add( btnAddRule );
 
@@ -633,7 +634,7 @@ namespace Rock.Field.Types
                 conditionalScaleRangeRuleContainer.Controls.Add( pnlColumn2 );
 
                 Panel pnlColumn3 = new Panel { ID = "pnlColumn3", CssClass = "col-md-2" };
-                LinkButton btnDeleteRule = new LinkButton { ID = "btnDeleteRule", CssClass = "btn btn-danger btn-sm", CausesValidation = false, Text = "<i class='fa fa-times'></i>" };
+                LinkButton btnDeleteRule = new LinkButton { ID = "btnDeleteRule", CssClass = "btn btn-danger btn-sm", CausesValidation = false, Text = "<i class='ti ti-x'></i>" };
                 btnDeleteRule.Click += BtnDeleteRule_Click;
                 pnlColumn3.Controls.Add( btnDeleteRule );
                 conditionalScaleRangeRuleContainer.Controls.Add( pnlColumn3 );

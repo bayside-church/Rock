@@ -18,7 +18,6 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
-using System.Linq.Dynamic;
 using System.Web;
 
 using AspNet.Security.OpenIdConnect.Primitives;
@@ -29,10 +28,11 @@ using Owin;
 using Owin.Security.OpenIdConnect.Extensions;
 
 using Rock;
-using Rock.CheckIn;
 using Rock.Data;
+using Rock.Enums.Security;
 using Rock.Model;
 using Rock.Oidc.Authorization;
+using Rock.Utility;
 using Rock.Web.UI;
 
 namespace RockWeb.Blocks.Security.Oidc
@@ -72,9 +72,13 @@ namespace RockWeb.Blocks.Security.Oidc
 
         #endregion Keys
 
+        #region Fields
+
         private const string AntiXsrfTokenKey = "__AntiXsrfToken";
         protected string _antiXsrfTokenValue;
         private const string ScopeCookiePrefix = ".ROCK-OidcScopeApproval-";
+
+        #endregion Fields
 
         #region Base Control Methods
 
@@ -170,24 +174,42 @@ namespace RockWeb.Blocks.Security.Oidc
             var authClient = GetAuthClient();
             if ( authClient == null )
             {
-                DenyAuthorization( "Invalid+client" );
+                DenyAuthorization( "Invalid+client", LoginFailureReason.InvalidOidcClientId, authClient );
                 base.OnLoad( e );
                 return;
             }
 
+            /*
+                12/19/2024 - JPH
+
+                The page this block is most-commonly placed on does not require individuals to be authenticated, so that
+                we can effectively validate the `client_id` (above) BEFORE automatically redirecting the individual to
+                the login page. This means that once we're sure the client ID is valid, we THEN need to ensure the
+                individual is authenticated with Rock, and redirect them to the login page at this time, if not.
+
+                Reason: Allow OIDC `client_id` verification before auto-redirect to login page.
+             */
+            if ( CurrentUser?.IsAuthenticated != true )
+            {
+                var loginUrl = RockPage.GetLoginUrlWithReturnUrl();
+                Response.Redirect( loginUrl );
+                ApplicationInstance.CompleteRequest();
+                return;
+            }
+
             // Check if this client has already approved the scopes. We'll look for the cookie and check that the scopes have not changed.
-            var scopesApprovalCookieValue = RockPage.GetCookie( $"{ScopeCookiePrefix}{authClient.Guid}" )?.Value;
+            var scopesApprovalCookieValue = RockPage.GetCookie( GetScopeCookieName( authClient ) )?.Value;
             var scopesPreviouslyApproved = Rock.Security.Encryption.DecryptString( scopesApprovalCookieValue ) == authClient.AllowedScopes.ToString();
 
             // We have to use querystring, because something in the .net postback chain writes to the Response object which breaks the auth call.
             var action = PageParameter( PageParamKey.Action );
             var token = PageParameter( "token" );
 
-            if ( (action.IsNotNullOrWhiteSpace() && ValidateAntiForgeryToken( token ) ) || scopesPreviouslyApproved )
+            if ( ( action.IsNotNullOrWhiteSpace() && ValidateAntiForgeryToken( token ) ) || scopesPreviouslyApproved )
             {
-                if (action == "deny" )
+                if ( action == "deny" )
                 {
-                    DenyAuthorization( "The+user+declined+claim+permissions" );
+                    DenyAuthorization( "The+individual+declined+claim+permissions", LoginFailureReason.Other, authClient );
                     base.OnLoad( e );
                     return;
                 }
@@ -212,8 +234,24 @@ namespace RockWeb.Blocks.Security.Oidc
         /// <summary>
         /// Denies the authorization.
         /// </summary>
-        private void DenyAuthorization( string errorDescription )
+        private void DenyAuthorization( string errorDescription, LoginFailureReason loginFailureReason, AuthClient authClient )
         {
+            // Only log explicit denials by the individual, as other failures (e.g. invalid client) will be logged by
+            // Rock's authorization provider OIDC implementation.
+            if ( loginFailureReason != LoginFailureReason.InvalidOidcClientId )
+            {
+                new HistoryLogin
+                {
+                    UserName = CurrentUser.UserName,
+                    UserLoginId = CurrentUser.Id,
+                    PersonAliasId = CurrentPersonAliasId,
+                    AuthClientClientId = PageParameter( PageParamKey.ClientId ),
+                    ExternalSource = authClient?.Name,
+                    LoginFailureReason = loginFailureReason,
+                    LoginFailureMessage = errorDescription.Replace( "+", " " )
+                }.SaveAfterDelay();
+            }
+
             // Notify the client that the authorization grant has been denied by the resource owner.
             var owinContext = Context.GetOwinContext();
             var redirectUri = owinContext.Request.Query["redirect_uri"];
@@ -328,6 +366,22 @@ namespace RockWeb.Blocks.Security.Oidc
 
         #region Private Methods
 
+        /// <summary>
+        /// Gets the scope cookie name for the current <see cref="AuthClient"/> and <see cref="UserLogin"/> combination.
+        /// </summary>
+        /// <param name="authClient">The <see cref="AuthClient"/> for which authorization is being requested.</param>
+        /// <returns>
+        /// The scope cookie name for the current <see cref="AuthClient"/> and <see cref="UserLogin"/> combination.
+        /// </returns>
+        private string GetScopeCookieName( AuthClient authClient )
+        {
+            return $"{ScopeCookiePrefix}{IdHasher.Instance.GetHash( authClient.Id )}-{IdHasher.Instance.GetHash( CurrentUser.Id )}";
+        }
+
+        /// <summary>
+        /// Adds a cookie indicating that the individual has authorized the requested scopes and continues the OIDC
+        /// authentication process.
+        /// </summary>
         private void AcceptAuthorization()
         {
             var owinContext = Context.GetOwinContext();
@@ -360,7 +414,7 @@ namespace RockWeb.Blocks.Security.Oidc
 
             // Create a new authentication ticket holding the user identity.
             var ticket = new AuthenticationTicket( identity, new AuthenticationProperties() );
-            
+
             // We should set the scopes to the requested valid scopes.
             ticket.SetScopes( requestedScopes );
 
@@ -369,7 +423,7 @@ namespace RockWeb.Blocks.Security.Oidc
 
             // Set cookie to remember the fact that this individual as approved the scopes.
             var cookieValue = $"{Rock.Security.Encryption.EncryptString( authClient.AllowedScopes.ToString() )}";
-            RockPage.AddOrUpdateCookie( $"{ScopeCookiePrefix}{authClient.Guid}", cookieValue, RockDateTime.Now.AddDays( authClient.ScopeApprovalExpiration ) );
+            RockPage.AddOrUpdateCookie( GetScopeCookieName( authClient ), cookieValue, RockDateTime.Now.AddDays( authClient.ScopeApprovalExpiration ) );
 
             // Returning a SignInResult will ask ASOS to serialize the specified identity
             // to build appropriate tokens. You should always make sure the identities

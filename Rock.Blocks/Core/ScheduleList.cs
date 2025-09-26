@@ -39,8 +39,8 @@ namespace Rock.Blocks.Core
     [DisplayName( "Schedule List" )]
     [Category( "Core" )]
     [Description( "Lists all the schedules." )]
-    [IconCssClass( "fa fa-list" )]
-    // [SupportedSiteTypes( Model.SiteType.Web )]
+    [IconCssClass( "ti ti-list" )]
+    [SupportedSiteTypes( Model.SiteType.Web )]
 
     [LinkedPage(
         "Detail Page",
@@ -54,6 +54,7 @@ namespace Rock.Blocks.Core
         DefaultBooleanValue = false,
         Order = 1 )]
 
+    [Rock.Cms.DefaultBlockRole( Rock.Enums.Cms.BlockRole.Secondary )]
     [Rock.SystemGuid.EntityTypeGuid( "259b6074-eefa-4638-a7ed-c2169f450bee" )]
     [Rock.SystemGuid.BlockTypeGuid( "b6a17e77-e53d-4c96-bcb2-643123b8160c" )]
     [CustomizedGrid]
@@ -78,41 +79,12 @@ namespace Rock.Blocks.Core
             public const string CategoryGuid = "CategoryGuid";
         }
 
-        private static class PreferenceKey
-        {
-            public const string FilterCategory = "filter-category";
-            public const string FilterActiveStatus = "filter-active-status";
-        }
-
         #endregion Keys
 
         #region  Fields
 
         private Guid? _categoryGuid;
         private HashSet<int> _schedulesWithAttendance;
-
-        #endregion
-
-        #region Properties
-
-        /// <summary>
-        /// Gets the category guid to filter results by.
-        /// </summary>
-        /// <value>
-        /// The category filter.
-        /// </value>
-        protected Guid? FilterCategory => GetBlockPersonPreferences()
-            .GetValue( PreferenceKey.FilterCategory )
-            .FromJsonOrNull<ListItemBag>()?.Value?.AsGuidOrNull();
-
-        /// <summary>
-        /// Gets the active status to filter results by.
-        /// </summary>
-        /// <value>
-        /// The active status filter.
-        /// </value>
-        protected string FilterActiveStatus => GetBlockPersonPreferences()
-            .GetValue( PreferenceKey.FilterActiveStatus );
 
         #endregion
 
@@ -177,21 +149,19 @@ namespace Rock.Blocks.Core
         /// <inheritdoc/>
         protected override IQueryable<Schedule> GetListQueryable( RockContext rockContext )
         {
-            var queryable = new ScheduleService( rockContext ).Queryable().Where( a => !string.IsNullOrEmpty( a.Name ) );
+            var queryable = new ScheduleService( rockContext ).Queryable()
+                .Include( a => a.Category )
+                .Where( a => !string.IsNullOrEmpty( a.Name ) );
 
-            Guid? categoryGuid = this.GetAttributeValue( AttributeKey.FilterCategoryFromQueryString ).AsBoolean() ? GetCategoryGuid() : FilterCategory;
-
-            // Filter by Category
-            if ( categoryGuid.HasValue )
+            if ( this.GetAttributeValue(AttributeKey.FilterCategoryFromQueryString).AsBoolean() )
             {
-                queryable = queryable.Where( a => a.Category.Guid == categoryGuid.Value );
-            }
+                var categoryGuid = GetCategoryGuid();
 
-            // Filter by IsActive
-            if ( !string.IsNullOrWhiteSpace( FilterActiveStatus ) )
-            {
-                var activeFilter = FilterActiveStatus.AsBoolean();
-                queryable = queryable.Where( b => b.IsActive == activeFilter );
+                // Filter by Category
+                if ( categoryGuid.HasValue )
+                {
+                    queryable = queryable.Where( a => a.Category.Guid == categoryGuid.Value );
+                }
             }
 
             return queryable;

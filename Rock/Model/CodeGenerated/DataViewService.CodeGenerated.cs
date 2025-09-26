@@ -21,6 +21,7 @@
 // </copyright>
 
 using System;
+using System.Collections.Generic;
 using System.Linq;
 
 using Rock.Data;
@@ -52,9 +53,27 @@ namespace Rock.Model
         {
             errorMessage = string.Empty;
 
+            if ( new Service<CommunicationFlow>( Context ).Queryable().Any( a => a.TargetAudienceDataViewId == item.Id ) )
+            {
+                errorMessage = string.Format( "This {0} is assigned to a {1}.", DataView.FriendlyTypeName, CommunicationFlow.FriendlyTypeName );
+                return false;
+            }
+
             if ( new Service<ConnectionStatusAutomation>( Context ).Queryable().Any( a => a.DataViewId == item.Id ) )
             {
                 errorMessage = string.Format( "This {0} is assigned to a {1}.", DataView.FriendlyTypeName, ConnectionStatusAutomation.FriendlyTypeName );
+                return false;
+            }
+
+            if ( new Service<ConnectionWorkflow>( Context ).Queryable().Any( a => a.ExcludeDataViewId == item.Id ) )
+            {
+                errorMessage = string.Format( "This {0} is assigned to a {1}.", DataView.FriendlyTypeName, ConnectionWorkflow.FriendlyTypeName );
+                return false;
+            }
+
+            if ( new Service<ConnectionWorkflow>( Context ).Queryable().Any( a => a.IncludeDataViewId == item.Id ) )
+            {
+                errorMessage = string.Format( "This {0} is assigned to a {1}.", DataView.FriendlyTypeName, ConnectionWorkflow.FriendlyTypeName );
                 return false;
             }
 
@@ -132,6 +151,24 @@ namespace Rock.Model
                 return false;
             }
             return true;
+        }
+    }
+
+    [HasQueryableAttributes( typeof( DataView.DataViewQueryableAttributeValue ), nameof( DataViewAttributeValues ) )]
+    public partial class DataView
+    {
+        /// <summary>
+        /// Gets the entity attribute values. This should only be used inside
+        /// LINQ statements when building a where clause for the query. This
+        /// property should only be used inside LINQ statements for filtering
+        /// or selecting values. Do <b>not</b> use it for accessing the
+        /// attributes after the entity has been loaded.
+        /// </summary>
+        public virtual ICollection<DataViewQueryableAttributeValue> DataViewAttributeValues { get; set; } 
+
+        /// <inheritdoc/>
+        public class DataViewQueryableAttributeValue : QueryableAttributeValue
+        {
         }
     }
 

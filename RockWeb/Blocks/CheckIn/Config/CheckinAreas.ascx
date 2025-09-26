@@ -6,7 +6,7 @@
         <asp:Panel ID="pnlDetails" runat="server" CssClass="panel panel-block js-panel-details">
             <div class="panel-heading">
                 <h1 class="panel-title">
-                    <i class="fa fa-list"></i>
+                    <i class="ti ti-list"></i>
                     Areas and Groups
                 </h1>
                 <div class="pull-right">
@@ -23,7 +23,7 @@
                             <asp:PlaceHolder ID="phRows" runat="server" />
                         </ul>
                         <div class="pull-right checkin-item-actions">
-                            <asp:LinkButton ID="lbAddArea" runat="server" ToolTip="Add New Area" CssClass="btn btn-xs btn-default" OnClick="lbAddArea_Click"><i class="fa fa-plus"></i> <i class="fa fa-folder-open"></i></asp:LinkButton>
+                            <asp:LinkButton ID="lbAddArea" runat="server" ToolTip="Add New Area" CssClass="btn btn-xs btn-default" OnClick="lbAddArea_Click"><i class="ti ti-plus"></i> <i class="ti ti-folder-open"></i></asp:LinkButton>
                         </div>
                     </div>
                     <div class="col-md-6 js-area-group-details">
@@ -35,7 +35,13 @@
                         <Rock:NotificationBox ID="nbSaveSuccess" runat="server" NotificationBoxType="Success" Text="Changes have been saved." Visible="false" />
 
                         <Rock:CheckinArea ID="checkinArea" runat="server" Visible="false" OnAddCheckinLabelClick="checkinArea_AddCheckinLabelClick" OnDeleteCheckinLabelClick="checkinArea_DeleteCheckinLabelClick" OnAddNextGenCheckInLabelClick="checkinArea_AddNextGenCheckInLabelClick" OnDeleteNextGenCheckInLabelClick="checkinArea_DeleteNextGenCheckInLabelClick" />
-                        <Rock:CheckinGroup ID="checkinGroup" runat="server" Visible="false" OnAddLocationClick="checkinGroup_AddLocationClick" OnDeleteLocationClick="checkinGroup_DeleteLocationClick" OnReorderLocationClick="checkinGroup_ReorderLocationClick" />
+                        <Rock:CheckinGroup ID="checkinGroup" runat="server" Visible="false"
+                            OnAddLocationClick="checkinGroup_AddLocationClick"
+                            OnDeleteLocationClick="checkinGroup_DeleteLocationClick"
+                            OnReorderLocationClick="checkinGroup_ReorderLocationClick"
+                            OnAddOverflowLocationClick="checkinGroup_AddOverflowLocationClick"
+                            OnDeleteOverflowLocationClick="checkinGroup_DeleteOverflowLocationClick"
+                            OnReorderOverflowLocationClick="checkinGroup_ReorderOverflowLocationClick" />
 
                         <div class="panel-actions margin-t-md">
                             <asp:LinkButton ID="btnSave" runat="server" data-shortcut-key="s" ToolTip="Alt+s" Text="Save" CssClass="btn btn-primary" OnClick="btnSave_Click" Visible="false" />
@@ -63,6 +69,7 @@
 
         <Rock:ModalDialog ID="mdLocationPicker" runat="server" ScrollbarEnabled="false" SaveButtonText="Save" OnSaveClick="mdLocationPicker_SaveClick" Title="Select Check-in Location" ValidationGroup="Location">
             <Content ID="mdLocationPickerContent">
+                <asp:HiddenField ID="hfLocationPickerOverflow" runat="server" />
                 <Rock:LocationItemPicker ID="locationPicker" runat="server" Label="Check-in Location" ValidationGroup="Location" Required="true" />
             </Content>
         </Rock:ModalDialog>

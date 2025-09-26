@@ -78,7 +78,9 @@ namespace RockWeb.Blocks.Groups
         Category = "Add Group",
         Order = 17,
         Key = AttributeKey.RootGroup )]
+
     [ContextAware]
+    [Rock.Cms.DefaultBlockRole( Rock.Enums.Cms.BlockRole.Primary )]
     [Rock.SystemGuid.BlockTypeGuid( "3D7FB6BE-6BBD-49F7-96B4-96310AF3048A" )]
     public partial class GroupList : RockBlock, ICustomGridColumns
     {
@@ -309,16 +311,21 @@ namespace RockWeb.Blocks.Groups
                         if ( groupInfo.IsSynced )
                         {
                             deleteButton.Enabled = false;
-                            buttonIcon.Attributes["class"] = "fa fa-exchange";
+                            buttonIcon.Attributes["class"] = "ti ti-switch-3";
 
                             deleteButton.ToolTip = string.Format( "Managed by group sync for role \"{0}\".", groupInfo.GroupRole );
                         }
                         else if ( groupInfo.GroupType.EnableGroupHistory && _groupsWithGroupHistory.Contains( groupInfo.Id ) )
                         {
-                            buttonIcon.Attributes["class"] = "fa fa-archive";
+                            buttonIcon.Attributes["class"] = "ti ti-archive";
                             deleteButton.AddCssClass( "btn-danger" );
                             deleteButton.ToolTip = "Archive";
                             e.Row.AddCssClass( "js-has-grouphistory" );
+                        }
+
+                        if ( groupInfo.HasChatChannel )
+                        {
+                            e.Row.AddCssClass( "js-has-chat-channel" );
                         }
                     }
                 }
@@ -914,6 +921,8 @@ namespace RockWeb.Blocks.Groups
                 var groupMemberService = new GroupMemberService( rockContext );
                 var groupSyncService = new GroupSyncService( rockContext );
 
+                var chatChannelGroupIds = new HashSet<int>( groupService.GetChatChannelGroupsQuery().Select( g => g.Id ) );
+
                 groupList = qryGroups
                     .AsEnumerable()
                     .Where( g => g.IsAuthorized( Rock.Security.Authorization.VIEW, CurrentPerson ) )
@@ -934,7 +943,8 @@ namespace RockWeb.Blocks.Groups
                         IsSecurityRole = g.IsSecurityRole,
                         DateAdded = DateTime.MinValue,
                         IsSynced = groupSyncService.Queryable().Any( gs => gs.GroupId == g.Id ),
-                        MemberCount = groupMemberService.Queryable().Count( gm => gm.GroupId == g.Id )
+                        MemberCount = groupMemberService.Queryable().Count( gm => gm.GroupId == g.Id ),
+                        HasChatChannel = chatChannelGroupIds.Contains( g.Id )
                     } )
                     .AsQueryable()
                     .Sort( sortProperty )
@@ -1029,7 +1039,7 @@ namespace RockWeb.Blocks.Groups
             else
             {
                 lTitle.Text = BlockName;
-                iIcon.AddCssClass( "fa fa-users" );
+                iIcon.AddCssClass( "ti ti-users" );
             }
 
             // if a SetPanelTitle is specified in block settings, use that instead
@@ -1305,6 +1315,11 @@ namespace RockWeb.Blocks.Groups
             /// </summary>
             /// <value>The group is security role.</value>
             public bool IsSecurityRole { get; internal set; }
+
+            /// <summary>
+            /// Gets or sets whether the group has a corresponding chat channel in the external chat system.
+            /// </summary>
+            public bool HasChatChannel { get; set; }
         }
     }
 }

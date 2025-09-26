@@ -38,7 +38,7 @@ namespace Rock.Blocks.Event
     [DisplayName( "Calendar Event Item Occurrence List" )]
     [Category( "Event" )]
     [Description( "Displays the occurrence details for a given calendar event item." )]
-    [IconCssClass( "fa fa-list" )]
+    [IconCssClass( "ti ti-list" )]
     // [SupportedSiteTypes( Model.SiteType.Web )]
 
     [LinkedPage( "Detail Page",
@@ -63,6 +63,7 @@ namespace Rock.Blocks.Event
         IsRequired = true,
         Order = 3 )]
 
+    [Rock.Cms.DefaultBlockRole( Rock.Enums.Cms.BlockRole.Secondary )]
     [Rock.SystemGuid.EntityTypeGuid( "ab765c53-424b-4824-afd6-1174228fd92f" )]
     [Rock.SystemGuid.BlockTypeGuid( "ddc28e7a-e6c0-4081-b4b9-7cd6475e9046" )]
     [CustomizedGrid]
@@ -220,25 +221,6 @@ namespace Rock.Blocks.Event
                     .AsNoTracking()
                     .Where( c => c.EventItemId == eventItem.Id );
 
-                // Filter by Campus
-                if ( FilterCampus.Any() )
-                {
-                    qry = qry
-                        .Where( i =>
-                            !i.CampusId.HasValue
-                            || FilterCampus.Contains( i.Campus.Guid ) );
-                }
-
-                // Contact filter
-                if ( !string.IsNullOrWhiteSpace( FilterContact ) )
-                {
-                    qry = qry.Where( i =>
-                            i.ContactPersonAlias != null &&
-                            i.ContactPersonAlias.Person != null &&
-                            i.ContactPersonAlias.Person.NickName.Contains( FilterContact ) ||
-                            i.ContactPersonAlias.Person.LastName.Contains( FilterContact ) );
-                }
-
                 return qry;
             }
             else
@@ -279,7 +261,7 @@ namespace Rock.Blocks.Event
                 .WithBlock( this )
                 .AddTextField( "idKey", a => a.IdKey )
                 .AddTextField( "campus", a => a.Campus?.Name ?? "All Campuses" )
-                .AddTextField( "date", a => GetNextStartDateTime( a ) )
+                .AddDateTimeField( "date", a => GetNextStartDateTime( a )?.DateTime )
                 .AddTextField( "location", a => a.Location )
                 .AddField( "registrationInstanceId", a => a.Linkages.Any() ? a.Linkages.First().RegistrationInstance?.IdKey : null )
                 .AddTextField( "registration", a => a.Linkages.Any() ? a.Linkages.First().RegistrationInstance?.Name : null )
@@ -297,7 +279,7 @@ namespace Rock.Blocks.Event
         /// </summary>
         /// <param name="eventItemOccurrence">The event item occurrence.</param>
         /// <returns></returns>
-        private string GetNextStartDateTime( EventItemOccurrence eventItemOccurrence )
+        private DateTimeOffset? GetNextStartDateTime( EventItemOccurrence eventItemOccurrence )
         {
             DateTime? nextStartDate = null;
 
@@ -327,7 +309,7 @@ namespace Rock.Blocks.Event
                 }
             }
 
-            return nextStartDate.HasValue ? nextStartDate.ToShortDateString() : "N/A";
+            return nextStartDate.HasValue ? nextStartDate.Value.ToRockDateTimeOffset() : ( DateTimeOffset? ) null;
         }
 
         /// <summary>

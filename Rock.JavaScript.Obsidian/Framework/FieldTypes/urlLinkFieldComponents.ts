@@ -14,7 +14,7 @@
 // limitations under the License.
 // </copyright>
 //
-import { defineComponent, computed, PropType, ref, watch  } from "vue";
+import { defineComponent, computed, ref, watch } from "vue";
 import CheckBox from "@Obsidian/Controls/checkBox.obs";
 import { useVModelPassthrough } from "@Obsidian/Utility/component";
 import UrlLinkBox from "@Obsidian/Controls/urlLinkBox.obs";
@@ -136,8 +136,8 @@ export const ConfigurationComponent = defineComponent({
 
     template: `
 <div>
-    <CheckBox v-model="shouldRequireTrailingForwardSlash" label="Ensure Trailing Forward Slash" text="Yes" help="When set, the URL must end with a forward slash (/) to be valid." />
-    <CheckBox v-model="shouldAlwaysShowCondensed" label="Should always Show Condensed" text="Yes" help="When set, the URL will always be returned as a raw value." />
+    <CheckBox v-model="shouldRequireTrailingForwardSlash" label="Ensure Trailing Forward Slash" help="When set, the URL must end with a forward slash (/) to be valid." />
+    <CheckBox v-model="shouldAlwaysShowCondensed" label="Should always Show Condensed" help="When set, the URL will always be returned as a raw value." />
 </div>
 `
 });

@@ -18,6 +18,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Data.Entity;
 using System.Linq;
 
 using Rock.Attribute;
@@ -37,14 +38,37 @@ namespace Rock.Blocks.Core
     [DisplayName( "Person Following List" )]
     [Category( "Follow" )]
     [Description( "Block for displaying people that current person follows." )]
-    [IconCssClass( "fa fa-list" )]
-    //[SupportedSiteTypes( Model.SiteType.Web )]
+    [IconCssClass( "ti ti-list" )]
+    [SupportedSiteTypes( Model.SiteType.Web )]
 
     [Rock.SystemGuid.EntityTypeGuid( "030b944d-66b5-4edb-aa38-10081e2acfb6" )]
     [Rock.SystemGuid.BlockTypeGuid( "18fa879f-1466-413b-8623-834d728f677b" )]
     [CustomizedGrid]
     public class PersonFollowingList : RockEntityListBlockType<Person>
     {
+        #region Properties
+        /// <summary>
+        /// The Adult Role Id
+        /// </summary>
+        private readonly int _adultRoleId = GroupTypeRoleCache.Get( Rock.SystemGuid.GroupRole.GROUPROLE_FAMILY_MEMBER_ADULT.AsGuid() ).Id;
+
+        /// <summary>
+        /// The Married Status Defined Value Id
+        /// </summary>
+        private readonly int? _marriedStatusValueId = DefinedValueCache.Get( Rock.SystemGuid.DefinedValue.PERSON_MARITAL_STATUS_MARRIED.AsGuid() ).Id;
+
+        /// <summary>
+        /// The Cell/Mobile Phone Defined Value Id
+        /// </summary>
+        private readonly int? _cellPhoneDefinedValueId = DefinedValueCache.Get(Rock.SystemGuid.DefinedValue.PERSON_PHONE_TYPE_MOBILE.AsGuid() ).Id;
+
+        /// <summary>
+        /// The Home Phone Defined Value Id
+        /// </summary>
+        private readonly int? _homePhoneDefinedValueId = DefinedValueCache.Get( Rock.SystemGuid.DefinedValue.PERSON_PHONE_TYPE_HOME.AsGuid() ).Id;
+
+        #endregion
+
         #region Methods
 
         /// <inheritdoc/>
@@ -93,7 +117,13 @@ namespace Rock.Blocks.Core
         protected override IQueryable<Person> GetListQueryable( RockContext rockContext )
         {
             var currentPerson = GetCurrentPerson();
-            return new FollowingService( RockContext ).GetFollowedPersonItems( currentPerson.PrimaryAliasId.Value );
+
+            // NOTE: If we try to get this down to one query by adding several more Includes
+            // (such as "Members.Group", "Members.Group.Members") it generates a 1200+ line
+            // SQL query that results in something like Cartesian Product.
+            return new FollowingService( RockContext ).GetFollowedPersonItems( currentPerson.PrimaryAliasId.Value )
+                .Include( "PhoneNumbers" )
+                .Include( "Members" );
         }
 
         /// <inheritdoc/>
@@ -110,7 +140,7 @@ namespace Rock.Blocks.Core
                 .AddTextField( "idKey", a => a.IdKey )
                 .AddPersonField( "name", a => a )
                 .AddDateTimeField( "birthDate", a => a.BirthDate )
-                .AddTextField( "email", a => a.Email )
+                .AddTextField( "email", a => a.Email ?? "" )
                 .AddField( "guid", a => a.Guid )
                 .AddTextField( "homePhone", a => GetHomePhone( a ) )
                 .AddTextField( "cellPhone", a => GetCellPhone( a ) )
@@ -124,18 +154,20 @@ namespace Rock.Blocks.Core
         /// <returns></returns>
         private Person GetSpouse( Person person )
         {
-            var adultGuid = Rock.SystemGuid.GroupRole.GROUPROLE_FAMILY_MEMBER_ADULT.AsGuid();
-            var marriedGuid = Rock.SystemGuid.DefinedValue.PERSON_MARITAL_STATUS_MARRIED.AsGuid();
-
-            return person.Members.Where( m =>
-                    person.MaritalStatusValue.Guid.Equals( marriedGuid ) &&
-                    m.GroupRole.Guid.Equals( adultGuid ) )
+            // Early null check to return null if not married or no spouse found.
+            if ( person.MaritalStatusValueId != _marriedStatusValueId )
+            {
+                return null;
+            }
+            
+            return person.Members
+                .Where( m => m.GroupRoleId == _adultRoleId )
                 .SelectMany( m => m.Group.Members )
                 .Where( m =>
                     m.PersonId != person.Id &&
-                    m.GroupRole.Guid.Equals( adultGuid ) &&
-                    m.Person.MaritalStatusValue.Guid.Equals( marriedGuid ) )
-                .Select( s => s.Person )
+                    m.GroupRoleId == _adultRoleId &&
+                    m.Person.MaritalStatusValueId == _marriedStatusValueId )
+                .Select( gm => gm.Person )
                 .FirstOrDefault();
         }
 
@@ -146,8 +178,7 @@ namespace Rock.Blocks.Core
         /// <returns></returns>
         private string GetCellPhone( Person person )
         {
-            var cellPhoneGuid = Rock.SystemGuid.DefinedValue.PERSON_PHONE_TYPE_MOBILE.AsGuid();
-            return person.PhoneNumbers.Where( n => n.NumberTypeValue.Guid.Equals( cellPhoneGuid ) )
+            return person.PhoneNumbers.Where( n => n.NumberTypeValueId.Equals( _cellPhoneDefinedValueId ) )
                 .Select( n => n.NumberFormatted )
                 .FirstOrDefault();
         }
@@ -159,8 +190,7 @@ namespace Rock.Blocks.Core
         /// <returns></returns>
         private string GetHomePhone( Person person )
         {
-            var homePhoneGuid = Rock.SystemGuid.DefinedValue.PERSON_PHONE_TYPE_HOME.AsGuid();
-            return person.PhoneNumbers.Where( n => n.NumberTypeValue.Guid.Equals( homePhoneGuid ) )
+            return person.PhoneNumbers.Where( n => n.NumberTypeValueId.Equals( _homePhoneDefinedValueId ) )
                 .Select( n => n.NumberFormatted )
                 .FirstOrDefault();
         }

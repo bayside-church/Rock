@@ -3,8 +3,10 @@
     <Grid :definition="config.gridDefinition ?? undefined"
           :data="gridDataSource"
           itemTerm="Consumer"
+          title="Consumers"
           stickyHeader
           liveUpdates
+          :showMergeTemplate="false"
           :showLaunchWorkflow="false">
 
         <TextColumn name="queueName"

@@ -76,7 +76,7 @@ namespace RockWeb.Blocks.Groups
             var groupService = new GroupService( new RockContext() );
             var groups = new List<Group>();
 
-            if ( !string.IsNullOrWhiteSpace( type ) && !string.IsNullOrWhiteSpace( term ) )
+            if ( !string.IsNullOrWhiteSpace( type ) && !string.IsNullOrWhiteSpace( term ) && !term.IsSingleSpecialCharacter() )
             {
                 switch ( type.ToLower() )
                 {
@@ -153,7 +153,7 @@ namespace RockWeb.Blocks.Groups
 
             if ( !string.IsNullOrWhiteSpace( prefix ) )
             {
-                prefix += " <i class='fa fa-angle-right'></i> ";
+                prefix += " <i class='ti ti-chevron-right'></i> ";
             }
 
             var mergeFields = new Dictionary<string, object>( _commonMergeFields )

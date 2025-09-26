@@ -48,6 +48,7 @@ namespace RockWeb.Blocks.Finance
         DefaultValue = Rock.SystemGuid.FinancialStatementTemplate.ROCK_DEFAULT,
         Order = 1 )]
 
+    [Rock.Cms.DefaultBlockRole( Rock.Enums.Cms.BlockRole.Primary )]
     [Rock.SystemGuid.BlockTypeGuid( "E0A699C3-61AA-4522-9067-1FE56FA80972" )]
     public partial class ContributionStatementGenerator : RockBlock
     {
@@ -206,6 +207,20 @@ namespace RockWeb.Blocks.Finance
             };
 
             var result = FinancialStatementGeneratorHelper.GetStatementGeneratorRecipientResult( financialStatementGeneratorRecipientRequest, this.CurrentPerson );
+
+            if ( !string.IsNullOrWhiteSpace( result.FooterHtmlFragment ) )
+            {
+                // Insert the footer text before the closing body tag
+                var insertPosition = result.Html.IndexOf( "</body>" );
+                if ( insertPosition >= 0 )
+                {
+                    result.Html = result.Html.Insert( insertPosition, result.FooterHtmlFragment );
+                }
+                else
+                {
+                    result.Html += result.FooterHtmlFragment;
+                }
+            }
 
             Response.Write( result.Html );
             Response.End();

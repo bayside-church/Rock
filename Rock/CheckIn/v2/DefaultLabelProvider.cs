@@ -75,10 +75,11 @@ namespace Rock.CheckIn.v2
         /// </summary>
         /// <param name="checkInResult">The attendance records to render labels for.</param>
         /// <param name="kiosk">The kiosk requesting the print or <see langword="null"/> if not known.</param>
+        /// <param name="printerOverride">The printer to use regardless of the check-in and device configuration.</param>
         /// <param name="printProvider">The instance that will handle sending data to the physical printers.</param>
         /// <param name="cancellationToken">A token that will be triggered if the operation should be aborted.</param>
         /// <returns>A list of <see cref="RenderedLabel"/> objects that should be printed on the client.</returns>
-        public Task<List<RenderedLabel>> RenderAndPrintCheckInLabelsAsync( CheckInResultBag checkInResult, DeviceCache kiosk, LabelPrintProvider printProvider, CancellationToken cancellationToken = default )
+        public Task<List<RenderedLabel>> RenderAndPrintCheckInLabelsAsync( CheckInResultBag checkInResult, DeviceCache kiosk, DeviceCache printerOverride, LabelPrintProvider printProvider, CancellationToken cancellationToken = default )
         {
             List<RenderedLabel> labels;
 
@@ -86,14 +87,14 @@ namespace Rock.CheckIn.v2
             {
                 activity?.AddTag( "rock.checkin.print_provider", GetType().FullName );
 
-                labels = RenderLabels( checkInResult.Attendances, kiosk, false );
+                labels = RenderLabels( checkInResult.Attendances, kiosk, printerOverride, false );
             }
 
             using ( var activity = ObservabilityHelper.StartActivity( "Print Labels" ) )
             {
                 activity?.AddTag( "rock.checkin.print_provider", GetType().FullName );
 
-                return PrintLabelsAsync( labels, kiosk, printProvider, cancellationToken, msg =>
+                return PrintLabelsAsync( labels, printProvider, cancellationToken, msg =>
                         checkInResult.Messages.Add( msg ) );
             }
         }
@@ -104,10 +105,11 @@ namespace Rock.CheckIn.v2
         /// </summary>
         /// <param name="checkOutResult">The result of the checkout operation to add additional messages to.</param>
         /// <param name="kiosk">The kiosk requesting the print or <see langword="null"/> if not known.</param>
+        /// <param name="printerOverride">The printer to use regardless of the check-in and device configuration.</param>
         /// <param name="printProvider">The instance that will handle sending data to the physical printers.</param>
         /// <param name="cancellationToken">A token that will be triggered if the operation should be aborted.</param>
         /// <returns>A list of <see cref="RenderedLabel"/> objects that should be printed on the client.</returns>
-        public Task<List<RenderedLabel>> RenderAndPrintCheckoutLabelsAsync( CheckoutResultBag checkOutResult, DeviceCache kiosk, LabelPrintProvider printProvider, CancellationToken cancellationToken = default )
+        public Task<List<RenderedLabel>> RenderAndPrintCheckoutLabelsAsync( CheckoutResultBag checkOutResult, DeviceCache kiosk, DeviceCache printerOverride, LabelPrintProvider printProvider, CancellationToken cancellationToken = default )
         {
             List<RenderedLabel> labels;
 
@@ -120,14 +122,14 @@ namespace Rock.CheckIn.v2
                     .Where( a => a.HasValue )
                     .Select( a => a.Value )
                     .ToList();
-                labels = RenderLabels( attendanceIds, kiosk, checkout: true );
+                labels = RenderLabels( attendanceIds, kiosk, printerOverride, checkout: true );
             }
 
             using ( var activity = ObservabilityHelper.StartActivity( "Print Labels" ) )
             {
                 activity?.AddTag( "rock.checkin.print_provider", GetType().FullName );
 
-                return PrintLabelsAsync( labels, kiosk, printProvider, cancellationToken, msg =>
+                return PrintLabelsAsync( labels, printProvider, cancellationToken, msg =>
                     checkOutResult.Messages.Add( msg ) );
             }
         }
@@ -136,12 +138,11 @@ namespace Rock.CheckIn.v2
         /// Renders all the labels for check-out operation.
         /// </summary>
         /// <param name="labels">The rendered labels that should be printed.</param>
-        /// <param name="kiosk">The kiosk requesting the print or <see langword="null"/> if not known.</param>
         /// <param name="printProvider">The instance that will handle sending data to the physical printers.</param>
         /// <param name="cancellationToken">A token that will be triggered if the operation should be aborted.</param>
         /// <param name="messageCallback">The callback when a print related message needs to be recorded.</param>
         /// <returns>A list of <see cref="RenderedLabel"/> objects that should be printed on the client.</returns>
-        private async Task<List<RenderedLabel>> PrintLabelsAsync( List<RenderedLabel> labels, DeviceCache kiosk, LabelPrintProvider printProvider, CancellationToken cancellationToken, Action<string> messageCallback )
+        private async Task<List<RenderedLabel>> PrintLabelsAsync( List<RenderedLabel> labels, LabelPrintProvider printProvider, CancellationToken cancellationToken, Action<string> messageCallback )
         {
             // Add any error messages from labels that failed to render.
             var errorMessages = labels
@@ -187,9 +188,10 @@ namespace Rock.CheckIn.v2
         /// </summary>
         /// <param name="allRecordedAttendance">The attendance records to render labels for.</param>
         /// <param name="kiosk">The kiosk requesting the print or <see langword="null"/> if not known.</param>
+        /// <param name="printerOverride">The printer to use regardless of the check-in and device configuration.</param>
         /// <param name="checkout"><c>true</c> if the labels to be rendered are for a checkout operation; otherwise <c>false</c>.</param>
         /// <returns>A list of <see cref="RenderedLabel"/> objects that contain all the information required to print the labels.</returns>
-        public List<RenderedLabel> RenderLabels( List<RecordedAttendanceBag> allRecordedAttendance, DeviceCache kiosk, bool checkout )
+        public List<RenderedLabel> RenderLabels( List<RecordedAttendanceBag> allRecordedAttendance, DeviceCache kiosk, DeviceCache printerOverride, bool checkout )
         {
             var attendanceIds = allRecordedAttendance
                 .Select( a => IdHasher.Instance.GetId( a.Attendance.Id ) )
@@ -203,7 +205,7 @@ namespace Rock.CheckIn.v2
             var allAttendance = allAttendanceQry.ToList();
 
             var attendanceLabels = allAttendance
-                .Select( a => new AttendanceLabel( a, allRecordedAttendance.First( ra => ra.Attendance.Id == a.IdKey), RockContext ) )
+                .Select( a => new LabelAttendanceDetail( a, allRecordedAttendance.First( ra => ra.Attendance.Id == a.IdKey), RockContext ) )
                 .Where( a => a.Area != null && a.Group != null && a.Location != null && a.Schedule != null )
                 .ToList();
 
@@ -215,13 +217,14 @@ namespace Rock.CheckIn.v2
             attendanceLabels.Select( a => a.Person )
                 .Where( p => p.Attributes == null )
                 .DistinctBy( p => p.Id )
+                .ToList()
                 .LoadAttributes( RockContext );
 
             var sessionFamily = allAttendance.Where( a => a.SearchResultGroupId.HasValue ).FirstOrDefault()?.SearchResultGroup;
 
             return !checkout
-                ? RenderCheckInLabels( attendanceLabels, sessionFamily, kiosk )
-                : RenderCheckOutLabels( attendanceLabels, sessionFamily, kiosk );
+                ? RenderCheckInLabels( attendanceLabels, sessionFamily, kiosk, printerOverride )
+                : RenderCheckOutLabels( attendanceLabels, sessionFamily, kiosk, printerOverride );
         }
 
         /// <summary>
@@ -229,15 +232,16 @@ namespace Rock.CheckIn.v2
         /// </summary>
         /// <param name="attendanceIds">The identifiers of the <see cref="Attendance"/> records to generate labels for.</param>
         /// <param name="kiosk">The kiosk requesting the print or <see langword="null"/> if not known.</param>
+        /// <param name="printerOverride">The printer to use regardless of the check-in and device configuration.</param>
         /// <param name="checkout"><c>true</c> if the labels to be rendered are for a checkout operation; otherwise <c>false</c>.</param>
         /// <returns>A list of <see cref="RenderedLabel"/> objects that contain all the information required to print the labels.</returns>
-        public List<RenderedLabel> RenderLabels( List<int> attendanceIds, DeviceCache kiosk, bool checkout )
+        public List<RenderedLabel> RenderLabels( List<int> attendanceIds, DeviceCache kiosk, DeviceCache printerOverride, bool checkout )
         {
             var allAttendanceQry = GetAttendanceQuery();
 
             allAttendanceQry = CheckInDirector.WhereContains( allAttendanceQry, attendanceIds, a => a.Id );
 
-            return RenderLabels( allAttendanceQry.ToList(), kiosk, checkout );
+            return RenderLabels( allAttendanceQry.ToList(), kiosk, printerOverride, checkout );
         }
 
         /// <summary>
@@ -245,12 +249,13 @@ namespace Rock.CheckIn.v2
         /// </summary>
         /// <param name="allAttendance">The <see cref="Attendance"/> records to generate labels for.</param>
         /// <param name="kiosk">The kiosk requesting the print or <see langword="null"/> if not known.</param>
+        /// <param name="printerOverride">The printer to use regardless of the check-in and device configuration.</param>
         /// <param name="checkout"><c>true</c> if the labels to be rendered are for a checkout operation; otherwise <c>false</c>.</param>
         /// <returns>A list of <see cref="RenderedLabel"/> objects that contain all the information required to print the labels.</returns>
-        private List<RenderedLabel> RenderLabels( List<Attendance> allAttendance, DeviceCache kiosk, bool checkout )
+        private List<RenderedLabel> RenderLabels( List<Attendance> allAttendance, DeviceCache kiosk, DeviceCache printerOverride, bool checkout )
         {
             var attendanceLabels = allAttendance
-                .Select( a => new AttendanceLabel( a, RockContext ) )
+                .Select( a => new LabelAttendanceDetail( a, RockContext ) )
                 .Where( a => a.Area != null && a.Group != null && a.Location != null && a.Schedule != null )
                 .ToList();
 
@@ -262,13 +267,14 @@ namespace Rock.CheckIn.v2
             attendanceLabels.Select( a => a.Person )
                 .Where( p => p.Attributes == null )
                 .DistinctBy( p => p.Id )
+                .ToList()
                 .LoadAttributes( RockContext );
 
             var sessionFamily = allAttendance.Where( a => a.SearchResultGroupId.HasValue ).FirstOrDefault()?.SearchResultGroup;
 
             return !checkout
-                ? RenderCheckInLabels( attendanceLabels, sessionFamily, kiosk )
-                : RenderCheckOutLabels( attendanceLabels, sessionFamily, kiosk );
+                ? RenderCheckInLabels( attendanceLabels, sessionFamily, kiosk, printerOverride )
+                : RenderCheckOutLabels( attendanceLabels, sessionFamily, kiosk, printerOverride );
         }
 
         /// <summary>
@@ -277,8 +283,9 @@ namespace Rock.CheckIn.v2
         /// <param name="attendanceLabels">All attendance records to render labels for.</param>
         /// <param name="sessionFamily">The family that was matched during the check-in operation, may be <see langword="null"/>.</param>
         /// <param name="kiosk">The kiosk requesting the print or <see langword="null"/> if not known.</param>
+        /// <param name="printerOverride">The printer to use regardless of the check-in and device configuration.</param>
         /// <returns>A list of <see cref="RenderedLabel"/> objects that contain all the information required to print the labels.</returns>
-        private List<RenderedLabel> RenderCheckInLabels( List<AttendanceLabel> attendanceLabels, Group sessionFamily, DeviceCache kiosk )
+        private List<RenderedLabel> RenderCheckInLabels( List<LabelAttendanceDetail> attendanceLabels, Group sessionFamily, DeviceCache kiosk, DeviceCache printerOverride )
         {
             if ( attendanceLabels == null || attendanceLabels.Count == 0 )
             {
@@ -299,7 +306,24 @@ namespace Rock.CheckIn.v2
             // Get all the labels that will be printed for each person.
             var personLabelsToPrint = groupTypeLabels
                 .Where( gtl => gtl.CheckInLabel.LabelType == LabelType.Person )
-                .DistinctBy( gtl => gtl.CheckInLabel.Id )
+                .DistinctBy( gtl => new
+                {
+                    gtl.AreaId,
+                    LabelId = gtl.CheckInLabel.Id
+                } )
+                .OrderBy( gtl => gtl.Order )
+                .ThenBy( gtl => gtl.CheckInLabel.Id )
+                .ToList();
+
+            // Get all the labels that will be printed for each person and
+            // location combination.
+            var personLocationLabelsToPrint = groupTypeLabels
+                .Where( gtl => gtl.CheckInLabel.LabelType == LabelType.PersonLocation )
+                .DistinctBy( gtl => new
+                {
+                    gtl.AreaId,
+                    LabelId = gtl.CheckInLabel.Id
+                } )
                 .OrderBy( gtl => gtl.Order )
                 .ThenBy( gtl => gtl.CheckInLabel.Id )
                 .ToList();
@@ -314,31 +338,55 @@ namespace Rock.CheckIn.v2
                 .ToList();
 
             var labels = new List<RenderedLabel>();
-            var attendanceLabelsByPerson = attendanceLabels.GroupBy( a => a.Person.Id );
+            var personIds = attendanceLabels.Select( a => a.Person.Id ).Distinct();
 
             // Print all family labels first.
             labels.AddRange( RenderLabels( familyLabelsToPrint,
                 attendanceLabels,
                 attendanceLabels,
                 kiosk,
+                printerOverride,
                 sessionFamily ) );
 
             // Now print person and attendance labels, grouped by person.
-            foreach ( var labelsByPerson in attendanceLabelsByPerson )
+            foreach ( var personId in personIds )
             {
+                var attendanceLabelsForPerson = attendanceLabels.Where( a => a.Person.Id == personId ).ToList();
+
                 // Print labels that get printed once per person.
                 labels.AddRange( RenderLabels( personLabelsToPrint,
-                    labelsByPerson,
+                    attendanceLabelsForPerson,
                     attendanceLabels,
                     kiosk,
-                    sessionFamily ) );
+                    printerOverride,
+                    sessionFamily,
+                    preventDuplicateLabels: true ) );
+
+                // Print labels that get printed once per location for the
+                // person.
+                var attendanceLabelsByLocations = attendanceLabelsForPerson
+                    .GroupBy( a => a.Location.Id );
+                foreach ( var attendanceLabelsByLocation in attendanceLabelsByLocations )
+                {
+                    labels.AddRange( RenderLabels( personLocationLabelsToPrint,
+                        attendanceLabelsByLocation,
+                        attendanceLabels,
+                        kiosk,
+                        printerOverride,
+                        sessionFamily,
+                        preventDuplicateLabels: true ) );
+                }
 
                 // Print labels that get printed for every attendance record.
-                labels.AddRange( RenderLabels( attendanceLabelsToPrint,
-                    labelsByPerson,
-                    attendanceLabels,
-                    kiosk,
-                    sessionFamily ) );
+                foreach ( var personLabel in attendanceLabelsForPerson )
+                {
+                    labels.AddRange( RenderLabels( attendanceLabelsToPrint,
+                        new List<LabelAttendanceDetail> { personLabel },
+                        attendanceLabels,
+                        kiosk,
+                        printerOverride,
+                        sessionFamily ) );
+                }
             }
 
             return labels;
@@ -350,8 +398,9 @@ namespace Rock.CheckIn.v2
         /// <param name="attendanceLabels">All attendance records to render labels for.</param>
         /// <param name="sessionFamily">The family that was matched during the check-in operation, may be <see langword="null"/>.</param>
         /// <param name="kiosk">The kiosk requesting the print or <see langword="null"/> if not known.</param>
+        /// <param name="printerOverride">The printer to use regardless of the check-in and device configuration.</param>
         /// <returns>A list of <see cref="RenderedLabel"/> objects that contain all the information required to print the labels.</returns>
-        private List<RenderedLabel> RenderCheckOutLabels( List<AttendanceLabel> attendanceLabels, Group sessionFamily, DeviceCache kiosk )
+        private List<RenderedLabel> RenderCheckOutLabels( List<LabelAttendanceDetail> attendanceLabels, Group sessionFamily, DeviceCache kiosk, DeviceCache printerOverride )
         {
             if ( attendanceLabels == null || attendanceLabels.Count == 0 )
             {
@@ -374,9 +423,10 @@ namespace Rock.CheckIn.v2
             foreach ( var attendanceLabel in attendanceLabels )
             {
                 labels.AddRange( RenderLabels( checkoutLabelsToPrint,
-                    new AttendanceLabel[] { attendanceLabel },
+                    new LabelAttendanceDetail[] { attendanceLabel },
                     attendanceLabels,
                     kiosk,
+                    printerOverride,
                     sessionFamily ) );
             }
 
@@ -443,12 +493,12 @@ namespace Rock.CheckIn.v2
         /// <param name="sessionFamily">The family that was matched during the check-in operation, may be <see langword="null"/>.</param>
         /// <param name="printer">The device that the label will be sent to, may be <see langword="null"/>.</param>
         /// <returns>A new instance of <see cref="RenderedLabel"/> that contains either the data to be printed or an error message, will be <see langword="null"/> if the label conditions prevent rendering.</returns>
-        public RenderedLabel RenderLabel( Rock.Model.CheckInLabel label, AttendanceLabel attendanceLabel, List<AttendanceLabel> attendanceLabels, Group sessionFamily, DeviceCache printer )
+        public RenderedLabel RenderLabel( Rock.Model.CheckInLabel label, LabelAttendanceDetail attendanceLabel, List<LabelAttendanceDetail> attendanceLabels, Group sessionFamily, DeviceCache printer )
         {
             var labelData = GetLabelData( label.LabelType, attendanceLabel, attendanceLabels, sessionFamily );
 
             var filter = label.GetConditionalPrintCriteria();
-            var builder = new Reporting.FieldFilterExpressionBuilder();
+            var builder = new CheckInFieldFilterBuilder();
             var fn = builder.GetIsMatchFunction( filter, labelData.GetType() );
 
             if ( !fn( labelData ) )
@@ -470,16 +520,25 @@ namespace Rock.CheckIn.v2
         /// <param name="sessionFamily">The family that was matched during the check-in operation, may be <see langword="null"/>.</param>
         /// <param name="printer">The device that the label will be sent to, may be <see langword="null"/>.</param>
         /// <returns>A new instance of <see cref="RenderedLabel"/> that contains either the data to be printed or an error message, will be <see langword="null"/> if the label conditions prevent rendering.</returns>
-        public RenderedLabel RenderLabelUnconditionally( Rock.Model.CheckInLabel label, AttendanceLabel attendanceLabel, List<AttendanceLabel> attendanceLabels, Group sessionFamily, DeviceCache printer )
+        public RenderedLabel RenderLabelUnconditionally( Rock.Model.CheckInLabel label, LabelAttendanceDetail attendanceLabel, List<LabelAttendanceDetail> attendanceLabels, Group sessionFamily, DeviceCache printer )
         {
             var people = new List<Person>( attendanceLabels.Count + 1 );
 
-            people.AddRange( attendanceLabels.Select( a => a.Person ) );
-            people.Add( attendanceLabel.Person );
+            people.AddRange( attendanceLabels.Where( a => a.Person != null ).Select( a => a.Person ) );
 
-            people.Where( p => p.Attributes == null )
-                .DistinctBy( p => p.Id )
-                .LoadAttributes( RockContext );
+            if ( attendanceLabel.Person != null )
+            {
+                people.Add( attendanceLabel.Person );
+            }
+
+            if ( people.Count > 0 )
+            {
+                people.Where( p => p.Attributes == null )
+                    .DistinctBy( p => p.Id )
+                    .ToList()
+                    .LoadAttributes( RockContext );
+            }
+
 
             var labelData = GetLabelData( label.LabelType, attendanceLabel, attendanceLabels, sessionFamily );
 
@@ -529,11 +588,13 @@ namespace Rock.CheckIn.v2
                 }
 
                 var hasCutter = printer?.GetAttributeValue( DeviceAttributeKey.DEVICE_HAS_CUTTER ).AsBoolean() ?? false;
+                var dpi = printer?.GetAttributeValue( DeviceAttributeKey.DEVICE_PRINTER_DPI ).AsIntegerOrNull();
 
                 var printRequest = new PrintLabelRequest
                 {
                     Capabilities = new PrinterCapabilities
                     {
+                        Dpi = dpi,
                         IsCutterSupported = hasCutter
                     },
                     RockContext = RockContext,
@@ -564,6 +625,8 @@ namespace Rock.CheckIn.v2
 
                     return new RenderedLabel
                     {
+                        LabelId = label.IdKey,
+                        LabelName = label.Name,
                         Data = memoryStream.ToArray(),
                         PrintTo = printer
                     };
@@ -576,15 +639,24 @@ namespace Rock.CheckIn.v2
         /// These will contain all information required to print the labels.
         /// </summary>
         /// <param name="labelsToPrint">The set of label definitions to generate.</param>
-        /// <param name="filteredAttendanceLabels">The <see cref="AttendanceLabel"/> objects that have been filtered down for this operation, such as all records for a person.</param>
+        /// <param name="filteredAttendanceLabels">The <see cref="LabelAttendanceDetail"/> objects that have been filtered down for this operation, such as all records for a person.</param>
         /// <param name="attendanceLabels">All attendance data for the check-in session.</param>
         /// <param name="kiosk">The kiosk performing the operation, may be <see langword="null"/>.</param>
+        /// <param name="printerOverride">The printer to use regardless of the check-in and device configuration.</param>
         /// <param name="sessionFamily">The family that was matched during the check-in operation, may be <see langword="null"/>.</param>
+        /// <param name="preventDuplicateLabels">If <c>true</c> then duplicate <see cref="CheckInLabel"/> instances will be skipped.</param>
         /// <returns>A set of labels to be printed.</returns>
-        private IEnumerable<RenderedLabel> RenderLabels( List<OrderedAreaLabel> labelsToPrint, IEnumerable<AttendanceLabel> filteredAttendanceLabels, List<AttendanceLabel> attendanceLabels, DeviceCache kiosk, Group sessionFamily )
+        private IEnumerable<RenderedLabel> RenderLabels( List<OrderedAreaLabel> labelsToPrint, IEnumerable<LabelAttendanceDetail> filteredAttendanceLabels, List<LabelAttendanceDetail> attendanceLabels, DeviceCache kiosk, DeviceCache printerOverride, Group sessionFamily, bool preventDuplicateLabels = false )
         {
+            var renderedLabelIds = new List<int>( labelsToPrint.Count );
+
             foreach ( var label in labelsToPrint )
             {
+                if ( preventDuplicateLabels && renderedLabelIds.Contains( label.CheckInLabel.Id ) )
+                {
+                    continue;
+                }
+
                 var attendanceLabel = filteredAttendanceLabels
                     .FirstOrDefault( al => al.Area.Id == label.AreaId );
 
@@ -595,7 +667,9 @@ namespace Rock.CheckIn.v2
                     continue;
                 }
 
-                var printer = GetPrintToDevice( kiosk, attendanceLabel );
+                renderedLabelIds.Add( label.CheckInLabel.Id );
+
+                var printer = printerOverride ?? GetPrintToDevice( kiosk, attendanceLabel );
                 var labelData = RenderLabel( label.CheckInLabel, attendanceLabel, attendanceLabels, sessionFamily, printer );
 
                 if ( labelData != null )
@@ -615,7 +689,7 @@ namespace Rock.CheckIn.v2
         /// <param name="kiosk">The kiosk requesting the print or <see langword="null"/> if not known.</param>
         /// <param name="attendance">The attendance record related to the print request.</param>
         /// <returns>The device to send the label to or <see langword="null"/> if unknown.</returns>
-        private DeviceCache GetPrintToDevice( DeviceCache kiosk, AttendanceLabel attendance )
+        private DeviceCache GetPrintToDevice( DeviceCache kiosk, LabelAttendanceDetail attendance )
         {
             var printTo = kiosk?.PrintToOverride ?? PrintTo.Default;
 
@@ -646,7 +720,7 @@ namespace Rock.CheckIn.v2
         /// <param name="allAttendance">All attendance records related to this check-in session.</param>
         /// <param name="family">The family group that was used to search during the check-in session.</param>
         /// <returns>The label data object for the label type or <see langword="null"/> if <paramref name="labelType"/> was not valid.</returns>
-        private object GetLabelData( LabelType labelType, AttendanceLabel attendance, List<AttendanceLabel> allAttendance, Group family )
+        private object GetLabelData( LabelType labelType, LabelAttendanceDetail attendance, List<LabelAttendanceDetail> allAttendance, Group family )
         {
             if ( labelType == LabelType.Family )
             {
@@ -663,6 +737,10 @@ namespace Rock.CheckIn.v2
             else if ( labelType == LabelType.Checkout )
             {
                 return new CheckoutLabelData( attendance, family, RockContext );
+            }
+            else if ( labelType == LabelType.PersonLocation )
+            {
+                return new PersonLocationLabelData( attendance.Person, attendance.Location, allAttendance, RockContext );
             }
 
             return null;

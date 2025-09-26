@@ -17,13 +17,16 @@
 //
 
 using System;
-using System.Web;
+using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Text;
+using System.Web;
+
 using Rock;
-using Rock.Communication.SmsActions;
 using Rock.Communication;
+using Rock.Communication.Medium;
+using Rock.Communication.SmsActions;
 using Rock.Data;
 using Rock.Model;
 using Rock.SystemKey;
@@ -111,8 +114,12 @@ class TwilioSmsResponseAsync : TwilioDefaultResponseAsync
             Message = body
         };
 
-        if ( !string.IsNullOrWhiteSpace( message.ToNumber ) && !string.IsNullOrWhiteSpace( message.FromNumber ) )
+        if ( message.ToNumber.IsNotNullOrWhiteSpace() && message.FromNumber.IsNotNullOrWhiteSpace() )
         {
+            // Opt-in/opt-out tracking should be processed before anything else, to ensure we respect the sender's
+            // preferences and also to ensure we remain compliant with messaging regulations.
+            SmsActionService.TryUpdateOptInOutTrackingForSender( message );
+
             using ( var rockContext = new RockContext() )
             {
                 message.FromPerson = new PersonService( rockContext ).GetPersonFromMobilePhoneNumber( message.FromNumber, true );
@@ -136,7 +143,7 @@ class TwilioSmsResponseAsync : TwilioDefaultResponseAsync
                             imageGuid = Guid.NewGuid();
 
                             var httpWebRequest = ( HttpWebRequest ) HttpWebRequest.Create( imageUrl );
-                            httpWebRequest.Headers["Authorization"] = "Basic " + Convert.ToBase64String(Encoding.Default.GetBytes(accountSid + ":" + authToken));
+                            httpWebRequest.Headers["Authorization"] = "Basic " + Convert.ToBase64String( Encoding.Default.GetBytes( accountSid + ":" + authToken ) );
 
                             var httpWebResponse = ( HttpWebResponse ) httpWebRequest.GetResponse();
 
@@ -163,7 +170,7 @@ class TwilioSmsResponseAsync : TwilioDefaultResponseAsync
                     return null;
                 }
 
-                if ( !string.IsNullOrWhiteSpace( smsResponse.Message ) )
+                if ( smsResponse.Message.IsNotNullOrWhiteSpace() )
                 {
                     twilioMessage.Body( smsResponse.Message );
                 }

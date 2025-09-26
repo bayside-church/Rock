@@ -26,6 +26,8 @@ using Rock.Attribute;
 using Rock.Data;
 using Rock.Model;
 using Rock.Reporting;
+using Rock.Security.SecurityGrantRules;
+using Rock.Security;
 using Rock.Utility;
 using Rock.ViewModels.Utility;
 using Rock.Web.Cache;
@@ -37,15 +39,18 @@ namespace Rock.Field.Types
     /// Field Type used to display a dropdown list of binary files of a specific type
     /// Stored as BinaryFile's Guid
     /// </summary>
+    [FieldTypeUsage( FieldTypeUsage.System )]
     [RockPlatformSupport( Utility.RockPlatform.WebForms, Utility.RockPlatform.Obsidian )]
     [Rock.SystemGuid.FieldTypeGuid( Rock.SystemGuid.FieldType.BINARY_FILE )]
-    public class BinaryFileFieldType : FieldType, IEntityFieldType, IEntityReferenceFieldType
+    public class BinaryFileFieldType : FieldType, IEntityFieldType, IEntityReferenceFieldType, ISecurityGrantFieldType
     {
         #region Configuration
 
         private const string BINARY_FILE_TYPE = "binaryFileType";
 
         private const string BINARY_FILE_TYPES_PROPERTY_KEY = "binaryFileTypes";
+
+        private const string BINARY_FILE_OPTIONS = "binaryFileOptions";
 
         /// <inheritdoc/>
         public override Dictionary<string, string> GetPublicEditConfigurationProperties( Dictionary<string, string> privateConfigurationValues )
@@ -161,42 +166,55 @@ namespace Rock.Field.Types
         /// <inheritdoc/>
         public override Dictionary<string, string> GetPrivateConfigurationValues( Dictionary<string, string> publicConfigurationValues )
         {
-            var configurationProperties = base.GetPrivateConfigurationValues( publicConfigurationValues );
+            var configurationValues = base.GetPrivateConfigurationValues( publicConfigurationValues );
 
-            // Get the Guid value if one exists.
-            if ( publicConfigurationValues.ContainsKey( BINARY_FILE_TYPE ) )
-            {
-                var publicValue = publicConfigurationValues[BINARY_FILE_TYPE].FromJsonOrNull<ListItemBag>();
+            var publicValue = publicConfigurationValues.GetValueOrNull( BINARY_FILE_TYPE )?.FromJsonOrNull<ListItemBag>()?.Value;
+            configurationValues[BINARY_FILE_TYPE] = publicValue ?? string.Empty;
 
-                if ( !string.IsNullOrWhiteSpace( publicValue?.Value ) )
-                {
-                    configurationProperties[BINARY_FILE_TYPE] = publicValue.Value;
-                }
-            }
+            configurationValues.Remove( BINARY_FILE_OPTIONS );
 
-            return configurationProperties;
+            return configurationValues;
         }
 
         /// <inheritdoc/>
         public override Dictionary<string, string> GetPublicConfigurationValues( Dictionary<string, string> privateConfigurationValues, ConfigurationValueUsage usage, string value )
         {
-            var configurationProperties = base.GetPublicConfigurationValues( privateConfigurationValues, usage, value );
-
-            if ( privateConfigurationValues.ContainsKey( BINARY_FILE_TYPE ) )
+            if ( usage != ConfigurationValueUsage.View )
             {
-                var guidValue = privateConfigurationValues[BINARY_FILE_TYPE];
-
-                if ( !string.IsNullOrWhiteSpace( guidValue ) && Guid.TryParse( guidValue, out Guid guid ) )
+                using ( var rockContext = new RockContext() )
                 {
-                    configurationProperties[BINARY_FILE_TYPE] = new ListItemBag()
+                    var configurationValues = base.GetPublicConfigurationValues( privateConfigurationValues, usage, value );
+
+                    var binaryFileTypeGuid = privateConfigurationValues.GetValueOrNull( BINARY_FILE_TYPE )?.AsGuidOrNull();
+                    var binaryFileType = BinaryFileTypeCache.Get( binaryFileTypeGuid ?? Guid.Empty );
+
+                    if ( binaryFileType != null )
                     {
-                        Text = BinaryFileTypeCache.Get( guidValue )?.Name,
-                        Value = guidValue.ToString()
-                    }.ToCamelCaseJson( false, true );
+                        configurationValues[BINARY_FILE_TYPE] = new ListItemBag()
+                        {
+                            Text = binaryFileType?.Name,
+                            Value = binaryFileTypeGuid.ToString()
+                        }.ToCamelCaseJson( false, true );
+
+                        configurationValues[BINARY_FILE_OPTIONS] = new BinaryFileService( rockContext )
+                            .Queryable()
+                            .Where( f => f.BinaryFileTypeId == binaryFileType.Id && !f.IsTemporary )
+                            .OrderBy( f => f.FileName )
+                            .Select( t => new ListItemBag
+                            {
+                                Value = t.Guid.ToString(),
+                                Text = t.FileName
+                            } )
+                            .ToList().ToCamelCaseJson( false, true );
+                    }
+
+                    return configurationValues;
                 }
             }
-
-            return configurationProperties;
+            else
+            {
+                return new Dictionary<string, string>();
+            }
         }
 
         #endregion
@@ -298,6 +316,28 @@ namespace Rock.Field.Types
             {
                 new ReferencedProperty( EntityTypeCache.GetId<BinaryFile>().Value, nameof( BinaryFile.FileName ) )
             };
+        }
+
+        #endregion
+
+        #region ISecurityGrantFieldType
+
+        /// <inheritdoc/>
+        public virtual void AddRulesToSecurityGrant( SecurityGrant grant, Dictionary<string, string> privateConfigurationValues )
+        {
+            var binaryFileTypeGuid = privateConfigurationValues.GetValueOrNull( BINARY_FILE_TYPE ).AsGuidOrNull();
+
+            if ( !binaryFileTypeGuid.HasValue )
+            {
+                return;
+            }
+
+            var binaryFileType = BinaryFileTypeCache.Get( binaryFileTypeGuid.Value );
+
+            if ( binaryFileType != null )
+            {
+                grant.AddRule( new EntitySecurityGrantRule( binaryFileType.TypeId, binaryFileType.Id, Authorization.VIEW ) );
+            }
         }
 
         #endregion

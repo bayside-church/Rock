@@ -23,9 +23,13 @@ using System.Data.SqlClient;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Threading.Tasks;
+
+using Microsoft.EntityFrameworkCore;
+
 using Rock.Communication;
 using Rock.Data;
 using Rock.Observability;
+using Rock.Utility;
 using Rock.Web.Cache;
 
 namespace Rock.Model
@@ -65,6 +69,7 @@ namespace Rock.Model
         }
 
         #endregion Properties
+
         #region ISecured
 
         /// <summary>
@@ -90,7 +95,8 @@ namespace Rock.Model
             }
         }
 
-        #endregion
+        #endregion ISecured
+
         #region Methods
 
         /// <summary>
@@ -158,7 +164,38 @@ namespace Rock.Model
         /// <returns></returns>
         public bool HasPendingRecipients( RockContext rockContext )
         {
-            return new CommunicationRecipientService( rockContext ).Queryable().Where( a => a.CommunicationId == this.Id && a.Status == Model.CommunicationRecipientStatus.Pending ).Any();
+            return GetRecipientsQry( rockContext ).Where( a => a.Status == CommunicationRecipientStatus.Pending ).Any();
+        }
+
+        /// <summary>
+        /// Updates CommunicationRecipients who are stuck in the "Sending" status, setting the status to failed if they have been there for 2 days or more, and setting the status back to Pending otherwise.
+        /// </summary>
+        public void UpdateSendingRecipients()
+        {
+            var expirationDate = RockDateTime.Now.AddDays( -2 );
+            using ( var rockContext = new RockContext() )
+            {
+                // If any recipients have been in "Sending" status (or reset to "Pending" status from "Sending") for 2 days, set the status to failed, instead.
+                var expiredSendingRecipients = GetRecipientsQry( rockContext ).Where( a => ( a.Status == CommunicationRecipientStatus.Sending || a.Status == CommunicationRecipientStatus.Pending ) && a.FirstSendAttemptDateTime <= expirationDate ).ToList();
+                foreach ( var expiredSendingRecipient in expiredSendingRecipients )
+                {
+                    expiredSendingRecipient.Status = CommunicationRecipientStatus.Failed;
+                    expiredSendingRecipient.StatusNote = "Recipient locked in Sending status.";
+                }
+
+                // Any recipients stuck in "Sending" for less than two days get set back to "Pending".
+                var sendingRecipients = GetRecipientsQry( rockContext ).Where( a => a.Status == CommunicationRecipientStatus.Sending && ( !a.FirstSendAttemptDateTime.HasValue || a.FirstSendAttemptDateTime > expirationDate ) ).ToList();
+                foreach ( var sendingRecipient in sendingRecipients )
+                {
+                    sendingRecipient.Status = CommunicationRecipientStatus.Pending;
+                    sendingRecipient.StatusNote = "Recipient reverted to Pending status after initial attempt.";
+
+                    // This should already be set when the recipient was set to "Sending", but let's be certain the clock has started.
+                    sendingRecipient.FirstSendAttemptDateTime = sendingRecipient.FirstSendAttemptDateTime ?? RockDateTime.Now;
+                }
+
+                rockContext.SaveChanges();
+            }
         }
 
         /// <summary>
@@ -181,46 +218,91 @@ namespace Rock.Model
         /// <returns></returns>
         public static IQueryable<GroupMember> GetCommunicationListMembers( RockContext rockContext, int? listGroupId, SegmentCriteria segmentCriteria, List<int> segmentDataViewIds )
         {
-            IQueryable<GroupMember> groupMemberQuery = null;
             if ( listGroupId.HasValue )
             {
                 var groupMemberService = new GroupMemberService( rockContext );
-                var personService = new PersonService( rockContext );
+                var groupMemberQuery = groupMemberService.Queryable()
+                    .Where( a => a.GroupId == listGroupId.Value && a.GroupMemberStatus == GroupMemberStatus.Active );
+
                 var dataViewService = new DataViewService( rockContext );
+                var segmentDataViews = dataViewService.GetByIds( segmentDataViewIds ).AsNoTracking();
 
-                groupMemberQuery = groupMemberService.Queryable().Where( a => a.GroupId == listGroupId.Value && a.GroupMemberStatus == GroupMemberStatus.Active );
+                return GetCommunicationListMembersInternal( rockContext, groupMemberQuery, segmentCriteria, segmentDataViews );
+            }
+            else
+            {
+                return null;
+            }
+        }
 
-                Expression segmentExpression = null;
-                ParameterExpression paramExpression = personService.ParameterExpression;
-                var segmentDataViewList = dataViewService.GetByIds( segmentDataViewIds ).AsNoTracking().ToList();
-                foreach ( var segmentDataView in segmentDataViewList )
+        /// <summary>
+        /// Gets the communication list members.
+        /// </summary>
+        /// <param name="rockContext">The rock context.</param>
+        /// <param name="listGroupGuid">The group unique identifier.</param>
+        /// <param name="segmentCriteria">The segment criteria.</param>
+        /// <param name="segmentDataViewGuids">The segment data view unique identifiers.</param>
+        /// <returns></returns>
+        public static IQueryable<GroupMember> GetCommunicationListMembers( RockContext rockContext, Guid? listGroupGuid, SegmentCriteria segmentCriteria, List<Guid> segmentDataViewGuids )
+        {
+            if ( listGroupGuid.HasValue )
+            {
+                var groupMemberService = new GroupMemberService( rockContext );
+                var groupMemberQuery = groupMemberService.Queryable()
+                    .Where( a => a.Group.Guid == listGroupGuid.Value && a.GroupMemberStatus == GroupMemberStatus.Active );
+
+                var dataViewService = new DataViewService( rockContext );
+                var segmentDataViews = dataViewService.GetByGuids( segmentDataViewGuids ).AsNoTracking();
+
+                return GetCommunicationListMembersInternal( rockContext, groupMemberQuery, segmentCriteria, segmentDataViews );
+            }
+            else
+            {
+                return Enumerable.Empty<GroupMember>().AsQueryable();
+            }
+        }
+
+        /// <summary>
+        /// Gets the communication list members.
+        /// </summary>
+        /// <param name="rockContext">The rock context.</param>
+        /// <param name="groupMemberQuery">The group member query.</param>
+        /// <param name="segmentCriteria">The segment criteria.</param>
+        /// <param name="segmentDataViews">The segment data views.</param>
+        /// <returns></returns>
+        private static IQueryable<GroupMember> GetCommunicationListMembersInternal( RockContext rockContext, IQueryable<GroupMember> groupMemberQuery, SegmentCriteria segmentCriteria, IQueryable<DataView> segmentDataViews )
+        {
+            var personService = new PersonService( rockContext );
+
+            Expression segmentExpression = null;
+            ParameterExpression paramExpression = personService.ParameterExpression;
+            foreach ( var segmentDataView in segmentDataViews )
+            {
+                var exp = segmentDataView.GetExpression( personService, paramExpression );
+                if ( exp != null )
                 {
-                    var exp = segmentDataView.GetExpression( personService, paramExpression );
-                    if ( exp != null )
+                    if ( segmentExpression == null )
                     {
-                        if ( segmentExpression == null )
+                        segmentExpression = exp;
+                    }
+                    else
+                    {
+                        if ( segmentCriteria == SegmentCriteria.All )
                         {
-                            segmentExpression = exp;
+                            segmentExpression = Expression.AndAlso( segmentExpression, exp );
                         }
                         else
                         {
-                            if ( segmentCriteria == SegmentCriteria.All )
-                            {
-                                segmentExpression = Expression.AndAlso( segmentExpression, exp );
-                            }
-                            else
-                            {
-                                segmentExpression = Expression.OrElse( segmentExpression, exp );
-                            }
+                            segmentExpression = Expression.OrElse( segmentExpression, exp );
                         }
                     }
                 }
+            }
 
-                if ( segmentExpression != null )
-                {
-                    var personQry = personService.Get( paramExpression, segmentExpression );
-                    groupMemberQuery = groupMemberQuery.Where( a => personQry.Any( p => p.Id == a.PersonId ) );
-                }
+            if ( segmentExpression != null )
+            {
+                var personQry = personService.Get( paramExpression, segmentExpression );
+                groupMemberQuery = groupMemberQuery.Join( personQry, g => g.PersonId, p => p.Id, ( g, p ) => g );
             }
 
             return groupMemberQuery;
@@ -483,64 +565,142 @@ INNER JOIN @DuplicateRecipients dr
         }
 
         /// <summary>
-        /// Removes the non-primary person alias recipients.
+        /// Removes duplicate person recipients, when a given <see cref="Person"/> is represented within the list of
+        /// <see cref="CommunicationRecipient"/>s more than once.
         /// </summary>
         /// <param name="rockContext">The rock context.</param>
-        private void RemoveNonPrimaryPersonAliasRecipients( RockContext rockContext )
+        /// <remarks>
+        /// The first <see cref="CommunicationRecipient"/> that was added for a given <see cref="Person"/> is the one
+        /// that will be preserved. This means that the corresponding <see cref="PersonAlias"/> that remains might not
+        /// be the person's current "primary" alias. Since all we need is a pointer to the person, any alias record -
+        /// primary or not - will serve this purpose. It is more performant to NOT try to preserve the primary alias
+        /// reference here.
+        /// </remarks>
+        private void RemoveDuplicatePersonRecipients( RockContext rockContext )
         {
             /*
-                5/4/2022 - DMV
+                8/28/2025 - JPH
 
-                In tracking down alleged duplicate communications we discovered
-                that duplicates could be sent to the same person if they are in the
-                recipient list more that once with multiple Person Alias IDs.
-                This could have occurred through a person merge or other data changes
-                in Rock. This method removes those duplicates from the list before
-                sending the communication.
-            */
+                This method used to be called `RemoveNonPrimaryPersonAliasRecipients()` and was related to multiple past issues:
 
-            /*
-                1/2/2024 - JPH
+                ----------
 
-                We were previously loading these entities into memory and calling DeleteRange() on the
-                collection, which was causing a separate DELETE statement to be run for each entity.
-                By instead calling BulkDelete(), we can run the delete operation outside of EF context,
-                bypassing quite a bit of unnecessary overhead.
-
-                Reason: Communications with a large number of recipients time out and don't send.
+                1. Communications with a large number of recipients time out and don't send.
                 https://github.com/SparkDevNetwork/Rock/issues/5651
+
+                The fix for this issue involved replacing the previous EF query with a bulk delete process, and was
+                ultimately solved by introducing a precision index to greatly improve the delete performance.
+
+                EF Rework: https://github.com/SparkDevNetwork/Rock/commit/567a51652d1fe7fd09d894fa0474e152750c4d54
+                New Index: https://github.com/SparkDevNetwork/Rock/commit/f3b6f435d5425ef37e27bccfe60d676a4c398af7
+
+                ----------
+
+                2. Merged recipients incorrectly deleted from communication record.
+                https://github.com/SparkDevNetwork/Rock/issues/6255
+
+                The fix for this issue did solve the problem of no longer completely removing recipients from a
+                communication, but introduced a new SQL timeout because of the complexity of the EF-generated queries.
+
+                EF Queries Before Fix: https://github.com/SparkDevNetwork/Rock/blob/8bd4aabd56c31d88353c65635b84fc2c7e835984/Rock/Model/Communication/Communication/Communication.Logic.cs#L593-L622
+                EF Queries After Fix: https://github.com/SparkDevNetwork/Rock/blob/2a1c7d3df3fd1a597c81ac5d04ff32398d56b18a/Rock/Model/Communication/Communication/Communication.Logic.cs#L604-L635
+
+                ----------
+
+                3. SQL Timeout with large communication lists.
+                https://github.com/SparkDevNetwork/Rock/issues/6415
+
+                When this performance issue appeared again, we decided to abandon EF-generated queries altogether, in
+                favor of inline SQL that does what the original, poorly-named `RemoveNonPrimaryPersonAliasRecipients()`
+                method set out to do, as performantly as possible: delete duplicate people from a communication, when
+                they have multiple recipient records corresponding to multiple person alias records. It was also
+                determined that it's more performant to NOT try and preserve the "primary" alias record for a given
+                person, and instead simply delete all but the first recipient record that was added for that person.
+                Since a person alias is simply a pointer to a person, it ultimately doesn't matter which one we preserve
+                here, so we settled on performance over attempting to preserve the primary alias.
+
+                ----------
+
+                Reason: Rename method to reflect the work being performed and improve performance.
             */
 
-            using ( var activity = ObservabilityHelper.StartActivity( "COMMUNICATION: Prepare Recipient List > Remove Non-Primary Person Alias Recipients" ) )
+            var sql = @"
+;WITH Recipients AS (
+    SELECT
+        cr.[Id] AS [CommunicationRecipientId]
+        , ROW_NUMBER() OVER (
+            PARTITION BY pa.[PersonId]
+            ORDER BY cr.[Id]
+        ) AS [RowNumber]
+    FROM [CommunicationRecipient] cr
+    INNER JOIN [PersonAlias] pa
+        ON pa.[Id] = cr.[PersonAliasId]
+    WHERE cr.[CommunicationId] = @CommunicationId
+)
+DELETE cr
+FROM [CommunicationRecipient] cr
+INNER JOIN [Recipients] r
+    ON r.[CommunicationRecipientId] = cr.[Id]
+WHERE r.[RowNumber] > 1;";
+
+            using ( var activity = ObservabilityHelper.StartActivity( "COMMUNICATION: Prepare Recipient List > Remove Duplicate Person Recipients" ) )
             {
-                var communicationRecipientService = new CommunicationRecipientService( rockContext );
-
-                var recipientsQry = GetRecipientsQry( rockContext );
-
-                int? smsMediumEntityTypeId = EntityTypeCache.GetId( Rock.SystemGuid.EntityType.COMMUNICATION_MEDIUM_SMS.AsGuid() );
-                if ( smsMediumEntityTypeId.HasValue )
-                {
-                    var duplicateSMSRecipientsQuery = recipientsQry
-                        .Where( a =>
-                            a.MediumEntityTypeId == smsMediumEntityTypeId.Value
-                            && a.PersonAlias.PersonId != a.PersonAlias.AliasPersonId
-                        );
-
-                    rockContext.BulkDelete<CommunicationRecipient>( duplicateSMSRecipientsQuery );
-                }
-
-                int? emailMediumEntityTypeId = EntityTypeCache.GetId( Rock.SystemGuid.EntityType.COMMUNICATION_MEDIUM_EMAIL.AsGuid() );
-                if ( emailMediumEntityTypeId.HasValue )
-                {
-                    var duplicateEmailRecipientsQry = recipientsQry
-                        .Where( a =>
-                            a.MediumEntityTypeId == emailMediumEntityTypeId.Value
-                            && a.PersonAlias.PersonId != a.PersonAlias.AliasPersonId
-                        );
-
-                    rockContext.BulkDelete<CommunicationRecipient>( duplicateEmailRecipientsQry );
-                }
+                rockContext.Database.ExecuteSqlCommand( sql, new SqlParameter( "@CommunicationId", Id ) );
             }
+        }
+
+        /// <summary>
+        /// Retrieves an <see cref="IQueryable{GroupMember}"/> of communication list members
+        /// who match the specified personalization segment filters.
+        /// </summary>
+        /// <param name="rockContext">The database context.</param>
+        /// <param name="communicationListGroupId">The ID of the communication list (group).</param>
+        /// <param name="segmentCriteria">
+        /// The matching criteria:
+        /// <list type="bullet">
+        /// <item><description><see cref="SegmentCriteria.Any"/> - Matches members with at least one of the specified segments.</description></item>
+        /// <item><description><see cref="SegmentCriteria.All"/> - Matches members with all specified segments.</description></item>
+        /// </list>
+        /// </param>
+        /// <param name="personalizationSegmentIds">A list of personalization segment IDs to filter by.</param>
+        /// <returns>
+        /// An <see cref="IQueryable{GroupMember}"/> containing group members who meet the specified criteria.
+        /// </returns>
+        private static IQueryable<GroupMember> GetPersonalizedCommunicationListMembersQuery( RockContext rockContext, int communicationListGroupId, SegmentCriteria segmentCriteria, List<int> personalizationSegmentIds )
+        {
+            var groupMemberQuery = new GroupMemberService( rockContext ).Queryable();
+            var personAliasQuery = new PersonAliasService( rockContext ).Queryable();
+            var personAliasPersonalizationQuery = new PersonalizationSegmentService( rockContext ).GetPersonAliasPersonalizationSegmentQuery();
+
+            return groupMemberQuery
+                .Where( gm => gm.GroupId == communicationListGroupId && gm.GroupMemberStatus == GroupMemberStatus.Active && gm.Person.PrimaryAliasId.HasValue )
+                .Where( gm =>
+                    !personalizationSegmentIds.Any()
+                    || (
+                        segmentCriteria == SegmentCriteria.Any
+                        && personAliasQuery.Any( pa =>
+                            pa.PersonId == gm.PersonId
+                            && personAliasPersonalizationQuery.Any( pap =>
+                                pa.Id == pap.PersonAliasId
+                                && personalizationSegmentIds.Contains( pap.PersonalizationEntityId )
+                            )
+                        )
+                    )
+                    || (
+                        segmentCriteria == SegmentCriteria.All
+                        && personAliasQuery.Where( pa =>
+                            pa.PersonId == gm.PersonId
+                        ).SelectMany( pa =>
+                            personAliasPersonalizationQuery.Where( pap =>
+                                pa.Id == pap.PersonAliasId
+                                && personalizationSegmentIds.Contains( pap.PersonalizationEntityId )
+                            )
+                            .Select( pap => pap.PersonalizationEntityId )
+                        )
+                        .Distinct()
+                        .Count() == personalizationSegmentIds.Count
+                    )
+                );
         }
 
         /// <summary>
@@ -557,10 +717,21 @@ INNER JOIN @DuplicateRecipients dr
 
             using ( var activity = ObservabilityHelper.StartActivity( "COMMUNICATION: Prepare Recipient List > Refresh Communication Recipient List" ) )
             {
-                var segmentDataViewGuids = this.Segments.SplitDelimitedValues().AsGuidList();
-                var segmentDataViewIds = new DataViewService( rockContext ).GetByGuids( segmentDataViewGuids ).Select( a => a.Id ).ToList();
+                IQueryable<GroupMember> qryCommunicationListMembers;
 
-                var qryCommunicationListMembers = GetCommunicationListMembers( rockContext, ListGroupId, this.SegmentCriteria, segmentDataViewIds );
+                var personalizationSegmentIds = this.PersonalizationSegments.SplitDelimitedValues().AsIntegerList();
+
+                if ( personalizationSegmentIds.Any() )
+                {
+                    qryCommunicationListMembers = GetPersonalizedCommunicationListMembersQuery( rockContext, this.ListGroupId.Value, this.SegmentCriteria, personalizationSegmentIds );
+                }
+                else
+                {
+                    var segmentDataViewGuids = this.Segments.SplitDelimitedValues().AsGuidList();
+                    var segmentDataViewIds = new DataViewService( rockContext ).GetByGuids( segmentDataViewGuids ).Select( a => a.Id ).ToList();
+
+                    qryCommunicationListMembers = GetCommunicationListMembers( rockContext, ListGroupId, this.SegmentCriteria, segmentDataViewIds );
+                }
 
                 // NOTE: If this is a scheduled communication, don't include Members that were added after the scheduled FutureSendDateTime.
                 // However, don't exclude if the date added can't be determined or they will never be sent a scheduled communication.
@@ -647,11 +818,16 @@ INNER JOIN @DuplicateRecipients dr
 
                 using ( var bulkDeleteActivity = ObservabilityHelper.StartActivity( "COMMUNICATION: Prepare Recipient List > Refresh Communication Recipient List > Bulk Delete Old Members" ) )
                 {
-                    // Get all pending communication recipients that are no longer in the list of group members and delete them from the recipients.
+                    // Get all pending communication recipients that are no longer
+                    // in the list of group members and delete them from the recipients.
+                    // Do not remove nameless recipients that may have been added by the
+                    // Communication Entry block's Additional Email Recipients feature.
+                    var namelessPersonRecordTypeId = DefinedValueCache.GetId( Rock.SystemGuid.DefinedValue.PERSON_RECORD_TYPE_NAMELESS.AsGuid() );
                     var missingMemberInList = recipientsQry
                         .Where( a =>
                             a.Status == CommunicationRecipientStatus.Pending
                             && !qryCommunicationListMembers.Any( r => r.PersonId == a.PersonAlias.PersonId )
+                            && a.PersonAlias.Person.RecordTypeValueId != namelessPersonRecordTypeId
                         );
 
                     /*
@@ -682,10 +858,16 @@ INNER JOIN @DuplicateRecipients dr
         /// this method will determine which medium entity type id should be used and return that id.
         /// </summary>
         /// <remarks>
-        ///  NOTE: For the given communicationTypePreferences parameters array, in the event that CommunicationType.RecipientPreference is given,
-        ///  the logic below will use the *next* given CommunicationType to determine which medium/type is selected/returned. If none is available,
-        ///  it will return the email medium entity type id.  Typically is expected that the ordered params list eventually has either
-        ///  CommunicationType.Email, CommunicationType.SMS or CommunicationType.PushNotification.
+        /// <list type="bullet">
+        ///  <item>NOTE 1: If you have a SystemCommunication, we recommend using the DetermineMediumEntityTypeId overload that
+        ///          accepts a SystemCommunication parameter because it performs more checks to ensure that the SMS
+        ///          and/or Push mediums are valid for the given communication.</item>
+        ///          
+        ///  <item>NOTE 2: For the given communicationTypePreferences parameters array, in the event that CommunicationType.RecipientPreference is given,
+        ///          the logic below will use the *next* given CommunicationType to determine which medium/type is selected/returned.
+        ///          If none is available, it will return the email medium entity type id.  Typically is expected that the ordered
+        ///          params list eventually has either CommunicationType.Email, CommunicationType.SMS or CommunicationType.PushNotification.</item>
+        /// </list>
         /// </remarks>
         /// <param name="emailMediumEntityTypeId">The email medium entity type identifier.</param>
         /// <param name="smsMediumEntityTypeId">The SMS medium entity type identifier.</param>
@@ -725,6 +907,107 @@ INNER JOIN @DuplicateRecipients dr
         }
 
         /// <summary>
+        /// Determines the medium entity type identifier taking into account whether the Medium (SMS and Push) is active and
+        /// whether the communication has the required values set for that type.  For example, if the SMS Medium is active,
+        /// but the communication does not have an SMS From System Phone Number set, then it will not be returned as the
+        /// medium entity type id.
+        /// 
+        /// Given the email, SMS medium, and Push entity type ids, along with the available communication preferences,
+        /// this method will determine which medium entity type id should be used and return that id.
+        /// </summary>
+        /// 
+        /// <remarks>
+        /// NOTES:
+        ///     <list type="bullet">
+        ///     <item>If the person does not have an SMS number then SMS is not available for sending.</item>
+        ///     <item>If a medium is not active, then it is not available for sending.</item>
+        ///     <item>For the given communicationTypePreferences parameters array, in the event that CommunicationType.RecipientPreference is given,
+        ///       the logic below will use the *next* given CommunicationType to determine which medium/type is selected/returned.
+        ///     </item>
+        ///     <item>If no suitable medium entity type could be selected, it will fall back to Email.</item>
+        ///     </list>
+        /// </remarks>
+        /// <param name="emailMediumEntityTypeId">The email medium entity type identifier.</param>
+        /// <param name="smsMediumEntityTypeId">The SMS medium entity type identifier.</param>
+        /// <param name="pushMediumEntityTypeId">The push medium entity type identifier.</param>
+        /// <param name="communication">The <see cref="Rock.Model.SystemCommunication"/> that is intended to be sent.</param>
+        /// <param name="person">The <see cref="Rock.Model.Person"/> that the communication is being sent to.</param>
+        /// <param name="communicationTypePreference">An array of ordered communication type preferences.</param>
+        /// <returns></returns>
+        /// <exception cref="ArgumentException">Unexpected CommunicationType: {currentCommunicationPreference.ConvertToString()} - communicationTypePreference</exception>
+        /// <exception cref="Exception">Unexpected CommunicationType: " + currentCommunicationPreference.ConvertToString()</exception>
+        public static int DetermineMediumEntityTypeId( int emailMediumEntityTypeId, int smsMediumEntityTypeId, int pushMediumEntityTypeId, SystemCommunication communication, Person person, params CommunicationType[] communicationTypePreference )
+        {
+            var isSmsActive = MediumContainer.HasActiveSmsTransport();
+            var isPushActive = MediumContainer.HasActivePushTransport();
+
+            // Only check for the person's SMS number if SMS is one of the possible communications types being considered.
+            string personSmsNumber = string.Empty;
+            if ( communicationTypePreference.Contains( CommunicationType.SMS ) )
+            {
+                personSmsNumber = person?.PhoneNumbers != null
+                    ? person.PhoneNumbers.GetFirstSmsNumber()
+                    : null;
+            }
+
+            var isSmsAvailableForCommunication = communication.SmsFromSystemPhoneNumberId.HasValue && !string.IsNullOrWhiteSpace( personSmsNumber );
+            var isPushAvailableForCommunication = !( string.IsNullOrWhiteSpace( communication.PushMessage ) && string.IsNullOrWhiteSpace( communication.PushTitle ));
+
+            for ( var i = 0; i < communicationTypePreference.Length; i++ )
+            {
+                var currentCommunicationPreference = communicationTypePreference[i];
+                var hasNextCommunicationPreference = ( i + 1 ) < communicationTypePreference.Length;
+
+                switch ( currentCommunicationPreference )
+                {
+                    case CommunicationType.Email:
+                        return emailMediumEntityTypeId;
+
+                    case CommunicationType.SMS:
+                        if ( isSmsActive && isSmsAvailableForCommunication )
+                        {
+                            return smsMediumEntityTypeId;
+                        }
+                        if ( hasNextCommunicationPreference )
+                        {
+                            break;
+                        }
+                        else
+                        {
+                            continue;
+                        }
+
+                    case CommunicationType.PushNotification:
+                        if ( isPushActive && isPushAvailableForCommunication )
+                        {
+                            return pushMediumEntityTypeId;
+                        }
+                        if ( hasNextCommunicationPreference )
+                        {
+                            break;
+                        }
+                        else
+                        {
+                            continue;
+                        }
+
+                    case CommunicationType.RecipientPreference:
+                        if ( hasNextCommunicationPreference )
+                        {
+                            break;
+                        }
+
+                        return emailMediumEntityTypeId;
+
+                    default:
+                        throw new ArgumentException( $"Unexpected CommunicationType: {currentCommunicationPreference.ConvertToString()}", "communicationTypePreference" );
+                }
+            }
+
+            return emailMediumEntityTypeId;
+        }
+
+        /// <summary>
         /// Returns a <see cref="System.String" /> that represents this instance.
         /// </summary>
         /// <returns>
@@ -735,11 +1018,9 @@ INNER JOIN @DuplicateRecipients dr
             return this.Name ?? this.Subject ?? base.ToString();
         }
 
-        #endregion
+        #endregion Methods
 
         #region Static Methods
-
-        private static object _obj = new object();
 
         /// <summary>
         /// Sends the specified communication.
@@ -747,62 +1028,7 @@ INNER JOIN @DuplicateRecipients dr
         /// <param name="communication">The communication.</param>
         public static void Send( Rock.Model.Communication communication )
         {
-            if ( communication == null || communication.Status != CommunicationStatus.Approved )
-            {
-                return;
-            }
-
-            // only alter the Recipient list if it the communication hasn't sent a message to any recipients yet
-            if ( communication.SendDateTime.HasValue == false )
-            {
-                using ( var activity = ObservabilityHelper.StartActivity( "COMMUNICATION: Send > Prepare Recipient List" ) )
-                {
-                    activity?.AddTag( "rock.communication.id", communication.Id );
-                    activity?.AddTag( "rock.communication.name", communication.Name );
-
-                    using ( var rockContext = new RockContext() )
-                    {
-                        /*
-                            1/2/2024 - JPH
-
-                            We're increasing this timeout from the default of 30 seconds to give the following
-                            pre-send tasks more time to complete, as the sending of communications with a large
-                            number of recipients is most often done as a background task, and shouldn't risk
-                            tying up the UI.
-
-                            Reason: Communications with a large number of recipients time out and don't send.
-                            https://github.com/SparkDevNetwork/Rock/issues/5651
-                        */
-                        rockContext.Database.CommandTimeout = 90;
-
-                        if ( communication.ListGroupId.HasValue )
-                        {
-                            communication.RefreshCommunicationRecipientList( rockContext );
-                        }
-
-                        if ( communication.ExcludeDuplicateRecipientAddress )
-                        {
-                            communication.RemoveRecipientsWithDuplicateAddress( rockContext );
-                        }
-
-                        communication.RemoveNonPrimaryPersonAliasRecipients( rockContext );
-                    }
-                }
-            }
-
-            foreach ( var medium in communication.GetMediums() )
-            {
-                medium.Send( communication );
-            }
-
-            using ( var rockContext = new RockContext() )
-            {
-                var dbCommunication = new CommunicationService( rockContext ).Get( communication.Id );
-
-                // Set the SendDateTime of the Communication
-                dbCommunication.SendDateTime = RockDateTime.Now;
-                rockContext.SaveChanges();
-            }
+            AsyncHelper.RunSync( () => SendAsync( communication ) );
         }
 
         /// <summary>
@@ -816,16 +1042,18 @@ INNER JOIN @DuplicateRecipients dr
                 return;
             }
 
-            // only alter the Recipient list if it the communication hasn't sent a message to any recipients yet
-            if ( communication.SendDateTime.HasValue == false )
+            // Only alter the recipient list if Rock hasn't already begun sending to recipients.
+            using ( var rockContext = new RockContext() )
             {
-                using ( var activity = ObservabilityHelper.StartActivity( "COMMUNICATION: Send Async > Prepare Recipient List" ) )
-                {
-                    activity?.AddTag( "rock.communication.id", communication.Id );
-                    activity?.AddTag( "rock.communication.name", communication.Name );
+                var hasSendingBegun = GetOrSetHasSendingBegun( communication.Id, rockContext );
 
-                    using ( var rockContext = new RockContext() )
+                if ( !communication.SendDateTime.HasValue && !hasSendingBegun )
+                {
+                    using ( var activity = ObservabilityHelper.StartActivity( "COMMUNICATION: Send Async > Prepare Recipient List" ) )
                     {
+                        activity?.AddTag( "rock.communication.id", communication.Id );
+                        activity?.AddTag( "rock.communication.name", communication.Name );
+
                         /*
                             1/2/2024 - JPH
 
@@ -837,7 +1065,7 @@ INNER JOIN @DuplicateRecipients dr
                             Reason: Communications with a large number of recipients time out and don't send.
                             https://github.com/SparkDevNetwork/Rock/issues/5651
                         */
-                        rockContext.Database.CommandTimeout = 90;
+                        rockContext.Database.SetCommandTimeout( 90 );
 
                         if ( communication.ListGroupId.HasValue )
                         {
@@ -849,7 +1077,7 @@ INNER JOIN @DuplicateRecipients dr
                             communication.RemoveRecipientsWithDuplicateAddress( rockContext );
                         }
 
-                        communication.RemoveNonPrimaryPersonAliasRecipients( rockContext );
+                        communication.RemoveDuplicatePersonRecipients( rockContext );
                     }
                 }
             }
@@ -890,48 +1118,136 @@ INNER JOIN @DuplicateRecipients dr
             {
                 var dbCommunication = new CommunicationService( rockContext ).Get( communication.Id );
 
-                // Set the SendDateTime of the Communication
-                dbCommunication.SendDateTime = RockDateTime.Now;
+                dbCommunication.UpdateSendingRecipients();
+
+                if ( !dbCommunication.HasPendingRecipients( rockContext ) )
+                {
+                    // Set the SendDateTime of the Communication
+                    dbCommunication.SendDateTime = RockDateTime.Now;
+                }
+
                 rockContext.SaveChanges();
             }
         }
 
         /// <summary>
-        /// Gets the next pending.
+        /// Gets whether Rock has already begun sending this communication to any of its recipients.
         /// </summary>
         /// <param name="communicationId">The communication identifier.</param>
-        /// <param name="mediumEntityId">The medium entity identifier.</param>
         /// <param name="rockContext">The rock context.</param>
-        /// <returns></returns>
-        public static Rock.Model.CommunicationRecipient GetNextPending( int communicationId, int mediumEntityId, Rock.Data.RockContext rockContext )
+        /// <returns>Whether Rock has already begun sending this communication to any of its recipients.</returns>
+        /// <remarks>
+        /// If sending hasn't already begun, one of the recipient's <see cref="CommunicationRecipient.FirstSendAttemptDateTime"/>
+        /// will be set to <see cref="RockDateTime.Now"/> to indicate that sending has begun.
+        /// </remarks>
+        public static bool GetOrSetHasSendingBegun( int communicationId, RockContext rockContext )
+        {
+            var communicationRecipient = new CommunicationRecipientService( rockContext )
+                .Queryable()
+                .Where( cr =>
+                    cr.CommunicationId == communicationId
+                )
+                .OrderByDescending( cr => cr.FirstSendAttemptDateTime.HasValue )
+                .FirstOrDefault();
+
+            if ( communicationRecipient?.FirstSendAttemptDateTime.HasValue == true )
+            {
+                return true;
+            }
+
+            if ( communicationRecipient != null )
+            {
+                communicationRecipient.FirstSendAttemptDateTime = RockDateTime.Now;
+                rockContext.SaveChanges();
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Gets the next pending communication recipient for the specified communication and medium entity type.
+        /// </summary>
+        /// <param name="communicationId">The communication identifier.</param>
+        /// <param name="mediumEntityId">The medium entity type identifier.</param>
+        /// <param name="rockContext">The rock context.</param>
+        /// <returns>The next pending communication recipient or <see langword="null"/> if there are no more non-expired,
+        /// pending recipients.</returns>
+        public static CommunicationRecipient GetNextPending( int communicationId, int mediumEntityId, RockContext rockContext )
         {
             CommunicationRecipient recipient = null;
 
-            var delayTime = RockDateTime.Now.AddMinutes( -240 );
+            var previousSendLockExpiredDateTime = RockDateTime.Now.AddMinutes( CommunicationService.PreviousSendLockExpiredMinutes );
 
-            lock ( _obj )
+            /*
+                9/27/2024 - JPH
+
+                By wrapping the following in a transaction and using table hints within our query, we instruct SQL Server
+                to lock the next pending communication recipient row, knowing that multiple Rock instances (in a web farm
+                environment) + multiple threads and tasks (within each Rock instance) can simultaneously access this block
+                of code.
+
+                XLOCK: This hint places an exclusive lock on the rows read by the SELECT. The exclusive lock prevents
+                       other transactions from reading or modifying those rows until the current transaction completes.
+                       This is key in preventing simultaneous updates to the same rows.
+
+                ROWLOCK: This ensures that locks are applied at the row level, which is efficient when working with
+                         smaller sets of data (as we are in this case: seeking only one row at a time).
+
+                READPAST: This hint skips rows that are locked by other transactions. It prevents the current transaction
+                          from blocking or waiting on locked rows, but it will skip over them and continue processing
+                          other rows.
+
+                Reason: Ensure each recipient receives only a singly copy of each communication.
+             */
+
+            rockContext.WrapTransaction( () =>
             {
-                recipient = new CommunicationRecipientService( rockContext ).Queryable().Include( r => r.Communication ).Include( r => r.PersonAlias.Person )
-                    .Where( r =>
-                        r.CommunicationId == communicationId &&
-                        ( r.Status == CommunicationRecipientStatus.Pending ||
-                            ( r.Status == CommunicationRecipientStatus.Sending && r.ModifiedDateTime < delayTime )
-                        ) &&
-                        r.MediumEntityTypeId.HasValue &&
-                        r.MediumEntityTypeId.Value == mediumEntityId )
-                    .FirstOrDefault();
+                var recipientId = rockContext.Database.SqlQuery<int?>( @"
+UPDATE cr
+SET cr.[ModifiedDateTime] = @Now
+    , cr.[Status] = @SendingStatus
+    , cr.[FirstSendAttemptDateTime] = CASE
+        WHEN cr.[FirstSendAttemptDateTime] IS NOT NULL
+            THEN cr.[FirstSendAttemptDateTime]
+            ELSE @FirstSendAttemptDateTime
+        END
+OUTPUT INSERTED.[Id]
+FROM [CommunicationRecipient] cr
+WHERE cr.[Id] IN (
+    SELECT TOP 1 next.[Id]
+    FROM [CommunicationRecipient] next WITH (XLOCK, ROWLOCK, READPAST)
+    WHERE next.[CommunicationId] = @CommunicationId
+        AND next.[MediumEntityTypeId] = @MediumEntityTypeId
+        AND (
+            next.[Status] = @PendingStatus
+            OR (
+                next.[Status] = @SendingStatus
+                AND next.[ModifiedDateTime] < @PreviousSendLockExpiredDateTime
+            )
+        )
+);",
+                        new SqlParameter( "@CommunicationId", communicationId ),
+                        new SqlParameter( "@MediumEntityTypeId", mediumEntityId ),
+                        new SqlParameter( "@PendingStatus", CommunicationRecipientStatus.Pending ),
+                        new SqlParameter( "@SendingStatus", CommunicationRecipientStatus.Sending ),
+                        new SqlParameter( "@FirstSendAttemptDateTime", RockDateTime.Now ),
+                        new SqlParameter( "@PreviousSendLockExpiredDateTime", previousSendLockExpiredDateTime ),
+                        new SqlParameter( "@Now", RockDateTime.Now )
+                    ).FirstOrDefault();
 
-                if ( recipient != null )
+                if ( recipientId.HasValue )
                 {
-                    recipient.ModifiedDateTime = RockDateTime.Now;
-                    recipient.Status = CommunicationRecipientStatus.Sending;
-                    rockContext.SaveChanges();
+                    recipient = new CommunicationRecipientService( rockContext )
+                        .Queryable()
+                        .Include( r => r.Communication )
+                        .Include( r => r.PersonAlias.Person )
+                        .FirstOrDefault( r => r.Id == recipientId.Value );
                 }
-            }
+            } );
 
             return recipient;
         }
 
-        #endregion
+        #endregion Static Methods
     }
 }

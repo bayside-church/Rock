@@ -6,12 +6,12 @@
         
         <div class="panel panel-block">
             <div class="panel-heading">
-                <h1 class="panel-title"><i class="fa fa-magic"></i> Workflow Trigger List</h1>
+                <h1 class="panel-title"><i class="ti ti-wand"></i> Workflow Trigger List</h1>
             </div>
             <div class="panel-body">
                 <div class="grid grid-panel">
                     <Rock:GridFilter ID="gfWorkflowTrigger" runat="server" >
-                        <Rock:RockCheckBox ID="cbIncludeInactive" runat="server" Label="Include Inactive" Text="Yes" />
+                        <Rock:RockCheckBox ID="cbIncludeInactive" runat="server" Label="Include Inactive" />
                     </Rock:GridFilter>
                     <Rock:Grid ID="gWorkflowTrigger" runat="server" AllowSorting="false" OnRowSelected="gWorkflowTrigger_Edit">
                         <Columns>

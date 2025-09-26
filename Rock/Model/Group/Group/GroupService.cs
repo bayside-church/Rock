@@ -20,17 +20,29 @@ using System.Collections.Generic;
 using System.Data.Entity;
 using System.Data.Entity.Spatial;
 using System.Linq;
+using System.Linq.Dynamic.Core;
 using System.Text;
 
+using Rock.Attribute;
+using Rock.Communication.Chat;
+using Rock.Communication.Chat.DTO;
 using Rock.Data;
+using Rock.Core.Geography.Classes;
 using Rock.Model.Groups.Group.Options;
-using Rock.Observability;
 using Rock.Web.Cache;
 
 using Z.EntityFramework.Plus;
 
 namespace Rock.Model
 {
+    /*
+    12/16/2024 - DSH
+
+    The Group model participates in the the TPT (Table-Per-Type) pattern. This
+    can cause some rare unexpected results. See the engineering note above the
+    Group class for details.
+    */
+
     /// <summary>
     /// Data access/service class for <see cref="Rock.Model.Group"/> objects.
     /// </summary>
@@ -125,6 +137,112 @@ namespace Rock.Model
         public IQueryable<Group> GetByParentGroupIdAndName( int? parentGroupId, string name )
         {
             return Queryable().Where( t => ( t.ParentGroupId == parentGroupId || ( parentGroupId == null && t.ParentGroupId == null ) ) && t.Name == name );
+        }
+
+        /// <summary>
+        /// Gets a Queryable of chat-specific <see cref="Group"/>s, regardless of whether they're currently chat-enabled.
+        /// </summary>
+        /// <param name="groupTypeId">The optional identifier of the <see cref="GroupType"/> for the <see cref="Group"/>s to query.</param>
+        /// <returns>A Queryable of chat-specific <see cref="Group"/>s.</returns>
+        /// <remarks>This will include archived and inactive, chat-specific <see cref="Group"/>s.</remarks>
+        [RockInternal( "17.1", true )]
+        public IQueryable<Group> GetChatChannelGroupsQuery( int? groupTypeId = null )
+        {
+            var qry = AsNoFilter()
+                .Where( g =>
+                    (
+                        // Even if a group is not currently chat-enabled, include it if it has a chat channel key.
+                        g.ChatChannelKey != null
+                        && g.ChatChannelKey != string.Empty
+                    )
+                    || (
+                        g.GroupType.IsChatAllowed
+                        && (
+                            g.GroupType.IsChatEnabledForAllGroups
+                            || (
+                                g.IsChatEnabledOverride.HasValue
+                                && g.IsChatEnabledOverride.Value
+                            )
+                        )
+                    )
+                );
+
+            if ( groupTypeId.HasValue )
+            {
+                qry = qry.Where( g => g.GroupTypeId == groupTypeId.Value );
+            }
+
+            return qry;
+        }
+
+        /// <summary>
+        /// Gets a Queryable of all <see cref="Group"/>s that are currently chat-enabled.
+        /// </summary>
+        /// <param name="groupTypeId">The optional identifier of the <see cref="GroupType"/> for the <see cref="Group"/>s to query.</param>
+        /// <returns>A Queryable of all <see cref="Group"/>s that are currently chat-enabled.</returns>
+        /// <remarks>This will include archived and inactive, chat-enabled <see cref="Group"/>s.</remarks>
+        internal IQueryable<Group> GetChatEnabledGroupsQuery( int? groupTypeId = null )
+        {
+            var qry = AsNoFilter()
+                .Where( g =>
+                    g.GroupType.IsChatAllowed
+                    && (
+                        g.GroupType.IsChatEnabledForAllGroups
+                        || (
+                            g.IsChatEnabledOverride.HasValue
+                            && g.IsChatEnabledOverride.Value
+                        )
+                    )
+                );
+
+            if ( groupTypeId.HasValue )
+            {
+                qry = qry.Where( g => g.GroupTypeId == groupTypeId.Value );
+            }
+
+            return qry;
+        }
+
+        /// <summary>
+        /// Gets the identifier of the group that represents a chat channel.
+        /// </summary>
+        /// <param name="chatChannelKey">The key that identifies the chat channel.</param>
+        /// <returns>The group identifier or <see langword="null"/> if not found.</returns>
+        public int? GetChatChannelGroupId( string chatChannelKey )
+        {
+            if ( chatChannelKey.IsNullOrWhiteSpace() )
+            {
+                return null;
+            }
+
+            // Check the key itself first, as the group ID might be embedded within.
+            var groupId = ChatHelper.GetGroupId( chatChannelKey );
+            if ( groupId.HasValue )
+            {
+                return groupId.Value;
+            }
+
+            // Next, check to see if we already have this mapping in the cache.
+            var cacheKey = ChatHelper.GetChatChannelGroupIdCacheKey( chatChannelKey );
+            groupId = RockCache.Get( cacheKey ) as int?;
+            if ( groupId.HasValue )
+            {
+                return groupId.Value;
+            }
+
+            // Fall back to looking in the database and caching if we find it.
+            // We always want to include archived groups, as they'll be considered inactive chat channels.
+            groupId = AsNoFilter()
+                .Where( g => g.ChatChannelKey == chatChannelKey )
+                .Select( g => g.Id )
+                .FirstOrDefault();
+
+            if ( groupId.HasValue )
+            {
+                RockCache.AddOrUpdate( cacheKey, null, groupId.Value, RockDateTime.Now.AddSeconds( 300 ) );
+            }
+
+            return groupId;
         }
 
         #region Geospatial Queries
@@ -287,6 +405,83 @@ namespace Rock.Model
             return null;
         }
 
+        /// <summary>
+        /// Get's a list of the nearest groups to the person.
+        /// </summary>
+        /// <param name="point"></param>
+        /// <param name="groupTypeId"></param>
+        /// <param name="returnOnlyClosestLocationPerGroup"></param>
+        /// <param name="maxDistance"></param>
+        /// <returns></returns>
+        public IQueryable<GroupLocation> GetNearestGroups( DbGeography point, int groupTypeId, bool returnOnlyClosestLocationPerGroup = true, int? maxDistance = null )
+        {
+            return GetNearestGroups( GeographyPoint.FromDatabase( point ) , new List<int> { groupTypeId }, returnOnlyClosestLocationPerGroup, maxDistance );
+        }
+
+        /// <summary>
+        /// Get's a list of the nearest groups to the person.
+        /// </summary>
+        /// <param name="point"></param>
+        /// <param name="groupTypeId"></param>
+        /// <param name="returnOnlyClosestLocationPerGroup"></param>
+        /// <param name="maxDistance"></param>
+        /// <returns></returns>
+        public IQueryable<GroupLocation> GetNearestGroups( GeographyPoint point, int groupTypeId, bool returnOnlyClosestLocationPerGroup = true, int? maxDistance = null )
+        {
+            return GetNearestGroups( point, new List<int> { groupTypeId }, returnOnlyClosestLocationPerGroup, maxDistance );
+        }
+
+        /// <summary>
+        /// Get's a list of the nearest groups to the person filtered by the provided group types.
+        /// </summary>
+        /// <param name="point"></param>
+        /// <param name="groupTypeIds"></param>
+        /// <param name="returnOnlyClosestLocationPerGroup"></param>
+        /// <param name="maxDistance"></param>
+        /// <returns></returns>
+        public IQueryable<GroupLocation> GetNearestGroups( GeographyPoint point, List<int> groupTypeIds, bool returnOnlyClosestLocationPerGroup = true, int? maxDistance = null )
+        {
+            var rockContext = ( RockContext ) this.Context;
+
+            if ( point == null )
+            {
+                return null;
+            }
+
+            // Convert GeographyPoint to DbGeography
+            var efPoint = point.ToDatabase();
+
+            // Get all locations for the selected group type(s)
+            var groupLocation = this.Queryable()
+                .Where( g =>
+                    groupTypeIds.Contains( g.GroupTypeId ) )
+                .SelectMany( g =>
+                    g.GroupLocations
+                        .Where( gl =>
+                            gl.Location != null &&
+                            gl.Location.GeoPoint != null
+                        )
+                );
+
+            // Filter by max distance
+            if ( maxDistance.HasValue )
+            {
+                groupLocation = groupLocation.Where( gl => gl.Location.GeoPoint.Distance( efPoint ) <= maxDistance );
+            }
+
+            // Return all locations
+            if ( returnOnlyClosestLocationPerGroup == false )
+            {
+                return groupLocation;
+            }
+
+            // Return just the closest location
+            var closestLocationPerGroup = groupLocation
+                .GroupBy( x => x.GroupId )
+                .Select( g => g.OrderBy( x => x.Location.GeoPoint.Distance( efPoint ) ).FirstOrDefault() );
+
+            return closestLocationPerGroup;
+        }
         #endregion
 
         /// <summary>
@@ -1640,6 +1835,47 @@ namespace Rock.Model
             groupMember = groupMemberService.AsNoFilter().Where( a => a.IsArchived == false && a.GroupId == group.Id && a.PersonId == personId && a.GroupRoleId == groupRoleId ).FirstOrDefault();
             return groupMember != null;
         }
+
+        #region Group Placement Methods
+
+        /// <summary>
+        /// Gets the placement groups for a specific sourceGroup
+        /// </summary>
+        /// <param name="sourceGroup">The source group for placement.</param>
+        /// <returns></returns>
+        public IQueryable<Group> GetSourceGroupPlacementPlacementGroups( Group sourceGroup )
+        {
+            return this.RelatedEntities.GetRelatedToSourceEntity<Group>( sourceGroup.Id, RelatedEntityPurposeKey.GroupPlacement );
+        }
+
+        /// <summary>
+        /// Adds the source group placement group. Returns false if the group is already a placement group for this source group Placement
+        /// </summary>
+        /// <param name="sourceGroup">The source group placement.</param>
+        /// <param name="group">The group.</param>
+        /// <returns></returns>
+        public bool AddGroupPlacementPlacementGroup( Group sourceGroup, Group group )
+        {
+            if ( !this.RelatedEntities.RelatedToSourceEntityAlreadyExists( sourceGroup.Id, group, RelatedEntityPurposeKey.GroupPlacement ) )
+            {
+                this.RelatedEntities.AddRelatedToSourceEntity( sourceGroup.Id, group, RelatedEntityPurposeKey.GroupPlacement );
+                return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Deletes (detaches) the destination group for the given source group ID.
+        /// </summary>
+        /// <param name="sourceGroup">The source group.</param>
+        /// <param name="group">The group.</param>
+        public void DetachDestinationGroupFromSourceGroup( Group sourceGroup, Group group )
+        {
+            this.RelatedEntities.DeleteTargetEntityFromSourceEntity( sourceGroup.Id, group, RelatedEntityPurposeKey.GroupPlacement );
+        }
+
+        #endregion
 
         #region Group Copy Methods
 

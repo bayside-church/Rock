@@ -55,4 +55,20 @@ export type BlockEndEditData = void;
 
 // #region Page Framework Messages
 
+/**
+ * The data that is available in a page queryStringChanged message.
+ */
+export type QueryStringChangedData = URLSearchParams;
+
+/**
+ * The data that is available in a page contextEntityChanged message.
+ */
+export type ContextEntityChangedData = {
+    /** The full class name of the entity type. */
+    entityType?: string | null;
+
+    /** The unique identifier of the entity type. */
+    entityTypeGuid?: Guid | null;
+};
+
 // #endregion

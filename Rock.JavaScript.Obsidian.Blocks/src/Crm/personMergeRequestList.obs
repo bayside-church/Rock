@@ -4,6 +4,7 @@
           :data="gridDataSource"
           keyField="idKey"
           itemTerm="Merge Request"
+          title="Merge Requests"
           stickyHeader
           liveUpdates
           :showLaunchWorkflow="false"
@@ -25,6 +26,8 @@
                 title="Merge Records"
                 :filter="textValueFilter"
                 :filterValue="getMergeRecordsRowFilterValue"
+                :quickFilterValue="getMergeRecordsRowFilterValue"
+                :exportValue="getMergeRecordsExportValue"
                 visiblePriority="md">
             <template #format="{ row }">
                 <div class="text-lg">
@@ -87,18 +90,21 @@
     }
 
     /**
-    * Gets the filter value text to use for the accounts column.
+    * Gets the filter value text to use for the merge records column.
     *
     * @param row The row to be filtered.
     */
     function getMergeRecordsRowFilterValue(row: Record<string, unknown>): string {
-        let filterValue = "";
+        return (row.mergeRecords as string[]).join(" ");
+    }
 
-        for (const mergeRecord of row.mergeRecords as string[]) {
-            filterValue += mergeRecord;
-        }
-
-        return filterValue;
+    /**
+     * Gets the export value text to use for the merge records column.
+     *
+     * @param row The row to be exported.
+     */
+    function getMergeRecordsExportValue(row: Record<string, unknown>): string {
+        return (row.mergeRecords as string[]).join("\n");
     }
 
     // #endregion

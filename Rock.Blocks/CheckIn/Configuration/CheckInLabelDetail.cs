@@ -33,6 +33,7 @@ using Rock.ViewModels.Blocks;
 using Rock.ViewModels.Blocks.CheckIn.Configuration.CheckInLabelDetail;
 using Rock.ViewModels.CheckIn.Labels;
 using Rock.ViewModels.Utility;
+using Rock.Web;
 using Rock.Web.Cache;
 
 namespace Rock.Blocks.CheckIn.Configuration
@@ -44,7 +45,7 @@ namespace Rock.Blocks.CheckIn.Configuration
     [DisplayName( "Check-in Label Detail" )]
     [Category( "Check-in > Configuration" )]
     [Description( "Displays the details of a particular check in label." )]
-    [IconCssClass( "fa fa-question" )]
+    [IconCssClass( "ti ti-question-mark" )]
     [SupportedSiteTypes( Model.SiteType.Web )]
 
     #region Block Attributes
@@ -57,7 +58,7 @@ namespace Rock.Blocks.CheckIn.Configuration
 
     [Rock.SystemGuid.EntityTypeGuid( "e61908fc-ec33-4b55-b3b9-d83e32a1f064" )]
     [Rock.SystemGuid.BlockTypeGuid( "3299706f-2bb8-49db-831b-86a2b282bb02" )]
-    public class CheckInLabelDetail : RockEntityDetailBlockType<CheckInLabel, CheckInLabelBag>
+    public class CheckInLabelDetail : RockEntityDetailBlockType<CheckInLabel, CheckInLabelBag>, IBreadCrumbBlock
     {
         #region Keys
 
@@ -110,6 +111,7 @@ namespace Rock.Blocks.CheckIn.Configuration
                 options.CheckoutLabelFilterSources = FieldSourceHelper.GetCheckoutLabelFilterSources();
                 options.FamilyLabelFilterSources = FieldSourceHelper.GetFamilyLabelFilterSources();
                 options.PersonLabelFilterSources = FieldSourceHelper.GetPersonLabelFilterSources();
+                options.PersonLocationLabelFilterSources = FieldSourceHelper.GetPersonLocationLabelFilterSources();
             }
 
             return options;
@@ -219,7 +221,7 @@ namespace Rock.Blocks.CheckIn.Configuration
 
             var bag = GetCommonEntityBag( entity );
 
-            bag.LoadAttributesAndValuesForPublicView( entity, RequestContext.CurrentPerson );
+            bag.LoadAttributesAndValuesForPublicView( entity, RequestContext.CurrentPerson, enforceSecurity: true );
 
             return bag;
         }
@@ -234,7 +236,7 @@ namespace Rock.Blocks.CheckIn.Configuration
 
             var bag = GetCommonEntityBag( entity );
 
-            bag.LoadAttributesAndValuesForPublicEdit( entity, RequestContext.CurrentPerson );
+            bag.LoadAttributesAndValuesForPublicEdit( entity, RequestContext.CurrentPerson, enforceSecurity: true );
 
             return bag;
         }
@@ -294,7 +296,7 @@ namespace Rock.Blocks.CheckIn.Configuration
                 {
                     entity.LoadAttributes( RockContext );
 
-                    entity.SetPublicAttributeValues( box.Bag.AttributeValues, RequestContext.CurrentPerson );
+                    entity.SetPublicAttributeValues( box.Bag.AttributeValues, RequestContext.CurrentPerson, enforceSecurity: true );
                 } );
 
             return true;
@@ -352,6 +354,36 @@ namespace Rock.Blocks.CheckIn.Configuration
             }
 
             return true;
+        }
+
+        #endregion
+
+        #region IBreadCrumbBlock
+
+        /// <inheritdoc/>
+        public BreadCrumbResult GetBreadCrumbs( PageReference pageReference )
+        {
+            using ( var rockContext = new RockContext() )
+            {
+                var key = pageReference.GetPageParameter( PageParameterKey.CheckInLabelId );
+                var pageParameters = new Dictionary<string, string>();
+
+                var name = new CheckInLabelService( rockContext )
+                    .GetSelect( key, l => l.Name );
+
+                if ( name != null )
+                {
+                    pageParameters.Add( PageParameterKey.CheckInLabelId, key );
+                }
+
+                var breadCrumbPageRef = new PageReference( pageReference.PageId, 0, pageParameters );
+                var breadCrumb = new BreadCrumbLink( name ?? "New Label", breadCrumbPageRef );
+
+                return new BreadCrumbResult
+                {
+                    BreadCrumbs = new List<IBreadCrumb> { breadCrumb }
+                };
+            }
         }
 
         #endregion
@@ -528,13 +560,13 @@ namespace Rock.Blocks.CheckIn.Configuration
                     return ActionBadRequest( "Attendance record was not found." );
                 }
 
-                var attendanceLabel = new AttendanceLabel( attendance, RockContext );
+                var attendanceLabel = new LabelAttendanceDetail( attendance, RockContext );
                 var director = new CheckInDirector( RockContext );
 
                 var sw = System.Diagnostics.Stopwatch.StartNew();
                 var data = director.LabelProvider.RenderLabelUnconditionally( checkInLabel,
                     attendanceLabel,
-                    new List<AttendanceLabel> { attendanceLabel },
+                    new List<LabelAttendanceDetail> { attendanceLabel },
                     attendance.SearchResultGroup,
                     null );
                 sw.Stop();

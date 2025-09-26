@@ -10,6 +10,19 @@
           :onAddItem="config.isAddEnabled ? onAddItem : undefined"
           @selectItem="onSelectItem">
 
+        <!-- The following columns will only appear in the Excel/CSV Export -->
+
+        <Column name="id"
+                title="Id"
+                field="id"
+                :hideOnScreen="true" />
+
+        <BooleanColumn name="allowManualRefresh"
+                       title="Allow Manual Refresh"
+                       field="allowManualRefresh"
+                       :hideOnScreen="true" />
+
+        <!-- Most of these columns appear on screen -->
         <TextColumn name="name"
                     title="Name"
                     field="name"
@@ -24,69 +37,84 @@
                     visiblePriority="xs"
                     width="5%" />
 
-        <TextColumn name="timeToBuildMS"
-                    title="Time To Build (ms)"
-                    field="timeToBuildMS"
-                    :filter="textValueFilter"
-                    visiblePriority="xs"
-                    width="5%" />
+        <NumberColumn name="timeToBuildMS"
+                      title="Time To Build (ms)"
+                      field="timeToBuildMS"
+                      :filter="numberValueFilter"
+                      visiblePriority="xs"
+                      headerClass="text-right"
+                      itemClass="justify-content-end text-right"
+                      width="5%" />
 
         <NumberColumn name="resultSize"
                       title="Result Size (KB)"
                       field="resultSize"
                       :filter="numberValueFilter"
                       visiblePriority="xs"
+                      headerClass="text-right"
+                      itemClass="justify-content-end text-right"
                       width="2%" />
 
         <DateTimeColumn name="lastRefreshDateTime"
                         title="Last Refresh Date"
                         field="lastRefreshDateTime"
                         visiblePriority="xs"
+                        headerClass="text-right"
+                        itemClass="justify-content-end text-right"
                         width="10%" />
 
+        <BooleanColumn name="isActive"
+                       title="Active"
+                       field="isActive"
+                       :filter="booleanValueFilter"
+                       visiblePriority="xs"
+                       headerClass="text-center"
+                       itemClass="justify-content-center text-center"
+                       width="2%" />
+
         <ButtonColumn name="refresh"
-                      title="Refresh"
-                      iconClass="fa fa-sync-alt"
+                      tooltip="Refresh"
+                      iconClass="ti ti-refresh"
                       :excludeFromExport="true"
+                      :disabled="row => !row.allowManualRefresh"
                       @click="onRefreshClick" />
 
         <ButtonColumn name="preview"
-                      title="Preview"
-                      iconClass="fa fa-search"
+                      tooltip="Preview (does not save results)"
+                      iconClass="ti ti-search"
                       :excludeFromExport="true"
                       @click="onPreviewClick" />
 
         <DeleteColumn v-if="config.isDeleteEnabled" @click="onDeleteClick" />
 
-        <!-- The following columns will only appear in the Excel/CSV Export -->
-
-        <Column name="id"
-                    title="Id"
-                    field="id"
-                    :hideOnScreen="true" />
-
-        <BooleanColumn name="allowManualRefresh"
-                      title="Allow Manual Refresh"
-                      field="allowManualRefresh"
-                      :hideOnScreen="true" />
-
     </Grid>
 
     <GridPreviewModal :modelValue="previewModalData" />
+
+    <Modal v-model="showRefreshError" title="Warning" cancelText="OK" @close="showRefreshError = false">
+        <NotificationBox alertType="warning">
+            Error building Dataset object from the JSON generated from the Build Script
+        </NotificationBox>
+        <NotificationBox v-if="refreshMaxLengthWarning" alertType="info">
+            {{ refreshMaxLengthWarning }}
+        </NotificationBox>
+        <div v-html="refreshErrorMessage"></div>
+    </Modal>
 </template>
 
 <script setup lang="ts">
     import { useConfigurationValues, useInvokeBlockAction } from "@Obsidian/Utility/block";
     import { EntityType } from "@Obsidian/SystemGuids/entityType";
-    import Grid, { Column, NumberColumn, BooleanColumn, numberValueFilter, TextColumn, textValueFilter, DeleteColumn, DateTimeColumn, ButtonColumn } from "@Obsidian/Controls/grid";
+    import Grid, { Column, NumberColumn, BooleanColumn, numberValueFilter, TextColumn, textValueFilter, DeleteColumn, DateTimeColumn, ButtonColumn, booleanValueFilter } from "@Obsidian/Controls/grid";
     import { alert } from "@Obsidian/Utility/dialogs";
     import { ListBlockBox } from "@Obsidian/ViewModels/Blocks/listBlockBox";
     import { PersistedDatasetListOptionsBag } from "@Obsidian/ViewModels/Blocks/Cms/PersistedDatasetList/persistedDatasetListOptionsBag";
     import { GridDataBag } from "@Obsidian/ViewModels/Core/Grid/gridDataBag";
     import { NavigationUrlKey } from "./PersistedDatasetList/types.partial";
     import { reactive, ref } from "vue";
-    import { asBoolean } from "@Obsidian/Utility/booleanUtils";
     import GridPreviewModal from "./PersistedDatasetList/gridPreviewModal.partial.obs";
+    import Modal from "@Obsidian/Controls/modal.obs";
+    import NotificationBox from "@Obsidian/Controls/notificationBox.obs";
 
     const config = useConfigurationValues<ListBlockBox<PersistedDatasetListOptionsBag>>();
     const invokeBlockAction = useInvokeBlockAction();
@@ -98,6 +126,9 @@
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const previewModalData = ref<Record<string, any> | null>(null);
+    const showRefreshError = ref<boolean>(false);
+    const refreshMaxLengthWarning = ref<string>("");
+    const refreshErrorMessage = ref<string>("");
 
     // #endregion
 
@@ -172,12 +203,17 @@
     async function onRefreshClick(key: string): Promise<void> {
         const result = await invokeBlockAction("RefreshDataset", { datasetId: key });
         if (!result.isSuccess) {
-            previewModalData.value = {
-                jsonData: null,
-                previewMessage: `Error: ${result.errorMessage}` || "Unknown error occurred while refreshing dataset.",
-                previewMessageType: "danger",
-                isDataTruncated: false
-            };
+            try {
+                const resultData = JSON.parse(result.errorMessage ?? "{}");
+                refreshErrorMessage.value = resultData.refreshJson ?? result.errorMessage ?? "Unknown error occurred while refreshing dataset.";
+                refreshMaxLengthWarning.value = resultData.refreshMaxLengthWarning;
+            }
+            catch {
+                refreshErrorMessage.value = result.errorMessage ?? "Unknown error occurred while refreshing dataset.";
+            }
+            finally {
+                showRefreshError.value = true;
+            }
         }
         else {
             // Refresh the grid data after successful refresh
@@ -199,7 +235,8 @@
                 jsonData: responseData.previewData,
                 previewMessage: `Time to build Dataset: ${responseData.timeToBuildMS?.toFixed(0)}ms`,
                 previewMessageType: "success",
-                isDataTruncated: responseData.isDataTruncated
+                isDataTruncated: responseData.isDataTruncated,
+                refreshMaxLengthWarning: responseData.refreshMaxLengthWarning
             };
         }
         else {

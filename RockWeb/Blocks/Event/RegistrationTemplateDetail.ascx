@@ -26,7 +26,7 @@
             <asp:HiddenField ID="hfRegistrationTemplateId" runat="server" />
 
             <div class="panel-heading">
-                <h1 class="panel-title"><i class="fa fa-clipboard"></i>
+                <h1 class="panel-title"><i class="ti ti-clipboard"></i>
                     <asp:Literal ID="lReadOnlyTitle" runat="server" /></h1>
 
                 <div class="panel-labels">
@@ -67,11 +67,12 @@
                                     Help="The group member status that new registrants should be added to group with." />
                                 <Rock:DefinedValuePicker ID="dvpConnectionStatus" runat="server" Label="Connection Status"
                                     Help="The connection status to use for new individuals. Setting this here will override the setting on the Registration Entry block." />
+                                <Rock:DefinedValuePicker ID="dvpRecordSource" runat="server" Label="Record Source" Help="The record source to use for new individuals. If a 'RecordSource' page parameter is found at the time of registration, it will be used instead." />
                             </div>
                             <div class="col-md-8">
                                 <div class="row">
                                     <div class="col-xs-6">
-                                        <Rock:RockCheckBox ID="cbMultipleRegistrants" runat="server" Label="Allow Multiple Registrants" Text="Yes"
+                                        <Rock:RockCheckBox ID="cbMultipleRegistrants" runat="server" Label="Allow Multiple Registrants"
                                             Help="Should user be allowed to register multiple registrants at the same time?"
                                             AutoPostBack="true" OnCheckedChanged="cbMultipleRegistrants_CheckedChanged" />
                                     </div>
@@ -86,11 +87,11 @@
                                         <Rock:RockRadioButtonList ID="rblRegistrantsInSameFamily" runat="server" Label="Registrants In Same Family" RepeatDirection="Horizontal" CssClass="js-same-family"
                                             Help="Typical relationship of registrants that user would register." />
                                         <div id="divCurrentFamilyMembers" runat="server" class="js-current-family-members">
-                                            <Rock:RockCheckBox ID="cbShowCurrentFamilyMembers" runat="server" Label="Show Family Members" Text="Yes"
+                                            <Rock:RockCheckBox ID="cbShowCurrentFamilyMembers" runat="server" Label="Show Family Members"
                                                 Help="If Registrants in Same Family option is set to 'Yes' or 'Ask', should the person registering be able to select people from their family when registering (vs. having to enter the family member's information manually)?" />
                                         </div>
 
-                                        <Rock:RockCheckBox ID="cbWaitListEnabled" runat="server" Label="Enable Wait List" Text="Yes" Help="Check to enable a 'wait list' once the registration's maximum attendees has been reached. The 'Maximum Attendees' must be set on the registration instance for this feature to work." />
+                                        <Rock:RockCheckBox ID="cbWaitListEnabled" runat="server" Label="Enable Wait List" Help="Check to enable a 'wait list' once the registration's maximum attendees has been reached. The 'Maximum Attendees' must be set on the registration instance for this feature to work." />
                                     </div>
                                     <div class="col-xs-6">
                                         <Rock:RockDropDownList ID="ddlRegistrarOption" runat="server" Label="Registrar Options">
@@ -99,7 +100,7 @@
                                             <asp:ListItem Value="2" Text="Use First Registrant" />
                                             <asp:ListItem Value="3" Text="Use Logged In Person" />
                                         </Rock:RockDropDownList>
-                                        <Rock:RockCheckBox ID="cbShowSmsOptIn" runat="server" Label="Show SMS Opt-In" Text="Yes" Help="When enabled a checkbox will be shown next to each mobile phone number for registrants allowing the registrar to enable SMS messaging for this number." />
+                                        <Rock:RockCheckBox ID="cbShowSmsOptIn" runat="server" Label="Show SMS Opt-In" Help="When enabled a checkbox will be shown next to each mobile phone number for registrants allowing the registrar to enable SMS messaging for this number." />
                                     </div>
                                 </div>
                             </div>
@@ -119,14 +120,14 @@
                                         </Rock:RockCheckBoxList>
                                     </div>
                                     <div class="col-xs-6">
-                                        <Rock:RockCheckBox ID="cbAddPersonNote" runat="server" Label="Add Person Note" Help="Should a note be added to a person's record whenever they register?" Text="Yes" />
+                                        <Rock:RockCheckBox ID="cbAddPersonNote" runat="server" Label="Add Person Note" Help="Should a note be added to a person's record whenever they register?" />
                                     </div>
                                 </div>
                             </div>
                             <div class="col-md-6">
                                 <div class="row">
                                     <div class="col-xs-6">
-                                        <Rock:RockCheckBox ID="cbLoginRequired" runat="server" Label="Login Required" Text="Yes"
+                                        <Rock:RockCheckBox ID="cbLoginRequired" runat="server" Label="Login Required"
                                             Help="Is user required to be logged in when registering?" />
                                     </div>
                                     <div class="col-xs-6">
@@ -161,11 +162,11 @@
                             </div>
                             <div class="row">
                                 <div class="col-md-6">
-                                    <Rock:CurrencyBox ID="cbMinimumInitialPayment" runat="server" Label="Minimum Initial Payment"
+                                    <Rock:CurrencyBox ID="cbMinimumInitialPayment" runat="server" Label="Minimum Initial Payment" DisablePlaceholder="true"
                                         Help="The minimum amount required per registrant. Leave value blank if full amount is required." />
                                 </div>
                                 <div class="col-md-6">
-                                    <Rock:CurrencyBox ID="cbDefaultPaymentAmount" runat="server" Label="Default Payment Amount"
+                                    <Rock:CurrencyBox ID="cbDefaultPaymentAmount" runat="server" Label="Default Payment Amount" DisablePlaceholder="true"
                                         Help="The default payment amount per registrant. Leave value blank to default to the full amount. NOTE: This requires that a Minimum Initial Payment is greater than 0." />
                                 </div>
                             </div>
@@ -179,7 +180,7 @@
                                     Help="An optional workflow type to launch when a new registration is completed." />
                                  <Rock:WorkflowTypePicker ID="wtpRegistrantWorkflow" runat="server" Label="Registrant Workflow"
                                     Help="An optional workflow type to launch for each Registrant when a new registration is completed. Both the 'RegistrationRegistrantId' and the 'RegistrationId' will be passed to the workflow." />
-                                <Rock:RockCheckBox ID="cbAllowExternalUpdates" runat="server" Label="Allow External Updates to Saved Registrations" Text="Yes"
+                                <Rock:RockCheckBox ID="cbAllowExternalUpdates" runat="server" Label="Allow External Updates to Saved Registrations"
                                     Help="Allow saved registrations to be updated online. If false, the individual will be able to make additional payments but will
                                             not be allowed to change any of the registrant information and attributes." />
                             </div>
@@ -190,7 +191,7 @@
                                             Help="A document that needs to be signed for registrations of this type." OnSelectedIndexChanged="ddlSignatureDocumentTemplate_SelectedIndexChanged" />
                                     </div>
                                     <div class="col-xs-6">
-                                        <Rock:RockCheckBox ID="cbDisplayInLine" runat="server" Label="In-Line Signature" Text="Yes" Visible="false"
+                                        <Rock:RockCheckBox ID="cbDisplayInLine" runat="server" Label="In-Line Signature" Visible="false"
                                             Help="When registering for this type of event, should the Required Signature Document be displayed during the registration steps? If not, a request will be sent after the registration is completed." />
                                     </div>
                                 </div>
@@ -204,7 +205,7 @@
                             <asp:PlaceHolder ID="phForms" runat="server" />
                         </div>
                         <div class="pull-right">
-                            <asp:LinkButton ID="lbAddForm" runat="server" CssClass="btn btn-action btn-xs" OnClick="lbAddForm_Click" CausesValidation="false"><i class="fa fa-plus"></i> Add Form</asp:LinkButton>
+                            <asp:LinkButton ID="lbAddForm" runat="server" CssClass="btn btn-action btn-xs" OnClick="lbAddForm_Click" CausesValidation="false"><i class="ti ti-plus"></i> Add Form</asp:LinkButton>
                         </div>
                     </Rock:PanelWidget>
 
@@ -405,7 +406,7 @@
                     <Rock:NotificationBox ID="nbEditModeMessage" runat="server" NotificationBoxType="Info" />
 
                     <div class="row">
-                        <div class="col-md-6">
+                        <div class="col-md-4">
                             <Rock:RockLiteral ID="lGroupType" runat="server" Label="Group Type" />
                             <Rock:RockLiteral ID="lWorkflowType" runat="server" Label="Registration Workflow" />
                             <Rock:RockLiteral ID="lRequiredSignedDocument" runat="server" Label="Required Signature Document" />
@@ -420,7 +421,7 @@
                                 </div>
                             </Rock:RockControlWrapper>
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-4">
                             <Rock:RockLiteral ID="lCost" runat="server" Label="Cost" />
                             <Rock:RockLiteral ID="lMinimumInitialPayment" runat="server" Label="Minimum Initial Payment" />
                             <Rock:RockLiteral ID="lDefaultPaymentAmount" runat="server" Label="Default Payment Amount" />
@@ -435,6 +436,18 @@
                                 </asp:Repeater>
                             </Rock:RockControlWrapper>
                         </div>
+                        <div class="col-md-4">
+                            <div class="form-group static-control">
+                                <asp:Label ID="lGroupPlacements" runat="server" CssClass="control-label" Text="Group Placements"></asp:Label>
+                                <asp:Repeater ID="rptGroupPlacements" runat="server">
+                                    <ItemTemplate>
+                                        <li>
+                                            <asp:HyperLink ID="hlPlacement" runat="server" NavigateUrl='<%# Eval("Url") %>' Text='<%# Eval("Name") %>' />
+                                        </li>
+                                    </ItemTemplate>
+                                </asp:Repeater>
+                            </div>
+                        </div>
                     </div>
                     <div class="row">
                         <div class="col-md-12">
@@ -448,10 +461,7 @@
                         <Rock:HiddenFieldWithClass ID="hfHasRegistrations" runat="server" CssClass="js-has-registrations" />
                         <asp:LinkButton ID="btnDelete" runat="server" Text="Delete" CssClass="btn btn-link js-delete-template" OnClick="btnDelete_Click" CausesValidation="false" />
                         <span class="pull-right">
-                            <asp:LinkButton ID="btnPlacements" runat="server" CssClass="btn btn-default btn-sm btn-square" OnClick="btnPlacements_Click">
-                                <i class="fa fa-random"></i>
-                            </asp:LinkButton>
-                            <asp:LinkButton ID="btnCopy" runat="server" CssClass="btn btn-default btn-sm btn-square" Text="<i class='fa fa-clone'></i>" OnClick="btnCopy_Click" />
+                            <asp:LinkButton ID="btnCopy" runat="server" CssClass="btn btn-default btn-sm btn-square" Text="<i class='ti ti-copy'></i>" OnClick="btnCopy_Click" />
                             <Rock:SecurityButton ID="btnSecurity" runat="server" class="btn btn-sm btn-square btn-security" />
                         </span>
                     </div>
@@ -490,23 +500,23 @@
                         <Rock:RockDropDownList ID="ddlGroupTypeAttributes" runat="server" Label="Group Member Attribute" Visible="false" ValidationGroup="Field" EnhanceForLongLists="true" Required="true" DisplayRequiredIndicator="true" />
                     </div>
                     <div class="col-md-3">
-                        <Rock:RockCheckBox ID="cbInternalField" runat="server" Label="Internal Field" Text="Yes" Visible="false" ValidationGroup="Field"
+                        <Rock:RockCheckBox ID="cbInternalField" runat="server" Label="Internal Field" Visible="false" ValidationGroup="Field"
                             Help="Should this field be hidden on the public registration page(s) and only visible internally?" />
-                        <Rock:RockCheckBox ID="cbRequireInInitialEntry" runat="server" Label="Required" Text="Yes" Visible="false" ValidationGroup="Field"
+                        <Rock:RockCheckBox ID="cbRequireInInitialEntry" runat="server" Label="Required" Visible="false" ValidationGroup="Field"
                             Help="Should a value for this attribute be required when registering?" />
                     </div>
                     <div class="col-md-3">
-                        <Rock:RockCheckBox ID="cbCommonValue" runat="server" Label="Common Value" Text="Yes" Visible="false" ValidationGroup="Field"
-                            Help="When registering more than one person, should the value of this attribute default to the value entered for first person registered?" />
-                        <Rock:RockCheckBox ID="cbShowOnGrid" runat="server" Label="Show on Grid" Text="Yes" Visible="false" ValidationGroup="Field"
+                        <Rock:RockCheckBox ID="cbCommonValue" runat="server" Label="Common Value" Visible="false" ValidationGroup="Field"
+                            Help="When multiple people are being registered, this option uses the value entered for the first person to automatically fill the same field for each additional registrant." />
+                        <Rock:RockCheckBox ID="cbShowOnGrid" runat="server" Label="Show on Grid" Visible="false" ValidationGroup="Field"
                             Help="Should this value be displayed on the list of registrants? Note: Some person fields cannot be shown in grids, and group member attributes are only shown in group member lists." />
                     </div>
                     <div class="col-md-3">
-                        <Rock:RockCheckBox ID="cbUsePersonCurrentValue" runat="server" Label="Use Current Value" Text="Yes" Visible="false" ValidationGroup="Field"
+                        <Rock:RockCheckBox ID="cbUsePersonCurrentValue" runat="server" Label="Use Current Value" Visible="false" ValidationGroup="Field"
                             Help="Should the person's current value for this field be displayed when they register?" />
-                        <Rock:RockCheckBox ID="cbShowOnWaitList" runat="server" Label="Show On Wait List" Text="Yes" Visible="true" ValidationGroup="Field"
+                        <Rock:RockCheckBox ID="cbShowOnWaitList" runat="server" Label="Show On Wait List" Visible="true" ValidationGroup="Field"
                             Help="Should this field be shown for a person registering on the waitlist?" />
-                        <Rock:RockCheckBox ID="cbLockExistingValue" runat="server" Label="Lock Existing Value" Text="Yes" Visible="true" ValidationGroup="Field"
+                        <Rock:RockCheckBox ID="cbLockExistingValue" runat="server" Label="Lock Existing Value" Visible="true" ValidationGroup="Field"
                             Help="When enabled, this option restricts editing the field when a value is already on the person's record." />
                     </div>
                 </div>
@@ -627,25 +637,25 @@
                                         </asp:Panel>
                                         <Rock:CurrencyBox ID="cbFeeItemCost" runat="server" CssClass="input-width-md margin-b-sm" Placeholder="Cost" ValidationGroup="Fee" NumberType="Currency" Required="false" />
                                         <Rock:NumberBox ID="nbMaximumUsageCount" runat="server" CssClass="input-width-md margin-b-sm" Placeholder="Max Available" ValidationGroup="Fee" Required="false" NumberType="Integer" />
-                                        <asp:LinkButton ID="btnDeleteFeeItem" runat="server" CssClass="btn btn-danger btn-sm btn-square margin-b-sm" OnClick="btnDeleteFeeItem_Click"><i class="fa fa-times"></i></asp:LinkButton>
+                                        <asp:LinkButton ID="btnDeleteFeeItem" runat="server" CssClass="btn btn-danger btn-sm btn-square margin-b-sm" OnClick="btnDeleteFeeItem_Click"><i class="ti ti-x"></i></asp:LinkButton>
                                     </div>
                                 </ItemTemplate>
                             </asp:Repeater>
 
                             <div class="actions">
-                                <asp:LinkButton ID="btnAddFeeItem" runat="server" CssClass="btn btn-action btn-sm btn-square" OnClick="btnAddFeeItem_Click"><i class="fa fa-plus-circle"></i></asp:LinkButton>
+                                <asp:LinkButton ID="btnAddFeeItem" runat="server" CssClass="btn btn-action btn-sm btn-square" OnClick="btnAddFeeItem_Click"><i class="ti ti-circle-plus"></i></asp:LinkButton>
                             </div>
                         </Rock:RockControlWrapper>
 
                     </div>
                     <div class="col-md-3">
-                        <Rock:RockCheckBox ID="cbAllowMultiple" runat="server" Label="Enable Quantity" ValidationGroup="Fee" Text="Yes" Help="Should registrants be able to select more than one of this item?" CssClass="form-check" />
-                        <Rock:RockCheckBox ID="cbDiscountApplies" runat="server" Label="Discount Applies" ValidationGroup="Fee" Text="Yes" Help="Should discounts be applied to this fee?" />
-                        <Rock:RockCheckBox ID="cbFeeIsActive" runat="server" Label="Is Active" ValidationGroup="Fee" Text="Yes" Help="Unchecking this will remove the fee for new registrations but will not effect the existing registrants." />
+                        <Rock:RockCheckBox ID="cbAllowMultiple" runat="server" Label="Enable Quantity" ValidationGroup="Fee" Help="Should registrants be able to select more than one of this item?" CssClass="form-check" />
+                        <Rock:RockCheckBox ID="cbDiscountApplies" runat="server" Label="Discount Applies" ValidationGroup="Fee" Help="Should discounts be applied to this fee?" />
+                        <Rock:RockCheckBox ID="cbFeeIsActive" runat="server" Label="Is Active" ValidationGroup="Fee" Help="Unchecking this will remove the fee for new registrations but will not effect the existing registrants." />
                     </div>
                     <div class="col-md-3">
-                        <Rock:RockCheckBox ID="cbFeeIsRequired" runat="server" Label="Is Required" ValidationGroup="Fee" Text="Yes" Help="Checking this will mark the fee for new registrations required." />
-                        <Rock:RockCheckBox ID="cbHideWhenNoneRemaining" runat="server" Label="Hide When None Remaining" ValidationGroup="Fee" Text="Yes" Help="If checked then items that have 0 remaining will not display. If not checked then the items will display but will not be selectable." />
+                        <Rock:RockCheckBox ID="cbFeeIsRequired" runat="server" Label="Is Required" ValidationGroup="Fee" Help="Checking this will mark the fee for new registrations required." />
+                        <Rock:RockCheckBox ID="cbHideWhenNoneRemaining" runat="server" Label="Hide When None Remaining" ValidationGroup="Fee" Help="If checked then items that have 0 remaining will not display. If not checked then the items will display but will not be selectable." />
                     </div>
                 </div>
             </Content>

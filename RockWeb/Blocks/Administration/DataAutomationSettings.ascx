@@ -6,7 +6,7 @@
         <div class="panel panel-block">
             <div class="panel-heading">
                 <h1 class="panel-title">
-                    <i class="fa fa-tachometer"></i>
+                    <i class="ti ti-brand-speedtest"></i>
                     Data Automation Settings
                 </h1>
             </div>
@@ -128,7 +128,7 @@
                                             <div class="row margin-b-sm">
                                                 <asp:HiddenField ID="hfInteractionTypeId" runat="server" Value='<%# Eval("Guid") %>' />
                                                 <div class="col-md-5 col-sm-6 col-xs-8 padding-t-sm">
-                                                    <Rock:RockCheckBox ID="cbInterationType" runat="server" SelectedIconCssClass="fa fa-check-square-o" UnSelectedIconCssClass="fa fa-square-o" Text='<%# Eval("Name") %>' Checked='<%# (bool)Eval("IsInteractionTypeEnabled") %>' />
+                                                    <Rock:RockCheckBox ID="cbInterationType" runat="server" SelectedIconCssClass="ti ti-square-check" UnSelectedIconCssClass="ti ti-square" Text='<%# Eval("Name") %>' Checked='<%# (bool)Eval("IsInteractionTypeEnabled") %>' />
                                                 </div>
                                                 <div class="col-md-7 col-sm-6 col-xs-4">
                                                     <Rock:NumberBox ID="nbInteractionDays" runat="server" AppendText="days" CssClass="input-width-md" Text='<%#Eval("LastInteractionDays") %>' />
@@ -272,7 +272,7 @@
                                                 <div class="row margin-b-sm">
                                                     <asp:HiddenField ID="hfInteractionTypeId" runat="server" Value='<%# Eval("Guid") %>' />
                                                     <div class="col-md-5 col-sm-6 col-xs-8 padding-t-sm">
-                                                        <Rock:RockCheckBox ID="cbInterationType" runat="server" SelectedIconCssClass="fa fa-check-square-o" UnSelectedIconCssClass="fa fa-square-o" Text='<%# Eval("Name") %>' Checked='<%# (bool)Eval("IsInteractionTypeEnabled") %>' />
+                                                        <Rock:RockCheckBox ID="cbInterationType" runat="server" SelectedIconCssClass="ti ti-square-check" UnSelectedIconCssClass="ti ti-square" Text='<%# Eval("Name") %>' Checked='<%# (bool)Eval("IsInteractionTypeEnabled") %>' />
                                                     </div>
                                                     <div class="col-md-7 col-sm-6 col-xs-4">
                                                         <Rock:NumberBox ID="nbNoInteractionDays" runat="server" AppendText="days" CssClass="input-width-md" Text='<%#Eval("LastInteractionDays") %>' />
@@ -355,12 +355,12 @@
                                                     <asp:ListItem Text="Giving" Value="1" />
                                                     <asp:ListItem Text="Attendance" Value="2" />
                                                 </Rock:RockDropDownList>
-                                                <asp:LinkButton ID="lbDelete" runat="server" CssClass="btn btn-xs btn-square btn-danger form-action-remove" CommandName="delete" CommandArgument='<%# Eval("Id") %>'><i class="fa fa-times"></i></asp:LinkButton>
+                                                <asp:LinkButton ID="lbDelete" runat="server" CssClass="btn btn-xs btn-square btn-danger form-action-remove" CommandName="delete" CommandArgument='<%# Eval("Id") %>'><i class="ti ti-x"></i></asp:LinkButton>
                                             </div>
                                         </ItemTemplate>
                                     </asp:Repeater>
                                     <asp:LinkButton ID="lbAdd" CssClass="btn btn-xs btn-action margin-l-sm" runat="server" OnClick="lbAdd_Click">
-                                        <i class="fa fa-plus-circle"></i>
+                                        <i class="ti ti-circle-plus"></i>
                                     </asp:LinkButton>
                                 </Rock:RockControlWrapper>
                                 </div>
@@ -378,13 +378,13 @@
                         <hr />
 
                         <asp:Panel ID="pnlAdultChildren" runat="server" Enabled="false" CssClass="data-integrity-options">
-                            <Rock:RockCheckBox ID="cbisMoveGraduated" runat="server" Label="Should children only be moved if they have graduated?" Text="Yes" />
+                            <Rock:RockCheckBox ID="cbisMoveGraduated" runat="server" Label="Should children only be moved if they have graduated?" />
                             <Rock:NumberBox ID="nbAdultAge" runat="server" Label="The age a child should be considered an adult" AppendText="years" CssClass="input-width-md" />
                             <Rock:GroupRolePicker ID="rpParentRelationship" runat="server" Label="An optional known relationship that should be added between the parent(s) and the new adult"
                                 Help="Usually this would be set to 'Parent', but if you have a different known relationship you want to use, you can set it here" />
                             <Rock:GroupRolePicker ID="rpSiblingRelationship" runat="server" Label="An optional known relationship that should be added between the new adult and their sibling(s)" />
-                            <Rock:RockCheckBox ID="cbSameAddress" runat="server" Label="Should the new adult's home address be the same as their current family?" Text="Yes" />
-                            <Rock:RockCheckBox ID="cbSamePhone" runat="server" Label="If the new adult does not have a home phone, should they use same number as their parent?" Text="Yes" />
+                            <Rock:RockCheckBox ID="cbSameAddress" runat="server" Label="Should the new adult's home address be the same as their current family?" />
+                            <Rock:RockCheckBox ID="cbSamePhone" runat="server" Label="If the new adult does not have a home phone, should they use same number as their parent?" />
                             <Rock:WorkflowTypePicker ID="wfWorkflows" runat="server" AllowMultiSelect="true" Label="The workflow type(s) to launch for each person that is processed."
                                 Help="The person will be passed to the workflow as the entity. If the workflow has an 'OldFamily' Group attribute it will set this to the person's primary family before processing the person. If the workflow has a 'NewFamily' Group attribute it will set to the family that the person was updated or added as an adult to." />
                             <Rock:NumberBox ID="nbMaxRecords" runat="server" Label="The maximum number of records that should be processed at a time." AppendText="records" CssClass="input-width-lg" />
@@ -435,7 +435,7 @@
 
                 <div class="actions">
                     <Rock:BootstrapButton ID="bbtnSaveConfig" runat="server" CssClass="btn btn-primary" data-shortcut-key="s" ToolTip="Alt+s" OnClick="bbtnSaveConfig_Click" Text="Save"
-                        DataLoadingText="&lt;i class='fa fa-refresh fa-spin'&gt;&lt;/i&gt; Saving"
+                        DataLoadingText="&lt;i class='ti ti-refresh ti-spin'&gt;&lt;/i&gt; Saving"
                         CompletedText="Success" CompletedMessage="<div class='margin-t-md alert alert-success'>Changes have been saved.</div>" CompletedDuration="3"></Rock:BootstrapButton>
                 </div>
 

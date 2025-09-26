@@ -31,8 +31,8 @@ namespace Rock.Blocks.Cms
     [DisplayName( "File Asset Manager" )]
     [Category( "CMS" )]
     [Description( "Browse and manage files on the web server or stored on a remote server or 3rd party cloud storage" )]
-    [IconCssClass( "fa fa-question" )]
-    // [SupportedSiteTypes( Model.SiteType.Web )]
+    [IconCssClass( "ti ti-question-mark" )]
+    [SupportedSiteTypes( Model.SiteType.Web )]
 
     #region Block Attributes
 
@@ -40,7 +40,7 @@ namespace Rock.Blocks.Cms
         "Enable Asset Storage Providers",
         Key = AttributeKey.EnableAssetProviders,
         Description = "Set this to true to enable showing folders and files from your configured asset storage providers.",
-        DefaultBooleanValue = true,
+        DefaultBooleanValue = false,
         Order = 0
     )]
 
@@ -48,15 +48,17 @@ namespace Rock.Blocks.Cms
         "Enable File Manager",
         Key = AttributeKey.EnableFileManager,
         Description = "Set this to true to enable showing folders and files your server's local file system.",
-        DefaultBooleanValue = false,
+        DefaultBooleanValue = true,
         Order = 1
     )]
 
-    [BooleanField(
-        "Use Static Height",
-        Key = AttributeKey.IsStaticHeight,
-        Description = "Set this to true to be able to set a CSS height value dictating how tall the block will be. Otherwise, it will grow with the content.",
-        DefaultBooleanValue = false,
+    [CustomDropdownListField(
+        "Height Mode",
+        Key = AttributeKey.HeightMode,
+        Description = "Static lets you set a CSS height below to determine the height of the block. Flexible will grow with the content. Full Worksurface is designed to fill up a full worksurface page layout.",
+        ListSource = "static^Static,flexible^Flexible,full^Full Worksurface",
+        IsRequired = true,
+        DefaultValue = "static",
         Order = 2
     )]
 
@@ -130,7 +132,7 @@ namespace Rock.Blocks.Cms
         {
             public const string EnableAssetProviders = "EnableAssetProviders";
             public const string EnableFileManager = "EnableFileManager";
-            public const string IsStaticHeight = "IsStaticHeight";
+            public const string HeightMode = "HeightMode";
             public const string Height = "Height";
             public const string RootFolder = "RootFolder";
             public const string BrowseMode = "BrowseMode";
@@ -150,11 +152,11 @@ namespace Rock.Blocks.Cms
                 Title = BlockCache.Name,
                 EnableAssetProviders = GetAttributeValue( AttributeKey.EnableAssetProviders ).AsBoolean(),
                 EnableFileManager = GetAttributeValue( AttributeKey.EnableFileManager ).AsBoolean(),
-                IsStaticHeight = GetAttributeValue( AttributeKey.IsStaticHeight ).AsBoolean(),
+                HeightMode = GetAttributeValue( AttributeKey.HeightMode ),
                 Height = GetAttributeValue( AttributeKey.Height ),
                 RootFolder = Rock.Security.Encryption.EncryptString( GetAttributeValue( AttributeKey.RootFolder ) ),
                 BrowseMode = GetAttributeValue( AttributeKey.BrowseMode ),
-                FileEditorPage = this.GetLinkedPageUrl( GetAttributeValue( AttributeKey.FileEditorPage ) ),
+                FileEditorPage = this.GetLinkedPageUrl( AttributeKey.FileEditorPage ),
                 EnableZipUploader = GetAttributeValue( AttributeKey.ZipUploaderEnabled ).AsBoolean(),
                 SecurityGrantToken = GetSecurityGrantToken()
             };

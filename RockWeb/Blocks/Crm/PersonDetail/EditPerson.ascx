@@ -14,7 +14,7 @@
 
         <div class="panel panel-block">
             <div class="panel-heading">
-                <h1 class="panel-title"><i class="fa fa-user"></i>
+                <h1 class="panel-title"><i class="ti ti-user"></i>
                     <asp:Literal ID="lTitle" runat="server" /></h1>
             </div>
 
@@ -48,20 +48,20 @@
                                         <Rock:DefinedValuePicker ID="dvpTitle" runat="server" CssClass="input-width-md" Label="Title" />
                                     </div>
                                     <div class="col-md-6">
-                                        <Rock:DataTextBox ID="tbFirstName" runat="server" SourceTypeName="Rock.Model.Person, Rock" PropertyName="FirstName" autocomplete="off" />
+                                        <Rock:DataTextBox ID="tbFirstName" runat="server" SourceTypeName="Rock.Model.Person, Rock" PropertyName="FirstName" autocomplete="off" NoSpecialCharacters="true" NoEmojisOrSpecialFonts="true" />
                                     </div>
                                 </div>
                                 <div class="form-row">
                                     <div class="col-md-6">
-                                        <Rock:DataTextBox ID="tbNickName" runat="server" SourceTypeName="Rock.Model.Person, Rock" PropertyName="NickName" Label="Nickname" autocomplete="off" />
+                                        <Rock:DataTextBox ID="tbNickName" runat="server" SourceTypeName="Rock.Model.Person, Rock" PropertyName="NickName" Label="Nickname" autocomplete="off" NoSpecialCharacters="true" NoEmojisOrSpecialFonts="true" />
                                     </div>
                                     <div class="col-md-6">
-                                        <Rock:DataTextBox ID="tbMiddleName" runat="server" SourceTypeName="Rock.Model.Person, Rock" PropertyName="MiddleName" autocomplete="off" />
+                                        <Rock:DataTextBox ID="tbMiddleName" runat="server" SourceTypeName="Rock.Model.Person, Rock" PropertyName="MiddleName" autocomplete="off" NoSpecialCharacters="true" NoEmojisOrSpecialFonts="true" />
                                     </div>
                                 </div>
                                 <div class="form-row">
                                     <div class="col-md-6">
-                                        <Rock:DataTextBox ID="tbLastName" runat="server" SourceTypeName="Rock.Model.Person, Rock" PropertyName="LastName" autocomplete="off" />
+                                        <Rock:DataTextBox ID="tbLastName" runat="server" SourceTypeName="Rock.Model.Person, Rock" PropertyName="LastName" autocomplete="off" NoSpecialCharacters="true" NoEmojisOrSpecialFonts="true" />
                                     </div>
                                     <div class="col-md-6">
                                         <Rock:DefinedValuePicker ID="dvpSuffix" CssClass="input-width-md" runat="server" Label="Suffix" />
@@ -74,6 +74,8 @@
                                         <Rock:DefinedValuePicker ID="dvpConnectionStatus" runat="server" Label="Connection Status" Required="true" />
                                     </div>
                                     <div class="col-sm-6">
+                                        <Rock:RockLiteral ID="lRecordSourceReadOnly" runat="server" Label="Record Source" />
+                                        <Rock:DefinedValuePicker ID="dvpRecordSource" runat="server" Label="Record Source" />
                                     </div>
                                 </div>
                                 <Rock:RockRadioButtonList ID="rblGender" runat="server" RepeatDirection="Horizontal" Label="Gender">
@@ -81,7 +83,7 @@
                                     <asp:ListItem Text="Female" Value="Female" />
                                     <asp:ListItem Text="Unknown" Value="Unknown" />
                                 </Rock:RockRadioButtonList>
-                                <Rock:BirthdayPicker ID="bpBirthDay" runat="server" Label="Birth Day" />
+                                <Rock:BirthdayPicker ID="bpBirthDay" runat="server" Label="Birth Date" />
                                 <asp:Panel ID="pnlGradeGraduation" runat="server" CssClass="form-row">
                                     <div class="col-xs-6 col-sm-3">
                                         <Rock:GradePicker ID="ddlGradePicker" runat="server" UseAbbreviation="true" UseGradeOffsetAsValue="true" />
@@ -159,6 +161,19 @@
                                     <asp:ListItem Text="SMS" Value="2" />
                                 </Rock:RockRadioButtonList>
 
+                                <asp:Panel ID="pnlChatPreferences" runat="Server">
+                                    <Rock:RockDropDownList ID="ddlIsChatProfilePublic" runat="server" CssClass="input-width-xl" Label="Is Chat Profile Public" Help="If enabled, the person's profile will be visible in the external chat system.">
+                                        <asp:ListItem Value="" Text="Inherit from System Default" />
+                                        <asp:ListItem Value="n" Text="No" />
+                                        <asp:ListItem Value="y" Text="Yes" />
+                                    </Rock:RockDropDownList>
+                                    <Rock:RockDropDownList ID="ddlIsChatOpenDirectMessageAllowed" runat="server" CssClass="input-width-xl" Label="Is Chat Open Direct Message Allowed" Help="If enabled, the person can receive direct messages from anybody in the external chat system. Otherwise, only people who are members of a shared, non-public chat channel may initiate a new direct message with this person.">
+                                        <asp:ListItem Value="" Text="Inherit from System Default" />
+                                        <asp:ListItem Value="n" Text="No" />
+                                        <asp:ListItem Value="y" Text="Yes" />
+                                    </Rock:RockDropDownList>
+                                </asp:Panel>
+
                                 <Rock:NotificationBox ID="nbCommunicationPreferenceWarning" runat="server" NotificationBoxType="Warning" Visible="false" />
 
                             </fieldset>
@@ -191,7 +206,7 @@
                                             <asp:LinkButton ID="btnGenerateEnvelopeNumber" runat="server" Text="Generate Envelope #" CssClass="btn btn-default margin-l-sm" OnClick="btnGenerateEnvelopeNumber_Click" />
                                         </Rock:RockControlWrapper>
                                     </asp:Panel>
-                                    <Rock:RockCheckBox ID="cbLockAsChild" runat="server" Label="Lock as Child" Text="Yes" Help="By default individuals will be considered an adult when they are over 18 or are marked as an adult in a family. This setting will override this logic and lock the individual as a child."/>
+                                    <Rock:RockCheckBox ID="cbLockAsChild" runat="server" Label="Lock as Child" Help="By default individuals will be considered an adult when they are over 18 or are marked as an adult in a family. This setting will override this logic and lock the individual as a child."/>
                                 </div>
                                 <div class="col-md-6">
                                     <Rock:RockControlWrapper ID="rcwPreviousNames" runat="server" Label="Previous Last Names">

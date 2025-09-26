@@ -20,6 +20,7 @@ using System.Collections.Generic;
 using Rock.Data;
 using Rock.Extension;
 using Rock.Model;
+using Rock.Net;
 using Rock.Web.Cache;
 
 namespace Rock.Workflow
@@ -320,6 +321,26 @@ namespace Rock.Workflow
                     value = Security.Encryption.EncryptString( value );
                 }
 
+                /*
+                     7/17/2025 - NA
+
+                     This trims any time component that may be present in the
+                     original value because the FieldType only represents a Date.
+                     We leave the time component in the string value as "00:00:00"
+                     along with the timezone offset so that the value can be interpreted
+                     correctly based on localization.
+
+                     Reason: To address issue #6377 by storing only the Date portion of the value.
+                */
+                if ( attr.FieldType.Field is Field.Types.DateFieldType )
+                {
+                    var dateValue = value.AsDateTime();
+                    if ( dateValue != null )
+                    {
+                        value = dateValue.Value.Date.ToString( "o" );
+                    }
+                }
+
                 if ( attr.EntityTypeId == new Rock.Model.Workflow().TypeId )
                 {
                     action.Activity.Workflow.SetAttributeValue( attr.Key, value );
@@ -348,5 +369,27 @@ namespace Rock.Workflow
             return mergeFields;
         }
 
+        /// <summary>
+        /// Gets the merge fields that should be used when resolving Lava
+        /// templates for the action.
+        /// </summary>
+        /// <param name="action">The action being processed.</param>
+        /// <param name="requestContext">The context that identifies the current request, must not be <c>null</c>.</param>
+        /// <returns>A dictionary of merge fields that should be used with the Lava template.</returns>
+        protected Dictionary<string, object> GetMergeFields( WorkflowAction action, RockRequestContext requestContext )
+        {
+            if ( requestContext == null )
+            {
+                throw new ArgumentNullException( nameof( requestContext ) );
+            }
+
+            var mergeFields = requestContext.GetCommonMergeFields();
+
+            mergeFields.Add( "Action", action );
+            mergeFields.Add( "Activity", action.Activity );
+            mergeFields.Add( "Workflow", action.Activity.Workflow );
+
+            return mergeFields;
+        }
     }
 }

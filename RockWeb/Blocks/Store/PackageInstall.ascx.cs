@@ -112,6 +112,12 @@ namespace RockWeb.Blocks.Store
             {
                 DisplayPackageInfo();
             }
+            else
+            {
+                // Set timeout for up to 3 minutes
+                Server.ScriptTimeout = 180;
+                ScriptManager.GetCurrent( Page ).AsyncPostBackTimeout = 180;
+            }
 
             base.OnLoad( e );
         }
@@ -191,12 +197,12 @@ namespace RockWeb.Blocks.Store
         /// </summary>
         /// <param name="packageName"></param>
         /// <returns>-1 if the package is not installed, otherwise the version id of the installed package.</returns>
-        private int GetCurrentlyInstalledPackageVersion( string packageName )
+        private int GetCurrentlyInstalledPackageVersion( int packageId )
         {
             var installedPackages = InstalledPackageService.GetInstalledPackages().OrderBy( p => p.PackageName ).OrderByDescending( p => p.InstallDateTime );
             foreach ( var installedPackage in installedPackages )
             {
-                if ( installedPackage.PackageName == packageName )
+                if ( installedPackage.PackageId == packageId )
                 {
                     return installedPackage.VersionId;
                 }
@@ -216,7 +222,7 @@ namespace RockWeb.Blocks.Store
                 return;
             }
 
-            var currentlyInstalledPackageVersion = GetCurrentlyInstalledPackageVersion( purchaseResponse.PackageName );
+            var currentlyInstalledPackageVersion = GetCurrentlyInstalledPackageVersion( purchaseResponse.PackageId );
             RockSemanticVersion rockVersion = RockSemanticVersion.Parse( VersionInfo.GetRockSemanticVersionNumber() );
 
             // Get package install steps that are newer than the currently installed package and apply to this

@@ -1,0 +1,147 @@
+<!-- Copyright by the Spark Development Network; Licensed under the Rock Community License -->
+<template>
+    <ComponentPropertyPanelBase :componentElement="componentElement"
+                                :componentMigrationHelper="titleComponentHelper"
+                                :ltr="ltr"
+                                title="Title"
+                                @clone="$emit('clone')"
+                                @complete="$emit('complete')"
+                                @delete="$emit('delete')"
+                                @migrate="$emit('migrate', $event)">
+        <template v-if="componentHelper?.headingEl">
+            <AccordionGroup>
+                <Accordion title="Text">
+                    <div class="row">
+                        <div class="col-sm-12">
+                            <TextContentProperty :element="componentHelper.headingEl" />
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-sm-12">
+                            <DropDownList v-model="headingLevel"
+                                          :items="headingLevels"
+                                          label="Level"
+                                          :showBlankItem="false" />
+                        </div>
+                    </div>
+
+                    <FontPropertyGroup :element="componentHelper.headingEl" />
+                </Accordion>
+
+                <Accordion title="Spacing">
+                    <div class="row">
+                        <div class="col-sm-12">
+                            <PaddingProperty :element="componentHelper.paddingEl" />
+                        </div>
+                    </div>
+
+                    <div v-if="componentHelper?.marginWrapper" class="row">
+                        <div class="col-sm-12">
+                            <PaddingProperty :element="componentHelper.marginEl"
+                                             label="Margin" />
+                        </div>
+                    </div>
+                </Accordion>
+
+                <Accordion title="Border">
+                    <div class="row">
+                        <div class="col-sm-12">
+                            <BorderPropertyGroup :element="componentHelper.borderEl" />
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-sm-12">
+                            <BorderRadiusProperty :element="componentHelper.borderEl" />
+                        </div>
+                    </div>
+                </Accordion>
+            </AccordionGroup>
+        </template>
+    </ComponentPropertyPanelBase>
+</template>
+
+<script setup lang="ts">
+    import { PropType, ref, watch } from "vue";
+    import ComponentPropertyPanelBase from "./componentPropertyPanelBase.partial.obs";
+    import AccordionGroup from "../accordionGroup.partial.obs";
+    import Accordion from "../accordion.partial.obs";
+    import BorderPropertyGroup from "../properties/borderPropertyGroup.partial.obs";
+    import BorderRadiusProperty from "../properties/borderRadiusProperty.partial.obs";
+    import FontPropertyGroup from "../properties/fontPropertyGroup.partial.obs";
+    import PaddingProperty from "../properties/paddingProperty.partial.obs";
+    import TextContentProperty from "../properties/textContentProperty.partial.obs";
+    import { getTitleComponentHelper, SupportedHeadingLevel, SupportedHeadingLevels } from "../utils.partial";
+    import DropDownList from "@Obsidian/Controls/dropDownList.obs";
+    import { ListItemBag } from "@Obsidian/ViewModels/Utility/listItemBag";
+    import { Enumerable } from "@Obsidian/Utility/linq";
+
+    const props = defineProps({
+        componentElement: {
+            type: Object as PropType<HTMLElement>,
+            required: true
+        },
+
+        ltr: {
+            type: Boolean as PropType<boolean>,
+            default: false
+        }
+    });
+
+    defineEmits<{
+        (e: "clone"): void;
+        (e: "complete"): void;
+        (e: "delete"): void;
+        (e: "migrate", value: Element): void;
+    }>();
+
+    const headingLevels: ListItemBag[] = Enumerable
+        .from(SupportedHeadingLevels)
+        .orderBy(l => l)
+        .select(l => ({
+            text: l.replace("h", "Heading "),
+            value: l
+        }))
+        .toArray();
+
+    // #region Values
+
+    const titleComponentHelper = getTitleComponentHelper();
+    const componentHelper = ref(titleComponentHelper.getElements(props.componentElement));
+    const headingLevel = ref<SupportedHeadingLevel>(componentHelper.value?.headingEl?.tagName?.toLowerCase() as SupportedHeadingLevel ?? "h1");
+
+    // #endregion
+
+    // #region Watchers
+
+    watch(headingLevel, (value: SupportedHeadingLevel) => {
+        if (!value || !componentHelper.value?.headingEl || componentHelper.value.headingEl.tagName.toLowerCase() === value) {
+            // No need to change heading level.
+            return;
+        }
+
+        const newHeadingElement = props.componentElement.ownerDocument.createElement(value);
+
+        // Copy attributes from old to new heading element.
+        [...componentHelper.value.headingEl.attributes].forEach(attr => {
+            newHeadingElement.setAttribute(attr.name, attr.value);
+        });
+
+        // Copy the inner content from old to new heading element.
+        newHeadingElement.innerHTML = componentHelper.value.headingEl.innerHTML;
+
+        // Replace the old heading element with the new one.
+        componentHelper.value.headingEl.parentNode?.replaceChild(newHeadingElement, componentHelper.value.headingEl);
+
+        // Update the wrapper classes to ensure global and component styles work correctly.
+        titleComponentHelper.setCssClasses(componentHelper.value);
+    });
+
+    watch(() => props.componentElement, () => {
+        componentHelper.value = titleComponentHelper.getElements(props.componentElement);
+        headingLevel.value = componentHelper.value?.headingEl?.tagName.toLowerCase() as SupportedHeadingLevel ?? "h1";
+    });
+
+    // #endregion
+</script>

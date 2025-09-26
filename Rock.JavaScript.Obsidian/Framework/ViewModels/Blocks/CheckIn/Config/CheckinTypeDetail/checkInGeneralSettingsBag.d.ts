@@ -33,7 +33,7 @@ export type CheckInGeneralSettingsBag = {
     allowCheckoutInManager: boolean;
 
     /** Gets or sets the automatic select days back. */
-    autoSelectDaysBack: number;
+    autoSelectDaysBack?: string | null;
 
     /** Gets or sets the automatic select options. */
     autoSelectOptions?: string | null;
@@ -50,11 +50,20 @@ export type CheckInGeneralSettingsBag = {
     /** Gets or sets a value indicating whether [enable presence]. */
     enablePresence: boolean;
 
+    /** Gets or sets a value indicating whether [enable proximity check-in]. */
+    enableProximityCheckin: boolean;
+
+    /** Gets or sets a value indicating whether [enable remove family kiosk]. */
+    enableRemoveFamilyKiosk: boolean;
+
     /** Gets or sets a value indicating whether [prevent duplicate checkin]. */
     preventDuplicateCheckin: boolean;
 
     /** Gets or sets a value indicating whether [prevent inactive people]. */
     preventInactivePeople: boolean;
+
+    /** Gets or sets the Promotions Content Channel. */
+    promotionsContentChannelTypes?: string | null;
 
     /** Gets or sets a value indicating whether [use same options]. */
     useSameOptions: boolean;

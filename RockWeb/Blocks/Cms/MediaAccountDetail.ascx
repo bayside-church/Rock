@@ -8,7 +8,7 @@
             <Rock:ModalAlert ID="mdSyncMessage" runat="server" />
 
             <div class="panel-heading ">
-                <h1 class="panel-title"><i class="fa fa-play-circle"></i>
+                <h1 class="panel-title"><i class="ti ti-player-play"></i>
                     <asp:Literal ID="lActionTitle" runat="server" />
                 </h1>
 
@@ -42,7 +42,7 @@
 
                         <span class="pull-right">
                             <asp:LinkButton ID="btnSyncWithProvider" runat="server" CssClass="btn btn-default btn-sm btn-square" ToolTip="Download all data from provider." data-toggle="tooltip" OnClick="btnSyncWithProvider_Click" CausesValidation="false">
-                                <i class="fa fa-download"></i>
+                                <i class="ti ti-download"></i>
                             </asp:LinkButton>
                         </span>
                     </div>
@@ -53,7 +53,7 @@
                             <Rock:DataTextBox ID="tbName" runat="server" SourceTypeName="Rock.Model.MediaAccount, Rock" PropertyName="Name" />
                         </div>
                         <div class="col-md-6">
-                            <Rock:RockCheckBox ID="cbActive" runat="server" SourceTypeName="Rock.Model.MediaAccount, Rock" PropertyName="IsActive" Label="Active" Checked="true" Text="Yes" />
+                            <Rock:RockCheckBox ID="cbActive" runat="server" SourceTypeName="Rock.Model.MediaAccount, Rock" PropertyName="IsActive" Label="Active" Checked="true" />
                         </div>
                     </div>
                     <div class="well">

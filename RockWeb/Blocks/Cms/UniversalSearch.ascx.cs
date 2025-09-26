@@ -157,7 +157,7 @@ namespace RockWeb.Blocks.Cms
         private int _currentPageNum = 0;
         private int _itemsPerPage = DefaultItemsPerPage;
         private const string DefaultLavaResultTemplate = @"<ul>{% for result in Results %}
-    <li><i class='fa {{ result.IconCssClass }}'></i> {{ result.DocumentName }} <small>(Score {{ result.Score }} )</small> </li>
+    <li><i class='ti {{ result.IconCssClass }}'></i> {{ result.DocumentName }} <small>(Score {{ result.Score }} )</small> </li>
 {% endfor %}</ul>";
 
         #endregion
@@ -788,11 +788,16 @@ namespace RockWeb.Blocks.Cms
 
             ddlSearchType.BindToEnum<SearchType>();
             ddlSearchType.SelectedValue = GetAttributeValue( AttributeKey.SearchType );
+            var searchType = PageParameter( PageParameterKey.SearchType );
 
-            // override the block setting if passed in the query string
-            if ( !string.IsNullOrWhiteSpace( PageParameter( PageParameterKey.SearchType ) ) )
+            // override the block setting if passed in the query string and valid search type.
+            if ( !string.IsNullOrWhiteSpace( searchType ) )
             {
-                ddlSearchType.SelectedValue = PageParameter( PageParameterKey.SearchType );
+                var searchTypeValue = searchType.ConvertToEnumOrNull<SearchType>();
+                if ( searchTypeValue.HasValue )
+                {
+                    ddlSearchType.SelectedValue = searchTypeValue.Value.ConvertToInt().ToString();
+                }
             }
 
             // set setting values from query string

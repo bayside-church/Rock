@@ -30,15 +30,15 @@ import EntityTagList from "@Obsidian/Controls/tagList.obs";
 import RockButton from "@Obsidian/Controls/rockButton.obs";
 import RockForm from "@Obsidian/Controls/rockForm.obs";
 import RockSuspense from "@Obsidian/Controls/rockSuspense.obs";
-import { useVModelPassthrough } from "@Obsidian/Utility/component";
 import { alert, confirmDelete, showSecurity } from "@Obsidian/Utility/dialogs";
 import { useHttp } from "@Obsidian/Utility/http";
 import { makeUrlRedirectSafe } from "@Obsidian/Utility/url";
 import { asBooleanOrNull } from "@Obsidian/Utility/booleanUtils";
 import { splitCase } from "@Obsidian/Utility/stringUtils";
 import { areEqual, emptyGuid } from "@Obsidian/Utility/guid";
-import { useBlockBrowserBus, useEntityTypeGuid, useEntityTypeName } from "@Obsidian/Utility/block";
+import { hideBlockRole, showBlockRole, useBlockBrowserBus, useEntityTypeGuid, useEntityTypeName } from "@Obsidian/Utility/block";
 import { BlockMessages } from "@Obsidian/Utility/browserBus";
+import { BlockRole } from "@Obsidian/Enums/Cms/blockRole";
 
 /** Provides a pattern for entity detail blocks. */
 export default defineComponent({
@@ -146,7 +146,7 @@ export default defineComponent({
          */
         isFullScreenVisible: {
             type: Boolean as PropType<boolean>,
-            default: true
+            default: false
         },
 
         /** The current display mode for the detail panel. */
@@ -251,7 +251,19 @@ export default defineComponent({
         additionalDeleteMessage: {
             type: String as PropType<string | null>,
             required: false
-        }
+        },
+
+        /**
+         * Enables the worksurface mode which allows the panel to be used on
+         * a full worksurface layout. This will cause the body content to
+         * automatically scroll if it is too large to fit in the panel. All
+         * other panel elements will remain in static positions.
+         */
+        worksurfaceMode: {
+            type: Boolean as PropType<boolean>,
+            default: false
+        },
+
     },
 
     emits: {
@@ -262,8 +274,7 @@ export default defineComponent({
         // #region Values
 
         const http = useHttp();
-        const internalMode = useVModelPassthrough(props, "mode", emit);
-        const isFormSubmitting = ref(false);
+        const internalMode = ref(props.mode);
         const isEditModeLoading = ref(false);
         const isEntityFollowed = ref<boolean | null>(null);
         const showAuditDetailsModal = ref(false);
@@ -271,6 +282,7 @@ export default defineComponent({
         const providedEntityTypeName = useEntityTypeName();
         const providedEntityTypeGuid = useEntityTypeGuid();
         const browserBus = useBlockBrowserBus();
+        const editForm = ref<InstanceType<typeof RockForm> | null>(null);
 
         let formSubmissionSource: PromiseCompletionSource | null = null;
         let editModeReadyCompletionSource: PromiseCompletionSource | null = null;
@@ -335,11 +347,11 @@ export default defineComponent({
             switch (internalMode.value) {
                 // If we are in edit mode show an icon to indicate that to the individual.
                 case DetailPanelMode.Edit:
-                    return "fa fa-pencil";
+                    return "ti ti-pencil";
 
                 // If we are in add mode show an icon to indicate that to the individual.
                 case DetailPanelMode.Add:
-                    return "fa fa-plus";
+                    return "ti ti-plus";
 
                 case DetailPanelMode.View:
                 default:
@@ -377,7 +389,7 @@ export default defineComponent({
             // we have a valid entity then show it.
             if (!props.isSecurityHidden && isViewMode.value && props.entityKey) {
                 actions.push({
-                    iconCssClass: "fa fa-lock",
+                    iconCssClass: "ti ti-lock",
                     title: "Edit Security",
                     type: "default",
                     handler: onSecurityClick
@@ -422,7 +434,7 @@ export default defineComponent({
             if (props.isFollowVisible && isViewMode.value) {
                 actions.push({
                     type: isEntityFollowed.value ? "primary" : "default",
-                    iconCssClass: isEntityFollowed.value ? "fa fa-star" : "fa fa-star-o",
+                    iconCssClass: isEntityFollowed.value ? "ti ti-star-filled" : "ti ti-star",
                     handler: onFollowClick,
                     title: isEntityFollowed.value ? `You are currently following ${props.name}.` : `Click to follow ${props.name}.`
                 });
@@ -492,7 +504,7 @@ export default defineComponent({
          */
         const getActionIconCssClass = (action: PanelAction): string => {
             // Provide a default value if they didn't give us one.
-            return action.iconCssClass || "fa fa-square";
+            return action.iconCssClass || "ti ti-square";
         };
 
         /**
@@ -571,6 +583,8 @@ export default defineComponent({
 
             internalMode.value = DetailPanelMode.View;
             browserBus.publish(BlockMessages.EndEdit);
+
+            await showBlockRole(BlockRole.Secondary);
         };
 
         /**
@@ -604,6 +618,8 @@ export default defineComponent({
             editModeReadyCompletionSource = new PromiseCompletionSource();
             await editModeReadyCompletionSource.promise;
 
+            await hideBlockRole(BlockRole.Secondary);
+
             // Perform the final switch into edit mode.
             browserBus.publish(BlockMessages.BeginEdit);
             internalMode.value = props.entityKey ? DetailPanelMode.Edit : DetailPanelMode.Add;
@@ -626,13 +642,7 @@ export default defineComponent({
          * operation on the form to perform validation.
          */
         const onSaveClick = async (): Promise<void> => {
-            // Trigger the form to begin processing and then wait for it to
-            // fully complete. This makes sure the Save button stays disabled
-            // until the action is complete so they can't double click.
-            formSubmissionSource = new PromiseCompletionSource();
-            isFormSubmitting.value = true;
-            await formSubmissionSource.promise;
-            isFormSubmitting.value = false;
+            await editForm.value.submitForm();
         };
 
         /**
@@ -679,6 +689,8 @@ export default defineComponent({
 
                 internalMode.value = DetailPanelMode.View;
                 browserBus.publish(BlockMessages.EndEdit);
+
+                await showBlockRole(BlockRole.Secondary);
             }
             finally {
                 if (formSubmissionSource !== null) {
@@ -694,7 +706,7 @@ export default defineComponent({
          */
         const onDeleteClick = async (): Promise<void> => {
             if (props.onDelete) {
-                if (!await confirmDelete(entityTypeName.value, props.additionalDeleteMessage ?? "")) {
+                if (!await confirmDelete(splitCase(entityTypeName.value), props.additionalDeleteMessage ?? "")) {
                     return;
                 }
 
@@ -762,12 +774,31 @@ export default defineComponent({
 
         // #endregion
 
-        // Watch for the RockForm component to toggle the isFormSubmitting value
-        // back off. This indicates it has finished submitting the form.
-        watch(isFormSubmitting, () => {
-            if (isFormSubmitting.value === false && formSubmissionSource !== null) {
-                formSubmissionSource.resolve();
-                formSubmissionSource = null;
+        watch(() => props.mode, () => {
+            if (props.mode === internalMode.value) {
+                return;
+            }
+
+            const wasEditMode = isEditMode.value;
+            internalMode.value = props.mode;
+            const newEditMode = isEditMode.value;
+
+            // If the edit mode state changed then we need to either hide or
+            // show the secondary blocks. This is rare but can happen if the
+            // parent component decides to manually change the mode.
+            if (wasEditMode != newEditMode) {
+                if (newEditMode) {
+                    hideBlockRole(BlockRole.Secondary);
+                }
+                else {
+                    showBlockRole(BlockRole.Secondary);
+                }
+            }
+        });
+
+        watch(internalMode, () => {
+            if (props.mode !== internalMode.value) {
+                emit("update:mode", internalMode.value);
             }
         });
 
@@ -789,8 +820,15 @@ export default defineComponent({
 
             onEditClick();
         }
+        else if (isEditMode.value) {
+            // If we are not in auto-edit mode but just starting in edit mode,
+            // then make sure secondary blocks are hidden. This is usually the
+            // case when adding a new entity.
+            hideBlockRole(BlockRole.Secondary);
+        }
 
         return {
+            editForm,
             entityTypeName,
             entityTypeGuid,
             internalFooterSecondaryActions,
@@ -803,7 +841,6 @@ export default defineComponent({
             headerActions,
             isEditMode,
             isEditModeVisible,
-            isFormSubmitting,
             isPanelShown,
             isPanelVisible,
             isViewMode,
@@ -827,6 +864,7 @@ export default defineComponent({
     :title="panelTitle"
     :titleIconCssClass="panelTitleIconCssClass"
     :hasFullscreen="isFullScreenVisible"
+    :worksurfaceMode="worksurfaceMode"
     :headerSecondaryActions="internalHeaderSecondaryActions">
 
     <template v-if="$slots.sidebar" #sidebar>
@@ -866,23 +904,24 @@ export default defineComponent({
 
     <template #footerActions>
         <template v-if="isEditMode">
-            <RockButton btnType="primary" autoDisable @click="onSaveClick" shortcutKey="s">Save</RockButton>
+            <RockButton btnType="primary" autoDisable autoLoading @click="onSaveClick" shortcutKey="s">Save</RockButton>
             <RockButton btnType="link" @click="onEditCancelClick" shortcutKey="c">Cancel</RockButton>
         </template>
 
         <template v-else>
-            <RockButton v-if="isEditVisible" btnType="primary" @click="onEditClick" autoDisable shortcutKey="e">Edit</RockButton>
-            <RockButton v-if="isDeleteVisible" btnType="link" @click="onDeleteClick" autoDisable>Delete</RockButton>
+            <RockButton v-if="isEditVisible" btnType="primary" @click="onEditClick" autoDisable autoLoading shortcutKey="e">Edit</RockButton>
+            <RockButton v-if="isDeleteVisible" btnType="link" @click="onDeleteClick" autoDisable autoLoading>Delete</RockButton>
         </template>
 
         <RockButton v-for="action in footerActions" :btnType="action.type" @click="onActionClick(action, $event)">
+            <i v-if="action.iconCssClass" :class="action.iconCssClass"></i>
+            <template v-if="action.title && action.title">&nbsp;</template>
             <template v-if="action.title">{{ action.title }}</template>
-            <i v-else :class="action.iconCssClass"></i>
         </RockButton>
     </template>
 
     <template #footerSecondaryActions>
-        <RockButton v-for="action in internalFooterSecondaryActions" :btnType="action.type" btnSize="sm" :title="action.title" @click="onActionClick(action, $event)" :disabled="action.disabled">
+        <RockButton v-for="action in internalFooterSecondaryActions" :btnType="action.type" btnSize="sm" :title="action.title" @click="onActionClick(action, $event)" :disabled="action.disabled" :key="action.title+action.iconCssClass">
             <i :class="getActionIconCssClass(action)"></i>
         </RockButton>
     </template>
@@ -894,7 +933,7 @@ export default defineComponent({
             }
         </v-style>
 
-        <RockForm v-if="isEditModeVisible" v-show="isEditMode" @submit="onSaveSubmit" v-model:submit="isFormSubmitting">
+        <RockForm ref="editForm" v-if="isEditModeVisible" v-show="isEditMode" @submit="onSaveSubmit">
             <RockSuspense @ready="onEditSuspenseReady">
                 <slot name="edit" />
             </RockSuspense>

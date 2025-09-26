@@ -23,6 +23,7 @@ using Rock;
 using Rock.Data;
 using Rock.Model;
 using Rock.Web.Cache;
+using Rock.Workflow.FormBuilder;
 
 namespace Rock.Web.UI.Controls
 {
@@ -47,6 +48,7 @@ namespace Rock.Web.UI.Controls
         {
             public const string ValidationGroup = "ValidationGroup";
             public const string EditingAttributeRowGuid = "EditingAttributeRowGuid";
+            public const string ModalManagerId = "ModalManagerId";
         }
 
         #region PersonEntry related
@@ -57,6 +59,7 @@ namespace Rock.Web.UI.Controls
         private CodeEditor _cePersonEntryPreHtml;
 
         private RockCheckBox _cbPersonEntryShowCampus;
+        private RockCheckBox _cbPersonEntryIncludeInactive;
         private RockCheckBox _cbPersonEntryAutofillCurrentPerson;
         private RockCheckBox _cbPersonEntryHideIfCurrentPersonKnown;
         private RockDropDownList _ddlPersonEntrySpouseEntryOption;
@@ -72,6 +75,7 @@ namespace Rock.Web.UI.Controls
         private RockTextBox _tbPersonEntrySpouseLabel;
         private DefinedValuePicker _dvpPersonEntryConnectionStatus;
         private DefinedValuePicker _dvpPersonEntryRecordStatus;
+        private DefinedValuePicker _dvpPersonEntryRecordSource;
         private DefinedValuePicker _dvpPersonEntryGroupLocationType;
         private DefinedValuePicker _dvpPersonEntryCampusStatus;
         private DefinedValuePicker _dvpPersonEntryCampusType;
@@ -127,6 +131,18 @@ namespace Rock.Web.UI.Controls
         }
 
         /// <summary>
+        /// Specifies the modal manager (update panel) that the form editor
+        /// should use when closing modals. This fixes an issue where a modal
+        /// is closed by C# code but the "modal-open" CSS class is not removed.
+        /// This causes drop down controls to be clipped.
+        /// </summary>
+        public string ModalManagerId
+        {
+            get => ViewState[ViewStateKey.ModalManagerId] as string;
+            set => ViewState[ViewStateKey.ModalManagerId] = value;
+        }
+
+        /// <summary>
         /// Gets or sets the form.
         /// </summary>
         /// <value>
@@ -173,9 +189,14 @@ namespace Rock.Web.UI.Controls
             form.PersonEntrySpouseLabel = _tbPersonEntrySpouseLabel.Text;
             form.PersonEntryConnectionStatusValueId = _dvpPersonEntryConnectionStatus.SelectedDefinedValueId;
             form.PersonEntryRecordStatusValueId = _dvpPersonEntryRecordStatus.SelectedDefinedValueId;
+            form.PersonEntryRecordSourceValueId = _dvpPersonEntryRecordSource.SelectedDefinedValueId;
             form.PersonEntryGroupLocationTypeValueId = _dvpPersonEntryGroupLocationType.SelectedDefinedValueId;
             form.PersonEntryCampusStatusValueId = _dvpPersonEntryCampusStatus.SelectedDefinedValueId;
             form.PersonEntryCampusTypeValueId = _dvpPersonEntryCampusType.SelectedDefinedValueId;
+            form.SetAdditionalSettings( new PersonEntryAdditionalSettings
+            {
+                IncludeInactiveCampus = _cbPersonEntryIncludeInactive.Checked,
+            } );
 
             form.PersonEntryPersonAttributeGuid = _ddlPersonEntryPersonAttribute.SelectedValueAsGuid();
             form.PersonEntrySpouseAttributeGuid = _ddlPersonEntrySpouseAttribute.SelectedValueAsGuid();
@@ -236,9 +257,11 @@ namespace Rock.Web.UI.Controls
             _cbAllowPersonEntry.Checked = workflowActionForm.AllowPersonEntry;
             _pnlPersonEntry.Visible = workflowActionForm.AllowPersonEntry;
 
+            var personEntryAdditionalSettings = workflowActionForm.GetAdditionalSettings<PersonEntryAdditionalSettings>();
             _cePersonEntryPreHtml.Text = workflowActionForm.PersonEntryPreHtml;
             _cePersonEntryPostHtml.Text = workflowActionForm.PersonEntryPostHtml;
             _cbPersonEntryShowCampus.Checked = workflowActionForm.PersonEntryCampusIsVisible;
+            _cbPersonEntryIncludeInactive.Checked = personEntryAdditionalSettings.IncludeInactiveCampus ?? true;
             _cbPersonEntryAutofillCurrentPerson.Checked = workflowActionForm.PersonEntryAutofillCurrentPerson;
             _cbPersonEntryHideIfCurrentPersonKnown.Checked = workflowActionForm.PersonEntryHideIfCurrentPersonKnown;
             _ddlPersonEntrySpouseEntryOption.SetValue( ( int ) workflowActionForm.PersonEntrySpouseEntryOption );
@@ -249,16 +272,18 @@ namespace Rock.Web.UI.Controls
             _ddlPersonEntryBirthdateEntryOption.SetValue( ( int ) workflowActionForm.PersonEntryBirthdateEntryOption );
             _ddlPersonEntryAddressEntryOption.SetValue( ( int ) workflowActionForm.PersonEntryAddressEntryOption );
             _ddlPersonEntryMaritalStatusEntryOption.SetValue( ( int ) workflowActionForm.PersonEntryMaritalStatusEntryOption );
-            _ddlPersonEntryRaceEntryOption.SetValue ( ( int ) workflowActionForm.PersonEntryRaceEntryOption );
-            _ddlPersonEntryEthnicityEntryOption.SetValue ( ( int ) workflowActionForm.PersonEntryEthnicityEntryOption );
+            _ddlPersonEntryRaceEntryOption.SetValue( ( int ) workflowActionForm.PersonEntryRaceEntryOption );
+            _ddlPersonEntryEthnicityEntryOption.SetValue( ( int ) workflowActionForm.PersonEntryEthnicityEntryOption );
 
             _tbPersonEntrySpouseLabel.Text = workflowActionForm.PersonEntrySpouseLabel;
             _dvpPersonEntryConnectionStatus.SetValue( workflowActionForm.PersonEntryConnectionStatusValueId );
             _dvpPersonEntryRecordStatus.SetValue( workflowActionForm.PersonEntryRecordStatusValueId );
+            _dvpPersonEntryRecordSource.SetValue( workflowActionForm.PersonEntryRecordSourceValueId );
             _dvpPersonEntryGroupLocationType.SetValue( workflowActionForm.PersonEntryGroupLocationTypeValueId );
 
             _dvpPersonEntryCampusStatus.Visible = workflowActionForm.PersonEntryCampusIsVisible;
             _dvpPersonEntryCampusType.Visible = workflowActionForm.PersonEntryCampusIsVisible;
+            _cbPersonEntryIncludeInactive.Visible = workflowActionForm.PersonEntryCampusIsVisible;
 
             _dvpPersonEntryCampusStatus.SetValue( workflowActionForm.PersonEntryCampusStatusValueId );
             _dvpPersonEntryCampusType.SetValue( workflowActionForm.PersonEntryCampusTypeValueId );
@@ -387,6 +412,7 @@ namespace Rock.Web.UI.Controls
             target.PersonEntrySpouseLabel = source.PersonEntrySpouseLabel;
             target.PersonEntryConnectionStatusValueId = source.PersonEntryConnectionStatusValueId;
             target.PersonEntryRecordStatusValueId = source.PersonEntryRecordStatusValueId;
+            target.PersonEntryRecordSourceValueId = source.PersonEntryRecordSourceValueId;
             target.PersonEntryGroupLocationTypeValueId = source.PersonEntryGroupLocationTypeValueId;
             target.PersonEntryRaceEntryOption = source.PersonEntryRaceEntryOption;
             target.PersonEntryEthnicityEntryOption = source.PersonEntryEthnicityEntryOption;
@@ -397,6 +423,7 @@ namespace Rock.Web.UI.Controls
             target.PersonEntryPersonAttributeGuid = source.PersonEntryPersonAttributeGuid;
             target.PersonEntrySpouseAttributeGuid = source.PersonEntrySpouseAttributeGuid;
             target.PersonEntryFamilyAttributeGuid = source.PersonEntryFamilyAttributeGuid;
+            target.AdditionalSettingsJson = source.AdditionalSettingsJson;
         }
 
         /// <summary>
@@ -596,6 +623,12 @@ namespace Rock.Web.UI.Controls
             _cbPersonEntryShowCampus.AutoPostBack = true;
             _cbPersonEntryShowCampus.CheckedChanged += _cbPersonEntryShowCampus_CheckedChanged;
 
+            _cbPersonEntryIncludeInactive = new RockCheckBox
+            {
+                ID = "_cbPersonEntryIncludeInactive",
+                Label = "Include Inactive"
+            };
+
             _cbPersonEntryAutofillCurrentPerson = new RockCheckBox
             {
                 ID = "_cbPersonEntryAutofillCurrentPerson",
@@ -646,7 +679,7 @@ namespace Rock.Web.UI.Controls
                 Label = "SMS Opt-In"
             };
 
-            _ddlPersonEntrySmsOptInEntryOption.BindToEnum<WorkflowActionFormShowHideOption> ();
+            _ddlPersonEntrySmsOptInEntryOption.BindToEnum<WorkflowActionFormShowHideOption>();
 
             _ddlPersonEntryBirthdateEntryOption = new RockDropDownList
             {
@@ -692,6 +725,14 @@ namespace Rock.Web.UI.Controls
                 Label = "Record Status",
                 Required = true,
                 DefinedTypeId = DefinedTypeCache.GetId( Rock.SystemGuid.DefinedType.PERSON_RECORD_STATUS.AsGuid() )
+            };
+
+            _dvpPersonEntryRecordSource = new DefinedValuePicker
+            {
+                ID = "_dvpPersonEntryRecordSource",
+                Label = "Record Source",
+                Required = true,
+                DefinedTypeId = DefinedTypeCache.GetId( Rock.SystemGuid.DefinedType.RECORD_SOURCE_TYPE.AsGuid() )
             };
 
             _dvpPersonEntryGroupLocationType = new DefinedValuePicker
@@ -805,8 +846,9 @@ namespace Rock.Web.UI.Controls
             pnlPersonEntryRow1.Controls.Add( pnlPersonEntryRow1Col3 );
             pnlPersonEntryRow1.Controls.Add( pnlPersonEntryRow1Col4 );
             pnlPersonEntryRow1Col1.Controls.Add( _cbPersonEntryAutofillCurrentPerson );
-            pnlPersonEntryRow1Col2.Controls.Add( _cbPersonEntryHideIfCurrentPersonKnown );
-            pnlPersonEntryRow1Col3.Controls.Add( _dvpPersonEntryRecordStatus );
+            pnlPersonEntryRow1Col1.Controls.Add( _cbPersonEntryHideIfCurrentPersonKnown );
+            pnlPersonEntryRow1Col2.Controls.Add( _dvpPersonEntryRecordStatus );
+            pnlPersonEntryRow1Col3.Controls.Add( _dvpPersonEntryRecordSource );
             pnlPersonEntryRow1Col4.Controls.Add( _dvpPersonEntryConnectionStatus );
 
             /* Person Entry - Row 2*/
@@ -847,6 +889,7 @@ namespace Rock.Web.UI.Controls
             pnlPersonEntryRow2.Controls.Add( pnlPersonEntryRow2Col4 );
 
             pnlPersonEntryRow2Col1.Controls.Add( _cbPersonEntryShowCampus );
+            pnlPersonEntryRow2Col1.Controls.Add( _cbPersonEntryIncludeInactive );
             pnlPersonEntryRow2Col2.Controls.Add( _dvpPersonEntryCampusType );
             pnlPersonEntryRow2Col3.Controls.Add( _dvpPersonEntryCampusStatus );
 
@@ -892,7 +935,7 @@ namespace Rock.Web.UI.Controls
             pnlPersonEntryRow3Col2.Controls.Add( _ddlPersonEntryEmailEntryOption );
             pnlPersonEntryRow3Col3.Controls.Add( _ddlPersonEntryMobilePhoneEntryOption );
             pnlPersonEntryRow3Col4.Controls.Add( _ddlPersonEntrySmsOptInEntryOption );
-            
+
 
             /* Person Entry - Row 4*/
             Panel pnlPersonEntryRow4 = new Panel
@@ -1067,6 +1110,7 @@ namespace Rock.Web.UI.Controls
         {
             _dvpPersonEntryCampusStatus.Visible = _cbPersonEntryShowCampus.Checked;
             _dvpPersonEntryCampusType.Visible = _cbPersonEntryShowCampus.Checked;
+            _cbPersonEntryIncludeInactive.Visible = _cbPersonEntryShowCampus.Checked;
         }
 
         /// <summary>
@@ -1095,7 +1139,7 @@ namespace Rock.Web.UI.Controls
             }
 
             attributeRow.VisibilityRules = fvre.GetFieldVisibilityRules();
-            _mdFieldVisibilityRules.Hide();
+            _mdFieldVisibilityRules.Hide( ModalManagerId );
         }
 
         /// <summary>
@@ -1173,7 +1217,7 @@ namespace Rock.Web.UI.Controls
                 writer.AddAttribute( "class", "help" );
                 writer.AddAttribute( "href", "#" );
                 writer.RenderBeginTag( HtmlTextWriterTag.A );
-                writer.AddAttribute( "class", "fa fa-question-circle" );
+                writer.AddAttribute( "class", "ti ti-zoom-question" );
                 writer.RenderBeginTag( HtmlTextWriterTag.I );
                 writer.RenderEndTag();
                 writer.RenderEndTag();

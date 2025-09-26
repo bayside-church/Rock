@@ -84,7 +84,7 @@
 
                                 <div class="row">
                                     <div class="col-md-6">
-                                        <Rock:RockCheckBox ID="cbDisplayProgressBar" runat="server" Label="Display Progress Bar" Text="Yes"
+                                        <Rock:RockCheckBox ID="cbDisplayProgressBar" runat="server" Label="Display Progress Bar"
                                             Help="Display a progress to the user that indicates how far along they are in filling out multiple forms. Not shown when there is only one form." />
                                         <Rock:RockDropDownList ID="ddlSaveValues" runat="server" Label="Save Values"
                                             Help="Determines if values should be saved each time user navigates to next form or not saved until the very end. An advantage to saving them on each form, is that those values can then be used in the header or footer of the next page using Lava.">
@@ -109,7 +109,7 @@
                                             <asp:PlaceHolder ID="phForms" runat="server" />
                                         </div>
                                         <div class="pull-right">
-                                            <asp:LinkButton ID="lbAddForm" runat="server" CssClass="btn btn-action btn-xs" OnClick="lbAddForm_Click" CausesValidation="false"><i class="fa fa-plus"></i> Add Form</asp:LinkButton>
+                                            <asp:LinkButton ID="lbAddForm" runat="server" CssClass="btn btn-action btn-xs" OnClick="lbAddForm_Click" CausesValidation="false"><i class="ti ti-plus"></i> Add Form</asp:LinkButton>
                                         </div>
 
                                     </div>
@@ -133,11 +133,11 @@
                         <Rock:RockDropDownList ID="ddlPersonAttributes" runat="server" Label="Person Attribute" ValidationGroup="Field" />
                     </div>
                     <div class="col-md-4">
-                        <Rock:RockCheckBox ID="cbUsePersonCurrentValue" runat="server" Label="Use Current Value" Text="Yes" ValidationGroup="Field"
+                        <Rock:RockCheckBox ID="cbUsePersonCurrentValue" runat="server" Label="Use Current Value" ValidationGroup="Field"
                             Help="Should the person's current value for this field be displayed (pre-filled)?" />
                     </div>
                     <div class="col-md-4">
-                        <Rock:RockCheckBox ID="cbRequireInInitialEntry" runat="server" Label="Required" Text="Yes" ValidationGroup="Field"
+                        <Rock:RockCheckBox ID="cbRequireInInitialEntry" runat="server" Label="Required" ValidationGroup="Field"
                             Help="Should a value for this attribute be required?" />
                     </div>
                 </div>

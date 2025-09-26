@@ -9,7 +9,7 @@
                     </div>
                     <div v-if="isFamilyMembersDropDownVisible" class="row">
                         <div class="col-md-6">
-                            <DropDownList :modelValue="currentRegistrant.personGuid ?? ''" @update:modelValue="onSetPersonGuid" :items="familyMemberOptions" label="Family Member to Register" />
+                            <DropDownList :modelValue="currentRegistrant.personGuid ?? ''" @update:modelValue="onSetPersonGuid" :items="familyMemberOptions" :label="props.currentRegistrant.isNewFamily ? 'Guest to Register' : 'Family Member to Register'" :showBlankItem="false" />
                         </div>
                     </div>
                 </template>
@@ -76,7 +76,7 @@
     import RadioButtonList from "@Obsidian/Controls/radioButtonList.obs";
     import RockButton from "@Obsidian/Controls/rockButton.obs";
     import RockForm from "@Obsidian/Controls/rockForm.obs";
-    import { FilterExpressionType } from "@Obsidian/Core/Reporting/filterExpressionType";
+    import { FilterExpressionType } from "@Obsidian/Enums/Reporting/filterExpressionType";
     import { RegistrantsSameFamily } from "@Obsidian/Enums/Event/registrantsSameFamily";
     import { RegistrationFieldSource } from "@Obsidian/Enums/Event/registrationFieldSource";
     import { useStore } from "@Obsidian/PageState";
@@ -121,6 +121,7 @@
     const registrationEntryState = use(CurrentRegistrationEntryState);
     const getRegistrationEntryBlockArgs = use(GetPersistSessionArgs);
     const registrationEntryTerms = use(RegistrationEntryTerms);
+    const newFamilyGuid = newGuid();
 
     // Make sure current registrant properties are initialized.
     if (!props.currentRegistrant.feeItemQuantities) {
@@ -176,8 +177,10 @@
             return true;
         }
 
-        // Allow back to intro page if this is not an existing registration
-        if (!registrationEntryState.viewModel.isExistingRegistration) {
+        // Allow back to intro page if this is not an existing registration.
+        const isFirstRegistrant = registrationEntryState.currentRegistrantIndex === 0;
+        const isFirstForm = currentFormIndex.value === 0;
+        if (!registrationEntryState.viewModel.isExistingRegistration || !(isFirstRegistrant && isFirstForm)) {
             return true;
         }
 
@@ -229,7 +232,7 @@
 
     /** The filtered fields to show on the current form augmented to remove pre/post HTML from non-visible fields */
     const currentFormFieldsAugmented = computed<RegistrationEntryFormFieldBag[]>(() => {
-        const fields = JSON.parse(JSON.stringify(currentFormFields.value)) as RegistrationEntryFormFieldBag[];
+        const fields = JSON.parse(JSON.stringify(currentFormFields.value ?? null)) as RegistrationEntryFormFieldBag[];
 
         fields.forEach(value => {
             if (value.fieldSource != fieldSources.personField) {
@@ -318,7 +321,7 @@
 
         // Add the current person (registrant) if not already added
         const familyGuid = !props.currentRegistrant.familyGuid || usedFamilyGuids[props.currentRegistrant.familyGuid] == true
-            ? newGuid()
+            ? newFamilyGuid
             : props.currentRegistrant.familyGuid;
         options.push({
             text: "None of the above",
@@ -359,17 +362,32 @@
 
     /** The people that can be picked from because they are members of the same family. */
     const familyMemberOptions = computed<ListItemBag[]>(() => {
+        if (props.currentRegistrant.isNewFamily) {
+            return [
+                {
+                    text: "Guest",
+                    value: null
+                }
+            ];
+        }
 
         const usedFamilyMemberGuids = registrationEntryState.registrants
             .filter(r => r.personGuid && r.personGuid !== props.currentRegistrant.personGuid)
             .map(r => r.personGuid);
 
-        return viewModel.value.familyMembers
+        const familyMembers = viewModel.value.familyMembers
             ?.filter(fm => fm.guid && !usedFamilyMemberGuids.includes(fm.guid))
             ?.map(fm => ({
                 text: fm.fullName,
                 value: fm.guid
             })) ?? [];
+
+        let newFamilyMemberOption = {
+            text: "New Family Member",
+            value: null
+        };
+
+        return [...familyMembers, newFamilyMemberOption];
     });
 
     const firstName = computed<string>(() => {
@@ -440,7 +458,7 @@
                 }
             }
             else if (field.personFieldType === RegistrationPersonFieldType.Address) {
-                const valueAsAddress = JSON.parse(JSON.stringify(originalFieldValue)) as AddressControlBag;
+                const valueAsAddress = JSON.parse(JSON.stringify(originalFieldValue ?? null)) as AddressControlBag;
                 if (valueAsAddress?.city
                     || valueAsAddress?.country
                     || valueAsAddress?.locality
@@ -774,6 +792,13 @@
     }
 
     function onSetFamilyGuid(familyGuid: Guid): void {
+        if (familyGuid === newFamilyGuid) {
+            props.currentRegistrant.isNewFamily = true;
+        }
+        else {
+            props.currentRegistrant.isNewFamily = false;
+        }
+
         if (familyGuid !== props.currentRegistrant.familyGuid) {
             props.currentRegistrant.familyGuid = familyGuid;
             props.currentRegistrant.personGuid = null;

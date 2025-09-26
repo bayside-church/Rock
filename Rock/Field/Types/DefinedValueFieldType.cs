@@ -21,7 +21,6 @@ using System.Linq.Expressions;
 #if WEBFORMS
 using System.Web.UI;
 using System.Web.UI.WebControls;
-using Microsoft.ServiceBus.Messaging;
 
 #endif
 
@@ -29,6 +28,8 @@ using Rock.Attribute;
 using Rock.Data;
 using Rock.Model;
 using Rock.Reporting;
+using Rock.Security.SecurityGrantRules;
+using Rock.Security;
 using Rock.ViewModels.Utility;
 using Rock.Web.Cache;
 using Rock.Web.UI.Controls;
@@ -44,7 +45,7 @@ namespace Rock.Field.Types
     [RockPlatformSupport( Utility.RockPlatform.WebForms, Utility.RockPlatform.Obsidian )]
     [IconSvg( @"<svg xmlns=""http://www.w3.org/2000/svg"" viewBox=""0 0 16 16""><path d=""M14.12,10.62V2.31A1.31,1.31,0,0,0,12.81,1H4.06A2.19,2.19,0,0,0,1.88,3.19v9.62A2.19,2.19,0,0,0,4.06,15h9.41a.66.66,0,0,0,0-1.31h-.22V11.86A1.32,1.32,0,0,0,14.12,10.62Zm-2.18,3.07H4.06a.88.88,0,0,1,0-1.75h7.88Zm.87-3.07H4.06a2.13,2.13,0,0,0-.87.19V3.19a.87.87,0,0,1,.87-.88h8.75Z""/></svg>" )]
     [Rock.SystemGuid.FieldTypeGuid( Rock.SystemGuid.FieldType.DEFINED_VALUE )]
-    public class DefinedValueFieldType : FieldType, IEntityFieldType, IEntityQualifierFieldType, ICachedEntitiesFieldType, IEntityReferenceFieldType, ISplitMultiValueFieldType
+    public class DefinedValueFieldType : FieldType, IEntityFieldType, IEntityQualifierFieldType, ICachedEntitiesFieldType, IEntityReferenceFieldType, ISplitMultiValueFieldType, ISecurityGrantFieldType
     {
         #region Configuration
 
@@ -90,11 +91,6 @@ namespace Rock.Field.Types
             var definedTypeId = privateConfigurationValues.GetValueOrDefault( DEFINED_TYPE_KEY, "" ).AsIntegerOrNull();
             var definedTypeCache = definedTypeId.HasValue ? DefinedTypeCache.Get( definedTypeId.Value ) : null;
 
-            if ( !definedTypeId.HasValue )
-            {
-                definedTypeCache = DefinedTypeCache.All().OrderBy( t => t.Name ).FirstOrDefault();
-            }
-
             if ( definedTypeCache != null && definedTypes.Any( t => t.Value == definedTypeCache.Guid.ToString() ) )
             {
                 // Get the defined values that are available to be selected.
@@ -135,21 +131,11 @@ namespace Rock.Field.Types
                 publicConfigurationValues.Remove( SELECTABLE_VALUES_KEY );
             }
 
-            // Convert the defined type from an integer value to a guid.
-            if ( usage == ConfigurationValueUsage.Edit || usage == ConfigurationValueUsage.Configure )
+            if ( usage == ConfigurationValueUsage.Edit || usage == ConfigurationValueUsage.Configure && definedType != null )
             {
-                if ( definedType == null )
-                {
-                    definedType = DefinedTypeCache.All().OrderBy( t => t.Name ).FirstOrDefault();
-                }
-
                 publicConfigurationValues[DEFINED_TYPE_KEY] = definedType?.Guid.ToString();
-            }
 
-            if ( usage == ConfigurationValueUsage.Configure || usage == ConfigurationValueUsage.Edit )
-            {
-                // If in configure mode, get the selectable value options that
-                // have been set.
+                // If in configure mode, get the selectable value options that have been set.
                 if ( privateConfigurationValues.ContainsKey( SELECTABLE_VALUES_KEY ) )
                 {
                     var selectableValues = ConvertDelimitedIdsToGuids( privateConfigurationValues[SELECTABLE_VALUES_KEY], id => DefinedValueCache.Get( id )?.Guid );
@@ -187,7 +173,9 @@ namespace Rock.Field.Types
             }
             else
             {
+                publicConfigurationValues[DEFINED_TYPE_KEY] = string.Empty;
                 publicConfigurationValues[VALUES_PUBLIC_KEY] = "[]";
+                publicConfigurationValues[SELECTABLE_VALUES_KEY] = string.Empty;
             }
 
             return publicConfigurationValues;
@@ -453,6 +441,36 @@ namespace Rock.Field.Types
             string titleJs = System.Web.HttpUtility.JavaScriptStringEncode( title );
             var format = "return Rock.reporting.formatFilterForDefinedValueField('{0}', $selectedContent);";
             return string.Format( format, titleJs );
+        }
+
+
+        /// <inheritdoc/>
+        public override ComparisonValue GetPublicFilterValue( string privateValue, Dictionary<string, string> privateConfigurationValues )
+        {
+            var values = privateValue.FromJsonOrNull<List<string>>();
+            if ( values?.Count == 2 )
+            {
+                return new ComparisonValue
+                {
+                    ComparisonType = values[0].ConvertToEnum<ComparisonType>( ComparisonType.Contains ),
+                    Value = GetPublicEditValue( values[1], privateConfigurationValues )
+                };
+            }
+            else if ( values?.Count == 1 )
+            {
+                return new ComparisonValue
+                {
+                    ComparisonType = ComparisonType.Contains,
+                    Value = GetPublicEditValue( values[0], privateConfigurationValues )
+                };
+            }
+            else
+            {
+                return new ComparisonValue
+                {
+                    Value = string.Empty
+                };
+            }
         }
 
         /// <summary>
@@ -724,6 +742,22 @@ namespace Rock.Field.Types
 
         #endregion
 
+        #region ISecurityGrantFieldType
+
+        /// <inheritdoc/>
+        public void AddRulesToSecurityGrant( SecurityGrant grant, Dictionary<string, string> privateConfigurationValues )
+        {
+            var definedTypeId = privateConfigurationValues.GetValueOrDefault( DEFINED_TYPE_KEY, "" ).AsIntegerOrNull();
+            var allowAdding = privateConfigurationValues.GetValueOrNull( ALLOW_ADDING_NEW_VALUES_KEY ).AsBooleanOrNull() ?? false;
+
+            if ( definedTypeId.HasValue && allowAdding )
+            {
+                grant.AddRule( new AddDefinedValueToTypeGrantRule( definedTypeId.Value ) );
+            }
+        }
+
+        #endregion
+
         #region WebForms
 #if WEBFORMS
 
@@ -776,7 +810,6 @@ namespace Rock.Field.Types
             {
                 AutoPostBack = true,
                 Label = "Allow Multiple Values",
-                Text = "Yes",
                 Help = "When set, allows multiple defined type values to be selected."
             };
 
@@ -787,7 +820,6 @@ namespace Rock.Field.Types
             {
                 AutoPostBack = true,
                 Label = "Display Descriptions",
-                Text = "Yes",
                 Help = "When set, the defined value descriptions will be displayed instead of the values."
             };
 
@@ -798,7 +830,6 @@ namespace Rock.Field.Types
             {
                 AutoPostBack = true,
                 Label = "Enhance For Long Lists",
-                Text = "Yes",
                 Help = "When set, will render a searchable selection of options."
             };
 
@@ -809,7 +840,6 @@ namespace Rock.Field.Types
             {
                 AutoPostBack = true,
                 Label = "Include Inactive",
-                Text = "Yes",
                 Help = "When set, inactive defined values will be included in the list."
             };
 
@@ -820,7 +850,6 @@ namespace Rock.Field.Types
             {
                 AutoPostBack = true,
                 Label = "Allow Adding New Values",
-                Text = "Yes",
                 Help = "When set the defined type picker can be used to add new defined types."
             };
 

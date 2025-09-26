@@ -14,7 +14,6 @@
 // limitations under the License.
 // </copyright>
 //
-
 using System.Linq;
 
 using Rock.Data;
@@ -27,70 +26,95 @@ namespace Rock.Model
         /// Save hook implementation for <see cref="LearningParticipant"/>.
         /// </summary>
         /// <seealso cref="Rock.Data.EntitySaveHook{TEntity}" />
-        new internal class SaveHook : EntitySaveHook<LearningParticipant>
+        internal new class SaveHook : EntitySaveHook<LearningParticipant>
         {
             /// <summary>
-            /// Ensures the Particpiant has the necessary <see cref="LearningActivityCompletion"/> records
-            /// for the <see cref="LearningClass"/>.
+            /// Called after the save operation is executed.
             /// </summary>
             protected override void PreSave()
             {
                 base.PreSave();
 
-                if ( PreSaveState == EntityContextState.Added )
+                if ( State == EntityContextState.Added )
                 {
-                    var isStudent = !Entity.GroupRole.IsLeader;
-
-                    if ( isStudent )
+                    if ( !Entity.LearningProgramCompletionId.HasValue && Entity.LearningProgramCompletion == null )
                     {
-                        AddCompletionsToContextForParticipant();
+                        UseExistingOrCreateLearningProgramCompletion();
                     }
                 }
             }
 
             /// <summary>
-            /// Adds all <see cref="LearningActivityCompletion"/> records for a class to the Context for the LearningParticipant.
+            /// Creates the learning program completion record to show that this
+            /// participant is enrolled in the program.
             /// </summary>
-            private void AddCompletionsToContextForParticipant()
+            private void UseExistingOrCreateLearningProgramCompletion()
             {
-                var activityService = new LearningActivityService( RockContext );
+                // Attempt to get the learning class.
+                var learningClass= Entity.LearningClass
+                    ?? new LearningClassService( RockContext ).Get( Entity.LearningClassId );
 
-                // Get the activity data and transform it into the completions for the student.
-                var completionsToAdd = activityService.GetClassLearningPlan( Entity.LearningClassId, false )
-                   .Select( a => new
-                   {
-                       LearningActivityId = a.Id,
-                       EnrollmentDate = a.LearningClass.CreatedDateTime,
-                       SemesterStart = a.LearningClass.LearningSemester.StartDate,
-                       a.AvailableDateCalculationMethod,
-                       a.AvailableDateDefault,
-                       a.AvailableDateOffset,
-                       a.DueDateCalculationMethod,
-                       a.DueDateDefault,
-                       a.DueDateOffset,
-                       a.SendNotificationCommunication,
-                       a.Order,
-                       NotificationCommunicationId = a.LearningClass.LearningSemester.LearningProgram.SystemCommunicationId
-                   } )
-                    .ToList()
-                    .OrderBy( a => a.Order )
-                    .ThenBy( a => a.LearningActivityId )
-                    .Select( a => new LearningActivityCompletion
-                    {
-                        StudentId = Entity.Id,
-                        LearningActivityId = a.LearningActivityId,
-                        AvailableDateTime = LearningActivity.CalculateAvailableDate(
-                            a.AvailableDateCalculationMethod,
-                            a.AvailableDateDefault,
-                            a.AvailableDateOffset,
-                            a.SemesterStart,
-                            a.EnrollmentDate
-                        ),
-                        DueDate = LearningActivity.CalculateDueDate( a.DueDateCalculationMethod, a.DueDateDefault, a.DueDateOffset, a.SemesterStart, a.EnrollmentDate ),
-                        NotificationCommunicationId = a.SendNotificationCommunication ? ( int? ) a.NotificationCommunicationId : null
-                    } );
+                if ( learningClass == null )
+                {
+                    return;
+                }
 
-                new LearningActivityCompletionService( RockContext ).AddRange( completionsToAdd );
+                // Attempt to get the learning course.
+                var learningCourse = learningClass.LearningCourse
+                    ?? new LearningCourseService( RockContext ).Get( learningClass.LearningCourseId );
+
+                if ( learningCourse == null )
+                {
+                    return;
+                }
+
+                // Attempt to get the learning program.
+                var learningProgram = learningCourse.LearningProgram
+                    ?? new LearningProgramService( RockContext ).Get( learningCourse.LearningProgramId );
+
+                if ( learningProgram == null || !learningProgram.IsCompletionStatusTracked )
+                {
+                    return;
+                }
+
+                // Attempt to get the person alias of the participant.
+                var personAliasId = Entity.Person?.PrimaryAliasId
+                    ?? new PersonAliasService( RockContext ).GetPrimaryAliasId( Entity.PersonId );
+
+                if ( !personAliasId.HasValue )
+                {
+                    return;
+                }
+
+                // Look for an existing pending completion record. In other
+                // words, if they sign up for two courses at once, we only
+                // want to create a single completion record. But if they sign
+                // up for two courses, complete them (and the program); and then
+                // a new course is added to the program which they sign up for
+                // then we want to create a new pending completion record.
+                var existingLearningProgramCompletion = new LearningProgramCompletionService( RockContext ).Queryable()
+                    .Where( lpc => lpc.PersonAlias.PersonId == Entity.PersonId
+                        && lpc.LearningProgramId == learningProgram.Id
+                        && lpc.CompletionStatus == Enums.Lms.CompletionStatus.Pending )
+                    .FirstOrDefault();
+
+                if ( existingLearningProgramCompletion != null )
+                {
+                    Entity.LearningProgramCompletionId = existingLearningProgramCompletion.Id;
+                    return;
+                }
+
+                // We couldn't find an existing pending completion record, so create a new one.
+                var learningProgramCompletion = new LearningProgramCompletion
+                {
+                    LearningProgramId = learningProgram.Id,
+                    PersonAliasId = personAliasId.Value,
+                    CampusId = learningClass.CampusId,
+                    StartDate = RockDateTime.Now,
+                    CompletionStatus = Enums.Lms.CompletionStatus.Pending
+                };
+
+                Entity.LearningProgramCompletion = learningProgramCompletion;
             }
         }
     }

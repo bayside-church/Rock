@@ -138,10 +138,18 @@ namespace RockWeb.Blocks.CheckIn
             rSelection.ItemDataBound += rSelection_ItemDataBound;
             rSelection.ItemCommand += RSelection_ItemCommand;
 
-            string script = string.Format( @"
+            string script = $@"
+        function NoEligiblePeople() {{
+            bootbox.alert(""Sorry, but it looks like there aren't any people eligible for check-in from your family."", function () {{
+                if ($('#{lbCancel.ClientID}').length > 0) {{
+                    $('#{lbCancel.ClientID}')[0].click();
+                }}
+            }});
+        }}
+
         function GetPersonSelection() {{
             var ids = '';
-            $('div.checkin-person-list').find('i.fa-check-square').each( function() {{
+            $('div.checkin-person-list').find('i.ti-checkbox').each( function() {{
                 ids += $(this).closest('a').attr('data-person-id') + ',';
             }});
             if (ids == '') {{
@@ -150,25 +158,25 @@ namespace RockWeb.Blocks.CheckIn
             }}
             else
             {{
-                $('#{0}').button('loading')
-                $('#{1}').val(ids);
+                $('#{lbSelect.ClientID}').button('loading')
+                $('#{hfPeople.ClientID}').val(ids);
                 return true;
             }}
         }}
 
         $('a.js-person-select').on('click', function() {{
             $(this).toggleClass('active');
-            $(this).find('i').toggleClass('fa-check-square').toggleClass('fa-square-o');
+            $(this).find('i').toggleClass('ti-checkbox').toggleClass('ti-square');
             var ids = '';
-            $('div.checkin-person-list').find('i.fa-check-square').each( function() {{
+            $('div.checkin-person-list').find('i.ti-checkbox').each( function() {{
                 ids += $(this).closest('a').attr('data-person-id') + ',';
             }});
-            $('#{1}').val(ids);
+            $('#{hfPeople.ClientID}').val(ids);
         }});
 
         function GetOptionSelection() {{
             var keys = '';
-            $('div.checkin-option-list').find('i.fa-check-square').each( function() {{
+            $('div.checkin-option-list').find('i.ti-checkbox').each( function() {{
                 keys += $(this).closest('a').attr('data-key') + ',';
             }});
             if (keys == '') {{
@@ -177,21 +185,21 @@ namespace RockWeb.Blocks.CheckIn
             }}
             else
             {{
-                $('#{2}').button('loading')
-                $('#{3}').val(keys);
+                $('#{lbOptionSelect.ClientID}').button('loading')
+                $('#{hfOptions.ClientID}').val(keys);
                 return true;
             }}
         }}
 
         $('a.js-option-select').on('click', function() {{
             $(this).removeClass('btn-dimmed');
-            $(this).find('i').toggleClass('fa-check-square').toggleClass('fa-square-o');
+            $(this).find('i').toggleClass('ti-checkbox').toggleClass('ti-square');
             var scheduleId = $(this).attr('data-schedule-id');
-            var selected = $(this).find('i.fa-check-square').length != 0;
+            var selected = $(this).find('i.ti-checkbox').length != 0;
             $(this).siblings().each( function() {{
                 if ( $(this).attr('data-schedule-id') == scheduleId ) {{
                     if ( selected ) {{
-                        $(this).find('i').removeClass('fa-check-square').addClass('fa-square-o');
+                        $(this).find('i').removeClass('ti-checkbox').addClass('ti-square');
                         $(this).addClass('btn-dimmed');
                     }} else {{
                         $(this).removeClass('btn-dimmed');
@@ -199,7 +207,7 @@ namespace RockWeb.Blocks.CheckIn
                 }}
             }});
         }});
-", lbSelect.ClientID, hfPeople.ClientID, lbOptionSelect.ClientID, hfOptions.ClientID );
+";
             ScriptManager.RegisterStartupScript( pnlContent, pnlContent.GetType(), "SelectPerson", script, true );
         }
 
@@ -247,6 +255,12 @@ namespace RockWeb.Blocks.CheckIn
                             Rock.Workflow.Action.CheckIn.SetAvailableSchedules.ProcessForFamily( rockContext, family );
                             Rock.Workflow.Action.CheckIn.FilterByPreviousCheckin.ProcessForFamily( rockContext, family, preventDuplicate );
                         }
+                    }
+
+                    if ( !family.People.Any() )
+                    {
+                        ScriptManager.RegisterStartupScript( this, this.GetType(), $"NoEligiblePeople_{this.ClientID}", "NoEligiblePeople();", true );
+                        return;
                     }
 
                     foreach ( var person in family.People )
@@ -576,7 +590,7 @@ namespace RockWeb.Blocks.CheckIn
 
         protected string GetCheckboxClass( bool selected )
         {
-            return selected ? "fa fa-check-square fa-3x" : "fa fa-square-o fa-3x";
+            return selected ? "ti ti-square-check" : "ti ti-square";
         }
 
         protected string GetPersonImageTag( object dataitem )

@@ -4,18 +4,17 @@
           :data="gridDataSource"
           keyField="idKey"
           itemTerm="Archived Group"
+          title="Archived Groups"
           :entityTypeGuid="EntityType.Group"
           stickyHeader
           liveUpdates
-          gridSettings
-          :showLaunchWorkflow="false"
-          :gridSettingsActive="hasSettingsFilters"
-          @gridSettingsClick="onClickGridSetting">
+          :showLaunchWorkflow="false">
 
         <TextColumn name="groupType"
                     title="Group Type"
                     field="groupType"
-                    :filter="textValueFilter"
+                    width="15%"
+                    :filter="pickExistingValueFilter"
                     visiblePriority="xs" />
 
         <TextColumn name="name"
@@ -59,67 +58,35 @@
                 <button class="btn btn-default btn-sm"
                         title="Unarchive"
                         @click.prevent="onUndoArchiveClick(row.idKey)">
-                    <i class="fa fa-undo"></i>
+                    <i class="ti ti-arrow-back-up"></i>
                 </button>
             </template>
         </Column>
     </Grid>
-
-    <GridSettingsModal v-model="gridSettings"
-                       v-model:visible="isGridSettingsVisible"
-                       :groupTypeGuids="groupTypeGuids" />
 </template>
 
 <script setup lang="ts">
-    import { useConfigurationValues, useInvokeBlockAction, usePersonPreferences } from "@Obsidian/Utility/block";
+    import { useConfigurationValues, useInvokeBlockAction } from "@Obsidian/Utility/block";
     import { EntityType } from "@Obsidian/SystemGuids/entityType";
     import Grid, { PersonColumn, pickExistingValueFilter, TextColumn, textValueFilter, dateValueFilter, DateColumn, Column } from "@Obsidian/Controls/grid";
     import { alert } from "@Obsidian/Utility/dialogs";
     import { ListBlockBox } from "@Obsidian/ViewModels/Blocks/listBlockBox";
     import { GroupArchivedListOptionsBag } from "@Obsidian/ViewModels/Blocks/Group/GroupArchivedList/groupArchivedListOptionsBag";
     import { GridDataBag } from "@Obsidian/ViewModels/Core/Grid/gridDataBag";
-    import { GridSettingsOptions, PreferenceKey } from "./GroupArchivedList/types.partial";
-    import GridSettingsModal from "./GroupArchivedList/gridSettingsModal.partial.obs";
-    import { computed, reactive, ref, watch } from "vue";
+    import { reactive, ref } from "vue";
     import { PersonFieldBag } from "@Obsidian/ViewModels/Core/Grid/personFieldBag";
 
     const config = useConfigurationValues<ListBlockBox<GroupArchivedListOptionsBag>>();
     const invokeBlockAction = useInvokeBlockAction();
-    const preferences = usePersonPreferences().blockPreferences;
 
     // #region Values
 
     const gridDataSource = ref<Promise<GridDataBag>>();
     let gridData: GridDataBag | undefined;
 
-    const groupTypeGuids = ref(config.options?.groupTypeGuids ?? []);
-    const isGridSettingsVisible = ref(false);
-    const gridSettings = ref<GridSettingsOptions>({
-        name: preferences.getValue(PreferenceKey.FilterGroupName),
-        groupType: JSON.parse(preferences.getValue(PreferenceKey.FilterGroupType) || "{}"),
-    });
-
-    // #endregion
-
-    // #region Computed Values
-
-    /** `true` if the grid settings is performing any filtering. */
-    const hasSettingsFilters = computed((): boolean => {
-        return !!gridSettings.value.name
-            || !!gridSettings.value.groupType?.value;
-    });
-
     // #endregion
 
     // #region Functions
-
-    /**
-    * Called when the grid setting icon is clicked, displays the block filters.
-    *
-    */
-    function onClickGridSetting(): void {
-        isGridSettingsVisible.value = true;
-    }
 
     /**
      * Called when the grid is requesting the row data be loaded.
@@ -138,7 +105,7 @@
 
     function archivedByFilterValue(row: Record<string, unknown>): string {
         const person = row["archivedBy"] as PersonFieldBag;
-        return `${person.nickName} ${person.lastName}`;
+        return !person ? "" : `${person.nickName} ${person.lastName}`;
     }
 
     // #endregion
@@ -172,17 +139,6 @@
     }
 
     // #endregion
-
-    watch(gridSettings, async () => {
-        preferences.setValue(PreferenceKey.FilterGroupName, gridSettings.value.name ?? "");
-        preferences.setValue(PreferenceKey.FilterGroupType, JSON.stringify(gridSettings.value.groupType));
-
-        // Save the preferences
-        await preferences.save();
-
-        // Reload the grid data
-        gridDataSource.value = loadGridData();
-    });
 
     gridDataSource.value = loadGridData();
 </script>
